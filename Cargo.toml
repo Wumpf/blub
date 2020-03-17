@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 wgpu = "0.4"
 winit = "0.22"
+glsl-to-spirv = "0.1"

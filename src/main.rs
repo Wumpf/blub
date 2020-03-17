@@ -1,51 +1,58 @@
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
     window::Window,
+    window::WindowBuilder,
 };
 
-struct Application {
+mod particle_renderer;
+mod shader;
+
+pub struct Application {
     device: wgpu::Device,
     command_queue: wgpu::Queue,
     swap_chain: wgpu::SwapChain,
     window_surface: wgpu::Surface,
+
+    particle_renderer: particle_renderer::ParticleRenderer,
 }
 
 impl Application {
-
     fn new(window: &Window) -> Application {
-        let adapter = wgpu::Adapter::request(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                backends: wgpu::BackendBit::PRIMARY,
-            },
-        )
+        let adapter = wgpu::Adapter::request(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            backends: wgpu::BackendBit::PRIMARY,
+        })
         .unwrap();
 
         let (device, command_queue) = adapter.request_device(&wgpu::DeviceDescriptor {
-            extensions: wgpu::Extensions {
-                anisotropic_filtering: true,
-            },
+            extensions: wgpu::Extensions { anisotropic_filtering: true },
             limits: wgpu::Limits::default(),
         });
 
-
         let window_surface = wgpu::Surface::create(window);
         let swap_chain = device.create_swap_chain(&window_surface, &Self::swap_chain_desc(window.inner_size()));
+
+        let particle_renderer = particle_renderer::ParticleRenderer::new(&device);
 
         Application {
             device,
             command_queue,
             swap_chain,
             window_surface,
+
+            particle_renderer,
         }
+    }
+
+    pub fn backbuffer_format() -> wgpu::TextureFormat {
+        wgpu::TextureFormat::Bgra8Unorm
     }
 
     fn swap_chain_desc(size: winit::dpi::PhysicalSize<u32>) -> wgpu::SwapChainDescriptor {
         wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8Unorm,
+            format: Self::backbuffer_format(),
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::NoVsync,
@@ -56,15 +63,13 @@ impl Application {
         self.swap_chain = self.device.create_swap_chain(&self.window_surface, &Self::swap_chain_desc(size));
     }
 
-    fn update(&mut self) {
-
-    }
+    fn update(&mut self) {}
 
     fn draw(&mut self) {
         let frame = self.swap_chain.get_next_texture();
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
         {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor{
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                     attachment: &frame.view,
                     resolve_target: None,
@@ -79,6 +84,8 @@ impl Application {
                 }],
                 depth_stencil_attachment: None,
             });
+
+            self.particle_renderer.draw(&mut rpass);
         }
         self.command_queue.submit(&[encoder.finish()]);
     }
@@ -101,29 +108,27 @@ fn main() {
         *control_flow = ControlFlow::Poll;
 
         match event {
-            Event::WindowEvent { event, .. } => {
-                match event {
-                    WindowEvent::CloseRequested => {
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                }
+                WindowEvent::Resized(size) => {
+                    application.window_resize(size);
+                }
+                WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            virtual_keycode: Some(virtual_keycode),
+                            ..
+                        },
+                    ..
+                } => {
+                    if virtual_keycode == VirtualKeyCode::Escape {
                         *control_flow = ControlFlow::Exit;
                     }
-                    WindowEvent::Resized(size) => {
-                        application.window_resize(size);
-                    }
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(virtual_keycode),
-                                ..
-                            },
-                        ..
-                    } => {
-                        if virtual_keycode == VirtualKeyCode::Escape {
-                            *control_flow = ControlFlow::Exit;
-                        }
-                    }
-                    _ => {}
                 }
-            }
+                _ => {}
+            },
             Event::MainEventsCleared => {
                 application.update();
                 window.request_redraw();
