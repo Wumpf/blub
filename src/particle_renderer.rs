@@ -5,6 +5,7 @@ use super::shader::*;
 
 pub struct ParticleRenderer {
     render_pipeline: wgpu::RenderPipeline,
+    pipeline_layout: wgpu::PipelineLayout,
     bind_group: wgpu::BindGroup,
 }
 
@@ -18,11 +19,20 @@ impl ParticleRenderer {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout],
         });
+        let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout).unwrap();
 
-        let vs_module = device.create_shader_module(&load_glsl(include_str!("shaders/shader.vert"), ShaderStage::Vertex));
-        let fs_module = device.create_shader_module(&load_glsl(include_str!("shaders/shader.frag"), ShaderStage::Fragment));
+        ParticleRenderer {
+            render_pipeline,
+            pipeline_layout,
+            bind_group,
+        }
+    }
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+    fn create_pipeline_state(device: &wgpu::Device, pipeline_layout: &wgpu::PipelineLayout) -> Option<wgpu::RenderPipeline> {
+        let vs_module = create_glsl_shader_module(device, include_str!("shaders/shader.vert"), ShaderStage::Vertex)?;
+        let fs_module = create_glsl_shader_module(device, include_str!("shaders/shader.frag"), ShaderStage::Fragment)?;
+
+        Some(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
@@ -52,9 +62,13 @@ impl ParticleRenderer {
             sample_count: 1,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
-        });
+        }))
+    }
 
-        ParticleRenderer { render_pipeline, bind_group }
+    pub fn try_reload_shaders(&mut self, device: &wgpu::Device) {
+        if let Some(render_pipeline) = Self::create_pipeline_state(device, &self.pipeline_layout) {
+            self.render_pipeline = render_pipeline;
+        }
     }
 
     pub fn draw(&self, rpass: &mut wgpu::RenderPass) {
