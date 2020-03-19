@@ -9,6 +9,7 @@ use winit::{
 mod camera;
 mod particle_renderer;
 mod shader;
+mod uniformbuffer;
 
 pub struct Application {
     device: wgpu::Device,

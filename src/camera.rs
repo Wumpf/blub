@@ -40,25 +40,4 @@ pub struct CameraUniformBufferContent {
     pub view_projection: cgmath::Matrix4<f32>,
 }
 
-pub struct CameraUniformBuffer {
-    buffer: wgpu::Buffer,
-}
-
-impl CameraUniformBuffer {
-    pub fn new(device: &wgpu::Device) -> CameraUniformBuffer {
-        let buffer = device
-            .create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST)
-            .fill_from_slice(&[cgmath::Matrix4::<f32>::identity()]);
-
-        CameraUniformBuffer { buffer }
-    }
-
-    pub fn buffer(&self) -> &wgpu::Buffer {
-        &self.buffer
-    }
-
-    pub fn update_content(&self, encoder: &mut wgpu::CommandEncoder, device: &wgpu::Device, content: CameraUniformBufferContent) {
-        let buffer = device.create_buffer_mapped(1, wgpu::BufferUsage::COPY_SRC).fill_from_slice(&[content]);
-        encoder.copy_buffer_to_buffer(&buffer, 0, &self.buffer, 0, std::mem::size_of::<CameraUniformBufferContent>() as u64);
-    }
-}
+pub type CameraUniformBuffer = super::uniformbuffer::UniformBuffer<CameraUniformBufferContent>;
