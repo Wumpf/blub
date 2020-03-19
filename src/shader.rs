@@ -11,32 +11,33 @@ pub enum ShaderStage {
     Compute,
 }
 
-fn load_shader(glsl_code: &str, stage: ShaderStage) -> Option<Vec<u32>> {
-    let ty = match stage {
-        ShaderStage::Vertex => glsl_to_spirv::ShaderType::Vertex,
-        ShaderStage::Fragment => glsl_to_spirv::ShaderType::Fragment,
-        ShaderStage::Compute => glsl_to_spirv::ShaderType::Compute,
+fn load_shader(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option<Vec<u32>> {
+    let kind = match stage {
+        ShaderStage::Vertex => shaderc::ShaderKind::Vertex,
+        ShaderStage::Fragment => shaderc::ShaderKind::Fragment,
+        ShaderStage::Compute => shaderc::ShaderKind::Compute,
     };
 
-    match glsl_to_spirv::compile(&glsl_code, ty) {
-        Ok(compile_result) => match wgpu::read_spirv(compile_result) {
-            Ok(spirv) => Some(spirv),
-            Err(io_error) => {
-                println!("Compilation suceeded, but wgpu::read_spirv failed: {}", io_error);
-                None
+    let mut compiler = shaderc::Compiler::new().unwrap();
+    //let mut options = shaderc::CompileOptions::new().unwrap();
+    match compiler.compile_into_spirv(glsl_code, kind, identifier, "main", None) {
+        Ok(compile_result) => {
+            if compile_result.get_num_warnings() > 0 {
+                println!("warnings when compiling {}:\n{}", identifier, compile_result.get_warning_messages());
             }
-        },
+
+            match wgpu::read_spirv(std::io::Cursor::new(&compile_result.as_binary_u8())) {
+                Ok(spirv) => Some(spirv),
+                Err(io_error) => {
+                    println!("Compilation suceeded, but wgpu::read_spirv failed: {}", io_error);
+                    None
+                }
+            }
+        }
         Err(compile_error) => {
             println!("{}", compile_error);
             None
         }
-    }
-}
-
-fn load_shader_module(device: &wgpu::Device, glsl_code: &str, stage: ShaderStage) -> Option<wgpu::ShaderModule> {
-    match &load_shader(glsl_code, stage) {
-        Some(spirv) => Some(device.create_shader_module(spirv)),
-        None => None,
     }
 }
 
@@ -84,7 +85,10 @@ impl ShaderDirectory {
         };
 
         match std::fs::read_to_string(&path) {
-            Ok(glsl_code) => load_shader_module(device, &glsl_code, shader_stage),
+            Ok(glsl_code) => match load_shader(&glsl_code, &relative_filename.to_str().unwrap(), shader_stage) {
+                Some(spirv) => Some(device.create_shader_module(&spirv)),
+                None => None,
+            },
             Err(err) => {
                 println!("Failed to read shader file \"{:?}\": {}", path, err);
                 None
