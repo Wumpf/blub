@@ -1,3 +1,4 @@
+use super::rendertimer::RenderTimer;
 use cgmath::prelude::*;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -21,8 +22,9 @@ impl Camera {
         }
     }
 
-    pub fn update(&mut self, time_startup: std::time::Duration) {
-        self.position = cgmath::Point3::new(time_startup.as_secs_f32().cos(), 0.0, time_startup.as_secs_f32().sin()) * 4.0;
+    pub fn update(&mut self, timer: &RenderTimer) {
+        let t = timer.time_since_start().as_secs_f32();
+        self.position = cgmath::Point3::new(t.cos(), 0.0, t.sin()) * 4.0;
         self.direction = cgmath::Point3::origin() - self.position;
     }
 
