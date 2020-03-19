@@ -1,3 +1,4 @@
+use std::path::Path;
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -5,9 +6,9 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod camera;
 mod particle_renderer;
 mod shader;
-use std::path::Path;
 
 pub struct Application {
     device: wgpu::Device,
@@ -16,6 +17,7 @@ pub struct Application {
     window_surface: wgpu::Surface,
 
     shader_dir: shader::ShaderDirectory,
+    ubo_camera: camera::CameraUniformBuffer,
     particle_renderer: particle_renderer::ParticleRenderer,
 }
 
@@ -36,7 +38,8 @@ impl Application {
         let swap_chain = device.create_swap_chain(&window_surface, &Self::swap_chain_desc(window.inner_size()));
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
-        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir);
+        let ubo_camera = camera::CameraUniformBuffer::new(&device);
+        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera);
 
         Application {
             device,
@@ -46,6 +49,7 @@ impl Application {
 
             shader_dir,
             particle_renderer,
+            ubo_camera,
         }
     }
 
