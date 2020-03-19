@@ -14,11 +14,20 @@ pub struct Application {
     device: wgpu::Device,
     command_queue: wgpu::Queue,
     swap_chain: wgpu::SwapChain,
+
     window_surface: wgpu::Surface,
+    backbuffer_resolution: winit::dpi::PhysicalSize<u32>,
 
     shader_dir: shader::ShaderDirectory,
-    ubo_camera: camera::CameraUniformBuffer,
     particle_renderer: particle_renderer::ParticleRenderer,
+
+    camera: camera::Camera,
+    ubo_camera: camera::CameraUniformBuffer,
+
+    timestamp_startup: std::time::Instant,
+    timestamp_last_frame: std::time::Instant,
+    time_startup: std::time::Duration,
+    time_last_frame: std::time::Duration,
 }
 
 impl Application {
@@ -45,11 +54,20 @@ impl Application {
             device,
             command_queue,
             swap_chain,
+
             window_surface,
+            backbuffer_resolution: window.inner_size(),
 
             shader_dir,
             particle_renderer,
+
+            camera: camera::Camera::new(),
             ubo_camera,
+
+            timestamp_startup: std::time::Instant::now(),
+            timestamp_last_frame: std::time::Instant::now(),
+            time_startup: std::time::Duration::from_millis(16),
+            time_last_frame: std::time::Duration::from_millis(16),
         }
     }
 
@@ -68,6 +86,8 @@ impl Application {
     }
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        println!("resizing screen to {:?}", size);
+        self.backbuffer_resolution = size;
         self.swap_chain = self.device.create_swap_chain(&self.window_surface, &Self::swap_chain_desc(size));
     }
 
@@ -76,31 +96,48 @@ impl Application {
             println!("reloading shaders...");
             self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
         }
+        self.camera.update(self.time_startup);
     }
 
     fn draw(&mut self) {
-        let frame = self.swap_chain.get_next_texture();
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
         {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &frame.view,
-                    resolve_target: None,
-                    load_op: wgpu::LoadOp::Clear,
-                    store_op: wgpu::StoreOp::Store,
-                    clear_color: wgpu::Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
-                        a: 1.0,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
+            let frame = self.swap_chain.get_next_texture();
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
 
-            self.particle_renderer.draw(&mut rpass);
+            self.ubo_camera.update_content(
+                &mut encoder,
+                &self.device,
+                camera::CameraUniformBufferContent {
+                    view_projection: self
+                        .camera
+                        .view_projection(self.backbuffer_resolution.width as f32 / self.backbuffer_resolution.height as f32),
+                },
+            );
+
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                        attachment: &frame.view,
+                        resolve_target: None,
+                        load_op: wgpu::LoadOp::Clear,
+                        store_op: wgpu::StoreOp::Store,
+                        clear_color: wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                });
+
+                self.particle_renderer.draw(&mut rpass);
+            }
+            self.command_queue.submit(&[encoder.finish()]);
         }
-        self.command_queue.submit(&[encoder.finish()]);
+        self.time_startup = self.timestamp_startup.elapsed();
+        self.time_last_frame = self.timestamp_last_frame.elapsed();
+        self.timestamp_last_frame = std::time::Instant::now();
     }
 }
 

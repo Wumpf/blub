@@ -30,7 +30,7 @@ impl ParticleRenderer {
             bindings: &[wgpu::Binding {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
-                    buffer: &ubo_camera.buffer,
+                    buffer: ubo_camera.buffer(),
                     range: 0..std::mem::size_of::<camera::CameraUniformBufferContent>() as u64,
                 },
             }],
