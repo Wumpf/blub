@@ -2,6 +2,7 @@
 // The idea is to have different render backend for the fluid, which one being the particle renderer which renders the fluid as particles (sprites)
 
 use super::shader::*;
+use std::path::Path;
 
 pub struct ParticleRenderer {
     render_pipeline: wgpu::RenderPipeline,
@@ -10,7 +11,7 @@ pub struct ParticleRenderer {
 }
 
 impl ParticleRenderer {
-    pub fn new(device: &wgpu::Device) -> ParticleRenderer {
+    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory) -> ParticleRenderer {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { bindings: &[] });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
@@ -19,7 +20,7 @@ impl ParticleRenderer {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout],
         });
-        let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout).unwrap();
+        let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout, shader_dir).unwrap();
 
         ParticleRenderer {
             render_pipeline,
@@ -28,9 +29,13 @@ impl ParticleRenderer {
         }
     }
 
-    fn create_pipeline_state(device: &wgpu::Device, pipeline_layout: &wgpu::PipelineLayout) -> Option<wgpu::RenderPipeline> {
-        let vs_module = create_glsl_shader_module(device, include_str!("shaders/shader.vert"), ShaderStage::Vertex)?;
-        let fs_module = create_glsl_shader_module(device, include_str!("shaders/shader.frag"), ShaderStage::Fragment)?;
+    fn create_pipeline_state(
+        device: &wgpu::Device,
+        pipeline_layout: &wgpu::PipelineLayout,
+        shader_dir: &ShaderDirectory,
+    ) -> Option<wgpu::RenderPipeline> {
+        let vs_module = shader_dir.load_shader_module(device, Path::new("shader.vert"))?;
+        let fs_module = shader_dir.load_shader_module(device, Path::new("shader.frag"))?;
 
         Some(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
@@ -65,8 +70,8 @@ impl ParticleRenderer {
         }))
     }
 
-    pub fn try_reload_shaders(&mut self, device: &wgpu::Device) {
-        if let Some(render_pipeline) = Self::create_pipeline_state(device, &self.pipeline_layout) {
+    pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
+        if let Some(render_pipeline) = Self::create_pipeline_state(device, &self.pipeline_layout, shader_dir) {
             self.render_pipeline = render_pipeline;
         }
     }

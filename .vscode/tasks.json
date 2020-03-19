@@ -29,7 +29,8 @@
             "type": "shell",
             "command": "cargo",
             "args": [
-                "test", "--no-run"
+                "test",
+                "--no-run"
             ],
             "group": "build",
         }

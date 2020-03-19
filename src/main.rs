@@ -7,6 +7,7 @@ use winit::{
 
 mod particle_renderer;
 mod shader;
+use std::path::Path;
 
 pub struct Application {
     device: wgpu::Device,
@@ -14,6 +15,7 @@ pub struct Application {
     swap_chain: wgpu::SwapChain,
     window_surface: wgpu::Surface,
 
+    shader_dir: shader::ShaderDirectory,
     particle_renderer: particle_renderer::ParticleRenderer,
 }
 
@@ -33,7 +35,8 @@ impl Application {
         let window_surface = wgpu::Surface::create(window);
         let swap_chain = device.create_swap_chain(&window_surface, &Self::swap_chain_desc(window.inner_size()));
 
-        let particle_renderer = particle_renderer::ParticleRenderer::new(&device);
+        let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
+        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir);
 
         Application {
             device,
@@ -41,6 +44,7 @@ impl Application {
             swap_chain,
             window_surface,
 
+            shader_dir,
             particle_renderer,
         }
     }
@@ -63,7 +67,12 @@ impl Application {
         self.swap_chain = self.device.create_swap_chain(&self.window_surface, &Self::swap_chain_desc(size));
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        if self.shader_dir.detected_change() {
+            println!("reloading shaders...");
+            self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
+        }
+    }
 
     fn draw(&mut self) {
         let frame = self.swap_chain.get_next_texture();
