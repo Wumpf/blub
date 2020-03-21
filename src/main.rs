@@ -13,6 +13,8 @@ mod shader;
 mod uniformbuffer;
 
 pub struct Application {
+    window: Window,
+
     device: wgpu::Device,
     command_queue: wgpu::Queue,
     swap_chain: wgpu::SwapChain,
@@ -30,7 +32,14 @@ pub struct Application {
 }
 
 impl Application {
-    fn new(window: &Window) -> Application {
+    fn new(event_loop: &EventLoop<()>) -> Application {
+        let window = WindowBuilder::new()
+            .with_title("Blub")
+            .with_resizable(true)
+            .with_inner_size(winit::dpi::LogicalSize::new(1980, 1080))
+            .build(&event_loop)
+            .unwrap();
+
         let adapter = wgpu::Adapter::request(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             backends: wgpu::BackendBit::PRIMARY,
@@ -42,7 +51,8 @@ impl Application {
             limits: wgpu::Limits::default(),
         });
 
-        let window_surface = wgpu::Surface::create(window);
+        let window_surface = wgpu::Surface::create(&window);
+        let backbuffer_resolution = window.inner_size();
         let swap_chain = device.create_swap_chain(&window_surface, &Self::swap_chain_desc(window.inner_size()));
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
@@ -50,12 +60,13 @@ impl Application {
         let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera);
 
         Application {
+            window,
             device,
             command_queue,
             swap_chain,
 
             window_surface,
-            backbuffer_resolution: window.inner_size(),
+            backbuffer_resolution,
 
             shader_dir,
             particle_renderer,
@@ -69,6 +80,55 @@ impl Application {
 
     pub fn backbuffer_format() -> wgpu::TextureFormat {
         wgpu::TextureFormat::Bgra8Unorm
+    }
+
+    fn run(mut self, event_loop: EventLoop<()>) {
+        event_loop.run(move |event, _, control_flow| {
+            // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
+            // dispatched any events. This is ideal for games and similar applications.
+            *control_flow = ControlFlow::Poll;
+
+            match event {
+                Event::WindowEvent { event, .. } => {
+                    self.camera.on_window_event(&event);
+                    match event {
+                        WindowEvent::CloseRequested => {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        WindowEvent::Resized(size) => {
+                            self.window_resize(size);
+                        }
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                            self.window_resize(*new_inner_size);
+                        }
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    virtual_keycode: Some(virtual_keycode),
+                                    ..
+                                },
+                            ..
+                        } => {
+                            if virtual_keycode == VirtualKeyCode::Escape {
+                                *control_flow = ControlFlow::Exit;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Event::DeviceEvent { event, .. } => {
+                    self.camera.on_device_event(&event);
+                }
+                Event::MainEventsCleared => {
+                    self.update();
+                    self.window.request_redraw();
+                }
+                Event::RedrawRequested(_) => {
+                    self.draw();
+                }
+                _ => (),
+            }
+        });
     }
 
     fn swap_chain_desc(size: winit::dpi::PhysicalSize<u32>) -> wgpu::SwapChainDescriptor {
@@ -137,50 +197,6 @@ impl Application {
 
 fn main() {
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_title("Blub")
-        .with_resizable(true)
-        .with_inner_size(winit::dpi::LogicalSize::new(1980, 1080))
-        .build(&event_loop)
-        .unwrap();
-
-    let mut application = Application::new(&window);
-
-    event_loop.run(move |event, _, control_flow| {
-        // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
-        // dispatched any events. This is ideal for games and similar applications.
-        *control_flow = ControlFlow::Poll;
-
-        match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                WindowEvent::Resized(size) => {
-                    application.window_resize(size);
-                }
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            virtual_keycode: Some(virtual_keycode),
-                            ..
-                        },
-                    ..
-                } => {
-                    if virtual_keycode == VirtualKeyCode::Escape {
-                        *control_flow = ControlFlow::Exit;
-                    }
-                }
-                _ => {}
-            },
-            Event::MainEventsCleared => {
-                application.update();
-                window.request_redraw();
-            }
-            Event::RedrawRequested(_) => {
-                application.draw();
-            }
-            _ => (),
-        }
-    });
+    let application = Application::new(&event_loop);
+    application.run(event_loop);
 }
