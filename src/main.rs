@@ -19,7 +19,7 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
+    pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
     pub const FORMAT_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn new(device: &wgpu::Device, window_surface: &wgpu::Surface, resolution: winit::dpi::PhysicalSize<u32>) -> Self {
@@ -174,7 +174,9 @@ impl Application {
     }
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        self.screen = Screen::new(&self.device, &self.window_surface, size);
+        if self.screen.resolution != size {
+            self.screen = Screen::new(&self.device, &self.window_surface, size);
+        }
     }
 
     fn update(&mut self) {
