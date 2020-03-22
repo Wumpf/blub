@@ -16,7 +16,7 @@ impl ParticleRenderer {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             bindings: &[wgpu::BindGroupLayoutBinding {
                 binding: 0,
-                visibility: wgpu::ShaderStage::VERTEX,
+                visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                 ty: wgpu::BindingType::UniformBuffer { dynamic: false },
             }],
         });
@@ -48,8 +48,8 @@ impl ParticleRenderer {
         pipeline_layout: &wgpu::PipelineLayout,
         shader_dir: &ShaderDirectory,
     ) -> Option<wgpu::RenderPipeline> {
-        let vs_module = shader_dir.load_shader_module(device, Path::new("particles.vert"))?;
-        let fs_module = shader_dir.load_shader_module(device, Path::new("particles.frag"))?;
+        let vs_module = shader_dir.load_shader_module(device, Path::new("sphere_particles.vert"))?;
+        let fs_module = shader_dir.load_shader_module(device, Path::new("sphere_particles.frag"))?;
 
         Some(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
