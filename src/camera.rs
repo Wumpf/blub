@@ -13,11 +13,12 @@ const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 #[derive(BitFlags, Copy, Clone, Debug, PartialEq)]
-enum MoveDirection {
+enum MoveCommands {
     Left = 0b0001,
     Right = 0b0010,
     Forwards = 0b0100,
     Backwards = 0b1000,
+    SpeedUp = 0b1_0000,
 }
 
 pub struct Camera {
@@ -26,7 +27,7 @@ pub struct Camera {
     rotational_up: cgmath::Vector3<f32>,
 
     movement_locked: bool,
-    move_directions: BitFlags<MoveDirection>,
+    active_move_commands: BitFlags<MoveCommands>,
     mouse_delta: (f64, f64),
 
     translation_speed: f32,
@@ -42,10 +43,10 @@ impl Camera {
             rotational_up: cgmath::Vector3::unit_y(),
 
             movement_locked: true,
-            move_directions: Default::default(),
+            active_move_commands: Default::default(),
             mouse_delta: (0.0, 0.0),
 
-            translation_speed: 1.0,
+            translation_speed: 4.0,
             rotation_speed: 0.001,
         }
     }
@@ -64,16 +65,16 @@ impl Camera {
                 ..
             } => {
                 let direction = match virtual_keycode {
-                    VirtualKeyCode::S | VirtualKeyCode::Down => BitFlags::from(MoveDirection::Backwards),
-                    VirtualKeyCode::A | VirtualKeyCode::Left => BitFlags::from(MoveDirection::Left),
-                    VirtualKeyCode::D | VirtualKeyCode::Right => BitFlags::from(MoveDirection::Right),
-                    VirtualKeyCode::W | VirtualKeyCode::Up => BitFlags::from(MoveDirection::Forwards),
+                    VirtualKeyCode::S | VirtualKeyCode::Down => BitFlags::from(MoveCommands::Backwards),
+                    VirtualKeyCode::A | VirtualKeyCode::Left => BitFlags::from(MoveCommands::Left),
+                    VirtualKeyCode::D | VirtualKeyCode::Right => BitFlags::from(MoveCommands::Right),
+                    VirtualKeyCode::W | VirtualKeyCode::Up => BitFlags::from(MoveCommands::Forwards),
+                    VirtualKeyCode::LShift => BitFlags::from(MoveCommands::SpeedUp),
                     _ => Default::default(),
                 };
                 match state {
-                    ElementState::Pressed => self.move_directions.insert(direction),
-
-                    ElementState::Released => self.move_directions.remove(direction),
+                    ElementState::Pressed => self.active_move_commands.insert(direction),
+                    ElementState::Released => self.active_move_commands.remove(direction),
                 };
             }
             WindowEvent::MouseInput { button, state, .. } => {
@@ -98,18 +99,21 @@ impl Camera {
         if self.movement_locked == false {
             let right = self.direction.cross(self.rotational_up).normalize();
 
-            let mut translation = (self.move_directions.contains(MoveDirection::Forwards) as i32 as f32
-                - self.move_directions.contains(MoveDirection::Backwards) as i32 as f32)
+            let mut translation = (self.active_move_commands.contains(MoveCommands::Forwards) as i32 as f32
+                - self.active_move_commands.contains(MoveCommands::Backwards) as i32 as f32)
                 * self.direction;
-            translation += (self.move_directions.contains(MoveDirection::Right) as i32 as f32
-                - self.move_directions.contains(MoveDirection::Left) as i32 as f32)
+            translation += (self.active_move_commands.contains(MoveCommands::Right) as i32 as f32
+                - self.active_move_commands.contains(MoveCommands::Left) as i32 as f32)
                 * right;
             translation *= timer.frame_delta_time().as_secs_f32() * self.translation_speed;
+            if self.active_move_commands.contains(MoveCommands::SpeedUp) {
+                translation *= 4.0;
+            }
 
             let rotation_updown = cgmath::Quaternion::from_axis_angle(right, cgmath::Rad(-self.mouse_delta.1 as f32 * self.rotation_speed));
             let rotation_leftright =
                 cgmath::Quaternion::from_axis_angle(self.rotational_up, cgmath::Rad(-self.mouse_delta.0 as f32 * self.rotation_speed));
-            self.direction = (rotation_updown + rotation_leftright).rotate_vector(self.direction);
+            self.direction = (rotation_updown + rotation_leftright).rotate_vector(self.direction).normalize();
 
             self.position += translation;
         }
