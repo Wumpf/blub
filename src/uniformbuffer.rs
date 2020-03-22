@@ -31,3 +31,27 @@ impl<Content: Copy + 'static> UniformBuffer<Content> {
         encoder.copy_buffer_to_buffer(&buffer, 0, &self.buffer, 0, std::mem::size_of_val(&content) as u64);
     }
 }
+
+#[derive(Clone, Copy)]
+#[allow(dead_code)]
+pub struct PaddedVector3 {
+    vector: cgmath::Vector3<f32>,
+    padding: f32,
+}
+impl From<cgmath::Vector3<f32>> for PaddedVector3 {
+    fn from(vector: cgmath::Vector3<f32>) -> Self {
+        PaddedVector3 { vector, padding: 0.0 }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[allow(dead_code)]
+pub struct PaddedPoint3 {
+    point: cgmath::Point3<f32>,
+    padding: f32,
+}
+impl From<cgmath::Point3<f32>> for PaddedPoint3 {
+    fn from(point: cgmath::Point3<f32>) -> Self {
+        PaddedPoint3 { point, padding: 1.0 }
+    }
+}

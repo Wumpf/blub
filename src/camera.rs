@@ -1,4 +1,5 @@
 use super::rendertimer::RenderTimer;
+use super::uniformbuffer::*;
 use cgmath::prelude::*;
 use enumflags2::BitFlags;
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -22,7 +23,7 @@ enum MoveDirection {
 pub struct Camera {
     pub position: cgmath::Point3<f32>,
     pub direction: cgmath::Vector3<f32>,
-    up: cgmath::Vector3<f32>,
+    rotational_up: cgmath::Vector3<f32>,
 
     movement_locked: bool,
     move_directions: BitFlags<MoveDirection>,
@@ -34,11 +35,11 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Camera {
-        let position = cgmath::Point3::new(1.5f32, -5.0, 3.0);
+        let position = cgmath::Point3::new(1.5f32, 5.0, 3.0);
         Camera {
             position,
             direction: cgmath::Point3::new(0f32, 0.0, 0.0) - position,
-            up: cgmath::Vector3::unit_y(),
+            rotational_up: cgmath::Vector3::unit_y(),
 
             movement_locked: true,
             move_directions: Default::default(),
@@ -95,7 +96,7 @@ impl Camera {
 
     pub fn update(&mut self, timer: &RenderTimer) {
         if self.movement_locked == false {
-            let right = self.direction.cross(self.up).normalize();
+            let right = self.direction.cross(self.rotational_up).normalize();
 
             let mut translation = (self.move_directions.contains(MoveDirection::Forwards) as i32 as f32
                 - self.move_directions.contains(MoveDirection::Backwards) as i32 as f32)
@@ -106,7 +107,8 @@ impl Camera {
             translation *= timer.frame_delta_time().as_secs_f32() * self.translation_speed;
 
             let rotation_updown = cgmath::Quaternion::from_axis_angle(right, cgmath::Rad(-self.mouse_delta.1 as f32 * self.rotation_speed));
-            let rotation_leftright = cgmath::Quaternion::from_axis_angle(self.up, cgmath::Rad(-self.mouse_delta.0 as f32 * self.rotation_speed));
+            let rotation_leftright =
+                cgmath::Quaternion::from_axis_angle(self.rotational_up, cgmath::Rad(-self.mouse_delta.0 as f32 * self.rotation_speed));
             self.direction = (rotation_updown + rotation_leftright).rotate_vector(self.direction);
 
             self.position += translation;
@@ -115,10 +117,23 @@ impl Camera {
         self.mouse_delta = (0.0, 0.0);
     }
 
-    pub fn view_projection(&self, aspect_ratio: f32) -> cgmath::Matrix4<f32> {
+    fn view_projection(&self, aspect_ratio: f32) -> cgmath::Matrix4<f32> {
         let projection = cgmath::perspective(cgmath::Deg(45f32), aspect_ratio, 1.0, 1000.0);
-        let view = cgmath::Matrix4::look_at_dir(self.position, self.direction, self.up);
+        let view = cgmath::Matrix4::look_at_dir(self.position, self.direction, self.rotational_up);
         OPENGL_TO_WGPU_MATRIX * projection * view
+    }
+
+    pub fn fill_uniform_buffer(&self, aspect_ratio: f32) -> CameraUniformBufferContent {
+        let right = self.direction.cross(self.rotational_up).normalize();
+        let up = right.cross(self.direction).normalize();
+
+        CameraUniformBufferContent {
+            view_projection: self.view_projection(aspect_ratio),
+            position: self.position.into(),
+            right: right.into(),
+            up: up.into(),
+            direction: self.direction.into(),
+        }
     }
 }
 
@@ -127,6 +142,10 @@ impl Camera {
 #[derive(Clone, Copy)]
 pub struct CameraUniformBufferContent {
     pub view_projection: cgmath::Matrix4<f32>,
+    pub position: PaddedPoint3,
+    pub right: PaddedVector3,
+    pub up: PaddedVector3,
+    pub direction: PaddedVector3,
 }
 
-pub type CameraUniformBuffer = super::uniformbuffer::UniformBuffer<CameraUniformBufferContent>;
+pub type CameraUniformBuffer = UniformBuffer<CameraUniformBufferContent>;

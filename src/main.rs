@@ -32,6 +32,8 @@ pub struct Application {
 }
 
 impl Application {
+    pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
+
     fn new(event_loop: &EventLoop<()>) -> Application {
         let window = WindowBuilder::new()
             .with_title("Blub")
@@ -76,10 +78,6 @@ impl Application {
 
             timer: rendertimer::RenderTimer::new(),
         }
-    }
-
-    pub fn backbuffer_format() -> wgpu::TextureFormat {
-        wgpu::TextureFormat::Bgra8Unorm
     }
 
     fn run(mut self, event_loop: EventLoop<()>) {
@@ -134,7 +132,7 @@ impl Application {
     fn swap_chain_desc(size: winit::dpi::PhysicalSize<u32>) -> wgpu::SwapChainDescriptor {
         wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: Self::backbuffer_format(),
+            format: Self::FORMAT_BACKBUFFER,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::NoVsync,
@@ -159,15 +157,9 @@ impl Application {
         let frame = self.swap_chain.get_next_texture();
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
 
-        self.ubo_camera.update_content(
-            &mut encoder,
-            &self.device,
-            camera::CameraUniformBufferContent {
-                view_projection: self
-                    .camera
-                    .view_projection(self.backbuffer_resolution.width as f32 / self.backbuffer_resolution.height as f32),
-            },
-        );
+        let aspect_ratio = self.backbuffer_resolution.width as f32 / self.backbuffer_resolution.height as f32;
+        self.ubo_camera
+            .update_content(&mut encoder, &self.device, self.camera.fill_uniform_buffer(aspect_ratio));
 
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

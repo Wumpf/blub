@@ -48,8 +48,8 @@ impl ParticleRenderer {
         pipeline_layout: &wgpu::PipelineLayout,
         shader_dir: &ShaderDirectory,
     ) -> Option<wgpu::RenderPipeline> {
-        let vs_module = shader_dir.load_shader_module(device, Path::new("shader.vert"))?;
-        let fs_module = shader_dir.load_shader_module(device, Path::new("shader.frag"))?;
+        let vs_module = shader_dir.load_shader_module(device, Path::new("particles.vert"))?;
+        let fs_module = shader_dir.load_shader_module(device, Path::new("particles.frag"))?;
 
         Some(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
@@ -68,9 +68,9 @@ impl ParticleRenderer {
                 depth_bias_slope_scale: 0.0,
                 depth_bias_clamp: 0.0,
             }),
-            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+            primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
-                format: super::Application::backbuffer_format(),
+                format: super::Application::FORMAT_BACKBUFFER,
                 color_blend: wgpu::BlendDescriptor::REPLACE,
                 alpha_blend: wgpu::BlendDescriptor::REPLACE,
                 write_mask: wgpu::ColorWrite::ALL,
@@ -93,6 +93,6 @@ impl ParticleRenderer {
     pub fn draw(&self, rpass: &mut wgpu::RenderPass) {
         rpass.set_pipeline(&self.render_pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
-        rpass.draw(0..3, 0..1);
+        rpass.draw(0..4, 0..100);
     }
 }
