@@ -12,15 +12,62 @@ mod rendertimer;
 mod shader;
 mod uniformbuffer;
 
+pub struct Screen {
+    resolution: winit::dpi::PhysicalSize<u32>,
+    swap_chain: wgpu::SwapChain,
+    depth_view: wgpu::TextureView,
+}
+
+impl Screen {
+    pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
+    pub const FORMAT_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    pub fn new(device: &wgpu::Device, window_surface: &wgpu::Surface, resolution: winit::dpi::PhysicalSize<u32>) -> Self {
+        println!("creating screen with {:?}", resolution);
+
+        let swap_chain = device.create_swap_chain(
+            window_surface,
+            &wgpu::SwapChainDescriptor {
+                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+                format: Self::FORMAT_BACKBUFFER,
+                width: resolution.width,
+                height: resolution.height,
+                present_mode: wgpu::PresentMode::NoVsync,
+            },
+        );
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            size: wgpu::Extent3d {
+                width: resolution.width,
+                height: resolution.height,
+                depth: 1,
+            },
+            array_layer_count: 1,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::FORMAT_DEPTH,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+        });
+
+        Screen {
+            resolution,
+            swap_chain,
+            depth_view: depth_texture.create_default_view(),
+        }
+    }
+
+    pub fn aspect_ratio(&self) -> f32 {
+        self.resolution.width as f32 / self.resolution.height as f32
+    }
+}
+
 pub struct Application {
     window: Window,
+    window_surface: wgpu::Surface,
+    screen: Screen,
 
     device: wgpu::Device,
     command_queue: wgpu::Queue,
-    swap_chain: wgpu::SwapChain,
-
-    window_surface: wgpu::Surface,
-    backbuffer_resolution: winit::dpi::PhysicalSize<u32>,
 
     shader_dir: shader::ShaderDirectory,
     particle_renderer: particle_renderer::ParticleRenderer,
@@ -32,8 +79,6 @@ pub struct Application {
 }
 
 impl Application {
-    pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
-
     fn new(event_loop: &EventLoop<()>) -> Application {
         let window = WindowBuilder::new()
             .with_title("Blub")
@@ -54,8 +99,8 @@ impl Application {
         });
 
         let window_surface = wgpu::Surface::create(&window);
+        let screen = Screen::new(&device, &window_surface, window.inner_size());
         let backbuffer_resolution = window.inner_size();
-        let swap_chain = device.create_swap_chain(&window_surface, &Self::swap_chain_desc(window.inner_size()));
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let ubo_camera = camera::CameraUniformBuffer::new(&device);
@@ -63,12 +108,11 @@ impl Application {
 
         Application {
             window,
+            window_surface,
+            screen,
+
             device,
             command_queue,
-            swap_chain,
-
-            window_surface,
-            backbuffer_resolution,
 
             shader_dir,
             particle_renderer,
@@ -129,20 +173,8 @@ impl Application {
         });
     }
 
-    fn swap_chain_desc(size: winit::dpi::PhysicalSize<u32>) -> wgpu::SwapChainDescriptor {
-        wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: Self::FORMAT_BACKBUFFER,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::NoVsync,
-        }
-    }
-
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        println!("resizing screen to {:?}", size);
-        self.backbuffer_resolution = size;
-        self.swap_chain = self.device.create_swap_chain(&self.window_surface, &Self::swap_chain_desc(size));
+        self.screen = Screen::new(&self.device, &self.window_surface, size);
     }
 
     fn update(&mut self) {
@@ -154,10 +186,10 @@ impl Application {
     }
 
     fn draw(&mut self) {
-        let frame = self.swap_chain.get_next_texture();
+        let aspect_ratio = self.screen.aspect_ratio();
+        let frame = self.screen.swap_chain.get_next_texture();
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
 
-        let aspect_ratio = self.backbuffer_resolution.width as f32 / self.backbuffer_resolution.height as f32;
         self.ubo_camera
             .update_content(&mut encoder, &self.device, self.camera.fill_uniform_buffer(aspect_ratio));
 
@@ -175,7 +207,15 @@ impl Application {
                         a: 1.0,
                     },
                 }],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                    attachment: &self.screen.depth_view,
+                    depth_load_op: wgpu::LoadOp::Clear,
+                    depth_store_op: wgpu::StoreOp::Store,
+                    stencil_load_op: wgpu::LoadOp::Clear,
+                    stencil_store_op: wgpu::StoreOp::Store,
+                    clear_depth: 1.0,
+                    clear_stencil: 0,
+                }),
             });
 
             self.particle_renderer.draw(&mut rpass);
