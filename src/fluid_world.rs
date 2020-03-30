@@ -3,7 +3,6 @@ use rand::prelude::*;
 pub struct FluidWorld {
     //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
     grid_dimension: cgmath::Vector3<u32>,
-    grid_cellsize: f32,
 
     particles: wgpu::Buffer,
     num_particles: u32,
@@ -13,22 +12,29 @@ pub struct FluidWorld {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Particle {
+    // Particle positions are in grid space.
     position: cgmath::Point3<f32>,
     padding: f32,
 }
+
+// #[repr(C)]
+// #[derive(Clone, Copy)]
+// pub struct FluidWorldUniformBufferContent {
+//     pub num_particles: u32,
+// }
+// pub type FluidWorldUniformBuffer = UniformBuffer<FluidWorldUniformBufferContent>;
 
 impl FluidWorld {
     // particles are distributed 2x2x2 within a single gridcell
     // (seems to be widely accepted as the default)
     const PARTICLES_PER_GRID_CELL: u32 = 8;
 
-    pub fn new(device: &wgpu::Device, grid_dimension: cgmath::Vector3<u32>, grid_cellsize: f32) -> Self {
+    pub fn new(device: &wgpu::Device, grid_dimension: cgmath::Vector3<u32>) -> Self {
         FluidWorld {
-            //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0),
+            //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
             grid_dimension,
-            grid_cellsize,
 
-            // dummy. is there a invalid buffer?
+            // dummy. is there an invalid buffer type?
             particles: device.create_buffer(&wgpu::BufferDescriptor {
                 size: 1,
                 usage: wgpu::BufferUsage::STORAGE,
@@ -45,17 +51,15 @@ impl FluidWorld {
         )
     }
 
-    // Adds a cube of fluid. Very slow operation!
+    // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
     // todo: Removes all previously added particles.
-    pub fn add_fluid_cube(&mut self, device: &wgpu::Device, min: cgmath::Point3<f32>, max: cgmath::Point3<f32>) {
+    pub fn add_fluid_cube(&mut self, device: &wgpu::Device, min_grid: cgmath::Point3<f32>, max_grid: cgmath::Point3<f32>) {
         // align to whole cells for simplicity.
-        let min_cell = self.clamp_to_grid(min / self.grid_cellsize + cgmath::vec3(0.5, 0.5, 0.5));
-        let min_max = min_cell + cgmath::vec3(1, 1, 1);
-        let max_tmp = self.clamp_to_grid(max / self.grid_cellsize + cgmath::vec3(0.5, 0.5, 0.5));
-        let max_cell = cgmath::Point3::new(max_tmp.x.max(min_max.x), max_tmp.y.max(min_max.y), max_tmp.z.max(min_max.z));
-        let extent_cell = max_cell - min_cell;
+        let min_grid = self.clamp_to_grid(min_grid);
+        let max_grid = self.clamp_to_grid(max_grid);
+        let extent_cell = max_grid - min_grid;
 
-        let num_new_particles = (max_cell.x - min_cell.x) * (max_cell.y - min_cell.y) * (max_cell.z - min_cell.z) * Self::PARTICLES_PER_GRID_CELL;
+        let num_new_particles = (max_grid.x - min_grid.x) * (max_grid.y - min_grid.y) * (max_grid.z - min_grid.z) * Self::PARTICLES_PER_GRID_CELL;
 
         // TODO: Keep previous particles! Maybe just have a max particle num on creation and keep track of how many we actually use.
         self.num_particles = num_new_particles;
@@ -72,7 +76,7 @@ impl FluidWorld {
                 (i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
             );
             *position = Particle {
-                position: (cell + rng.gen::<cgmath::Vector3<f32>>()) * self.grid_cellsize,
+                position: (cell + rng.gen::<cgmath::Vector3<f32>>()),
                 padding: i as f32,
             };
         }

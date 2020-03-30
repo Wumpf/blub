@@ -4,6 +4,8 @@ use cgmath::prelude::*;
 use enumflags2::BitFlags;
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
+// WGPU actually specifies Y to go up in NDC (Metal/DX12 coordinate system, not Vulkan)
+// Change for WGPU-RS imminent https://github.com/gfx-rs/wgpu-rs/pull/218 / https://github.com/gfx-rs/wgpu/commit/2e9610e8c956447cf8f4c35f5909cab2f1b9dbbe
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -36,7 +38,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Camera {
-        let position = cgmath::Point3::new(1.5f32, 5.0, 3.0);
+        let position = cgmath::Point3::new(-100.0f32, 100.0, 100.0);
         Camera {
             position,
             direction: cgmath::Point3::new(0f32, 0.0, 0.0) - position,
@@ -141,7 +143,6 @@ impl Camera {
     }
 }
 
-// todo: (semi-)generate this from the shader code?
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CameraUniformBufferContent {

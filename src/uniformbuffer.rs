@@ -55,3 +55,5 @@ impl From<cgmath::Point3<f32>> for PaddedPoint3 {
         PaddedPoint3 { point, padding: 1.0 }
     }
 }
+
+// todo: generate uniform buffers from shader code?

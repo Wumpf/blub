@@ -95,7 +95,7 @@ impl Application {
         })
         .unwrap();
 
-        let (device, mut command_queue) = adapter.request_device(&wgpu::DeviceDescriptor {
+        let (device, command_queue) = adapter.request_device(&wgpu::DeviceDescriptor {
             extensions: wgpu::Extensions { anisotropic_filtering: true },
             limits: wgpu::Limits::default(),
         });
@@ -106,15 +106,12 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let ubo_camera = camera::CameraUniformBuffer::new(&device);
 
-        let mut fluid_world = fluid_world::FluidWorld::new(&device, cgmath::vec3(256, 128, 128), 1.0);
-        let init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
+        let mut fluid_world = fluid_world::FluidWorld::new(&device, cgmath::vec3(128, 64, 64));
         fluid_world.add_fluid_cube(
             &device,
             cgmath::Point3::new(1.0, 1.0, 1.0),
-            cgmath::Point3::new(64.0, 128.0 - 2.0, 128.0 - 2.0),
+            cgmath::Point3::new(32.0, 64.0 - 2.0, 64.0 - 2.0),
         );
-        let init_commandbuffer = init_encoder.finish();
-        command_queue.submit(&[init_commandbuffer]);
 
         let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera, &fluid_world);
 
