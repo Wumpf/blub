@@ -7,6 +7,7 @@ use winit::{
 };
 
 mod camera;
+mod fluid_world;
 mod particle_renderer;
 mod rendertimer;
 mod shader;
@@ -71,6 +72,7 @@ pub struct Application {
 
     shader_dir: shader::ShaderDirectory,
     particle_renderer: particle_renderer::ParticleRenderer,
+    fluid_world: fluid_world::FluidWorld,
 
     camera: camera::Camera,
     ubo_camera: camera::CameraUniformBuffer,
@@ -93,18 +95,28 @@ impl Application {
         })
         .unwrap();
 
-        let (device, command_queue) = adapter.request_device(&wgpu::DeviceDescriptor {
+        let (device, mut command_queue) = adapter.request_device(&wgpu::DeviceDescriptor {
             extensions: wgpu::Extensions { anisotropic_filtering: true },
             limits: wgpu::Limits::default(),
         });
 
         let window_surface = wgpu::Surface::create(&window);
         let screen = Screen::new(&device, &window_surface, window.inner_size());
-        let backbuffer_resolution = window.inner_size();
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let ubo_camera = camera::CameraUniformBuffer::new(&device);
-        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera);
+
+        let mut fluid_world = fluid_world::FluidWorld::new(&device, cgmath::vec3(256, 128, 128), 1.0);
+        let init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
+        fluid_world.add_fluid_cube(
+            &device,
+            cgmath::Point3::new(1.0, 1.0, 1.0),
+            cgmath::Point3::new(64.0, 128.0 - 2.0, 128.0 - 2.0),
+        );
+        let init_commandbuffer = init_encoder.finish();
+        command_queue.submit(&[init_commandbuffer]);
+
+        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera, &fluid_world);
 
         Application {
             window,
@@ -116,6 +128,7 @@ impl Application {
 
             shader_dir,
             particle_renderer,
+            fluid_world,
 
             camera: camera::Camera::new(),
             ubo_camera,
@@ -195,6 +208,8 @@ impl Application {
         self.ubo_camera
             .update_content(&mut encoder, &self.device, self.camera.fill_uniform_buffer(aspect_ratio));
 
+        self.fluid_world.step();
+
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -220,7 +235,7 @@ impl Application {
                 }),
             });
 
-            self.particle_renderer.draw(&mut rpass);
+            self.particle_renderer.draw(&mut rpass, self.fluid_world.num_particles());
         }
         self.command_queue.submit(&[encoder.finish()]);
 

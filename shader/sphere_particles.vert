@@ -15,6 +15,17 @@ layout(binding = 0, set = 0) uniform Camera {
     vec3 CameraDirection;
 };
 
+struct Particle
+{
+    vec3 Position;
+    float Padding;
+};
+
+layout(binding = 1) buffer ParticleBuffer
+{
+    Particle Particles[];
+};
+
 const vec2 quadPositions[4] = vec2[4](
     vec2(-1.0, -1.0),
     vec2(-1.0, 1.0),
@@ -24,7 +35,7 @@ const vec2 quadPositions[4] = vec2[4](
 
 void main() {
     const float radius = 0.5; // todo.
-    out_ParticleWorldPosition = vec3(gl_InstanceIndex % 10, gl_InstanceIndex / 10, 0.0); // this comes from a buffer later
+    out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position; // vec3(gl_InstanceIndex % 10, gl_InstanceIndex / 10, 0.0); // this comes from a buffer later
 
     // Spanning billboards is easy!
     vec3 toCamera = CameraPosition - out_ParticleWorldPosition;

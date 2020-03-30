@@ -2,6 +2,7 @@
 // The idea is to have different render backend for the fluid, which one being the particle renderer which renders the fluid as particles (sprites)
 
 use super::camera::CameraUniformBuffer;
+use super::fluid_world::*;
 use super::shader::*;
 use std::path::Path;
 
@@ -12,13 +13,25 @@ pub struct ParticleRenderer {
 }
 
 impl ParticleRenderer {
-    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, ubo_camera: &CameraUniformBuffer) -> ParticleRenderer {
+    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, ubo_camera: &CameraUniformBuffer, fluid_world: &FluidWorld) -> ParticleRenderer {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            bindings: &[wgpu::BindGroupLayoutBinding {
-                binding: 0,
-                visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::UniformBuffer { dynamic: false },
-            }],
+            bindings: &[
+                // Camera uniform buffer
+                wgpu::BindGroupLayoutBinding {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                },
+                // Particle buffer
+                wgpu::BindGroupLayoutBinding {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::VERTEX,
+                    ty: wgpu::BindingType::StorageBuffer {
+                        dynamic: false,
+                        readonly: true,
+                    },
+                },
+            ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout],
@@ -27,13 +40,22 @@ impl ParticleRenderer {
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
-            bindings: &[wgpu::Binding {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: ubo_camera.buffer(),
-                    range: 0..ubo_camera.size(),
+            bindings: &[
+                wgpu::Binding {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: ubo_camera.buffer(),
+                        range: 0..ubo_camera.size(),
+                    },
                 },
-            }],
+                wgpu::Binding {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: fluid_world.particle_buffer(),
+                        range: 0..fluid_world.particle_buffer_size(),
+                    },
+                },
+            ],
         });
 
         ParticleRenderer {
@@ -98,9 +120,9 @@ impl ParticleRenderer {
         }
     }
 
-    pub fn draw(&self, rpass: &mut wgpu::RenderPass) {
+    pub fn draw(&self, rpass: &mut wgpu::RenderPass, num_particles: u32) {
         rpass.set_pipeline(&self.render_pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
-        rpass.draw(0..4, 0..100);
+        rpass.draw(0..4, 0..num_particles);
     }
 }
