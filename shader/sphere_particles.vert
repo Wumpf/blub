@@ -1,19 +1,13 @@
 #version 450
 
+#include "uniform_buffers.glsl"
+
 out gl_PerVertex {
     vec4 gl_Position;
 };
 
 layout(location = 0) out vec3 out_WorldPosition;
 layout(location = 1) out vec3 out_ParticleWorldPosition;
-
-layout(binding = 0, set = 0) uniform Camera {
-    mat4 ViewProjection;
-    vec3 CameraPosition;
-    vec3 CameraRight;
-    vec3 CameraUp;
-    vec3 CameraDirection;
-};
 
 struct Particle
 {
@@ -35,7 +29,7 @@ const vec2 quadPositions[4] = vec2[4](
 
 void main() {
     const float radius = 0.5; // todo.
-    out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position; // vec3(gl_InstanceIndex % 10, gl_InstanceIndex / 10, 0.0); // this comes from a buffer later
+    out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
 
     // Spanning billboards is easy!
     vec3 toCamera = CameraPosition - out_ParticleWorldPosition;

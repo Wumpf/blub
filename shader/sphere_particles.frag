@@ -1,21 +1,11 @@
 #version 450
 
+#include "uniform_buffers.glsl"
+#include "utilities.glsl"
+
 layout(location = 0) in vec3 in_WorldPosition;
 layout(location = 1) in vec3 in_ParticleWorldPosition;
 layout(location = 0) out vec4 out_Color;
-
-// todo: includes
-layout(binding = 0, set = 0) uniform Camera {
-    mat4 ViewProjection;
-    vec3 CameraPosition;
-    vec3 CameraRight;
-    vec3 CameraUp;
-    vec3 CameraDirection;
-};
-float saturate(float x)
-{
-    return clamp(x, 0.0, 1.0);
-}
 
 void main()
 {

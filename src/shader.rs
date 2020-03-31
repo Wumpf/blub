@@ -1,4 +1,5 @@
 use notify::Watcher;
+use regex::Regex;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,7 +12,7 @@ pub enum ShaderStage {
     Compute,
 }
 
-fn load_shader(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option<Vec<u32>> {
+fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option<Vec<u32>> {
     let kind = match stage {
         ShaderStage::Vertex => shaderc::ShaderKind::Vertex,
         ShaderStage::Fragment => shaderc::ShaderKind::Fragment,
@@ -36,6 +37,49 @@ fn load_shader(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option<
         }
         Err(compile_error) => {
             println!("{}", compile_error);
+            None
+        }
+    }
+}
+
+fn load_glsl_and_run_preprocessor(path: &Path) -> Option<String> {
+    match std::fs::read_to_string(&path) {
+        Ok(glsl_code) => {
+            lazy_static! {
+                static ref INCLUDE_REGEX: Regex = Regex::new(r#"^\s*#\s*include\s+[<"](?P<file>.*)[>"]"#).unwrap();
+            }
+
+            let mut expanded_code = Vec::new();
+            for (line_number, line) in glsl_code.lines().enumerate() {
+                match INCLUDE_REGEX.captures(line) {
+                    Some(captures) => {
+                        expanded_code.push(format!("#line {}", 1));
+                        let included_file = captures
+                            .name("file")
+                            .expect(&format!(
+                                "Invalid glsl include line in \"{:?}\" line {}, (couldn't find \"file\"):\n\t{}",
+                                path, line_number, line,
+                            ))
+                            .as_str();
+                        match load_glsl_and_run_preprocessor(&path.parent().unwrap().join(included_file)) {
+                            Some(included_code) => expanded_code.push(included_code),
+                            None => {
+                                println!("Failed to process include \"{:?}\"line {}:\n\t{}", path, line_number, line);
+                                return None;
+                            }
+                        }
+                        expanded_code.push(format!("#line {}", line_number + 2));
+                    }
+                    None => {
+                        expanded_code.push(line.to_string());
+                    }
+                }
+            }
+
+            Some(expanded_code.join("\n"))
+        }
+        Err(err) => {
+            println!("Failed to read shader file \"{:?}\": {}", path, err);
             None
         }
     }
@@ -84,15 +128,12 @@ impl ShaderDirectory {
             }
         };
 
-        match std::fs::read_to_string(&path) {
-            Ok(glsl_code) => match load_shader(&glsl_code, &relative_filename.to_str().unwrap(), shader_stage) {
+        match load_glsl_and_run_preprocessor(&path) {
+            Some(glsl_code) => match compile_glsl(&glsl_code, &relative_filename.to_str().unwrap(), shader_stage) {
                 Some(spirv) => Some(device.create_shader_module(&spirv)),
                 None => None,
             },
-            Err(err) => {
-                println!("Failed to read shader file \"{:?}\": {}", path, err);
-                None
-            }
+            None => None,
         }
     }
 }

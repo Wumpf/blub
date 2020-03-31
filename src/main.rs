@@ -1,10 +1,5 @@
-use std::path::Path;
-use winit::{
-    event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
-    window::WindowBuilder,
-};
+#[macro_use]
+extern crate lazy_static;
 
 mod camera;
 mod fluid_world;
@@ -12,6 +7,14 @@ mod particle_renderer;
 mod rendertimer;
 mod shader;
 mod uniformbuffer;
+
+use std::path::Path;
+use winit::{
+    event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::Window,
+    window::WindowBuilder,
+};
 
 pub struct Screen {
     resolution: winit::dpi::PhysicalSize<u32>,
