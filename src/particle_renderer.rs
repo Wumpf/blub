@@ -77,11 +77,11 @@ impl ParticleRenderer {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
-                entry_point: "main",
+                entry_point: SHADER_ENTRY_POINT_NAME,
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &fs_module,
-                entry_point: "main",
+                entry_point: SHADER_ENTRY_POINT_NAME,
             }),
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Ccw,

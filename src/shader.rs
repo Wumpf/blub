@@ -8,9 +8,12 @@ use std::sync::Arc;
 pub enum ShaderStage {
     Vertex,
     Fragment,
-    #[allow(dead_code)]
     Compute,
 }
+
+// All entry points need to have this name.
+// (could make customizable, but forcing this has perks as well)
+pub const SHADER_ENTRY_POINT_NAME: &str = "main";
 
 fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option<Vec<u32>> {
     let kind = match stage {
@@ -21,7 +24,7 @@ fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option
 
     let mut compiler = shaderc::Compiler::new().unwrap();
     //let mut options = shaderc::CompileOptions::new().unwrap();
-    match compiler.compile_into_spirv(glsl_code, kind, identifier, "main", None) {
+    match compiler.compile_into_spirv(glsl_code, kind, identifier, SHADER_ENTRY_POINT_NAME, None) {
         Ok(compile_result) => {
             if compile_result.get_num_warnings() > 0 {
                 println!("warnings when compiling {}:\n{}", identifier, compile_result.get_warning_messages());
@@ -42,7 +45,7 @@ fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option
     }
 }
 
-fn load_glsl_and_run_preprocessor(path: &Path) -> Option<String> {
+fn load_glsl_and_resolve_includes(path: &Path) -> Option<String> {
     match std::fs::read_to_string(&path) {
         Ok(glsl_code) => {
             lazy_static! {
@@ -61,7 +64,7 @@ fn load_glsl_and_run_preprocessor(path: &Path) -> Option<String> {
                                 path, line_number, line,
                             ))
                             .as_str();
-                        match load_glsl_and_run_preprocessor(&path.parent().unwrap().join(included_file)) {
+                        match load_glsl_and_resolve_includes(&path.parent().unwrap().join(included_file)) {
                             Some(included_code) => expanded_code.push(included_code),
                             None => {
                                 println!("Failed to process include \"{:?}\"line {}:\n\t{}", path, line_number, line);
@@ -122,13 +125,14 @@ impl ShaderDirectory {
         let shader_stage = match path.extension().and_then(OsStr::to_str) {
             Some("frag") => ShaderStage::Fragment,
             Some("vert") => ShaderStage::Vertex,
+            Some("comp") => ShaderStage::Compute,
             _ => {
                 println!("Did not recognize file extension for shader file \"{:?}\"", path);
                 return None;
             }
         };
 
-        match load_glsl_and_run_preprocessor(&path) {
+        match load_glsl_and_resolve_includes(&path) {
             Some(glsl_code) => match compile_glsl(&glsl_code, &relative_filename.to_str().unwrap(), shader_stage) {
                 Some(spirv) => Some(device.create_shader_module(&spirv)),
                 None => None,
