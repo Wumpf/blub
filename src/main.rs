@@ -109,7 +109,15 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let ubo_camera = camera::CameraUniformBuffer::new(&device);
 
-        let mut fluid_world = fluid_world::FluidWorld::new(&device, cgmath::vec3(128, 64, 64));
+        let mut fluid_world = fluid_world::FluidWorld::new(
+            &device,
+            wgpu::Extent3d {
+                width: 128,
+                height: 64,
+                depth: 64,
+            },
+            &shader_dir,
+        );
         fluid_world.add_fluid_cube(
             &device,
             cgmath::Point3::new(1.0, 1.0, 1.0),
@@ -196,6 +204,7 @@ impl Application {
         if self.shader_dir.detected_change() {
             println!("reloading shaders...");
             self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
+            self.fluid_world.try_reload_shaders(&self.device, &self.shader_dir);
         }
         self.camera.update(&self.timer);
     }
@@ -208,7 +217,10 @@ impl Application {
         self.ubo_camera
             .update_content(&mut encoder, &self.device, self.camera.fill_uniform_buffer(aspect_ratio));
 
-        self.fluid_world.step();
+        {
+            let mut cpass = encoder.begin_compute_pass();
+            self.fluid_world.step(&mut cpass);
+        }
 
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

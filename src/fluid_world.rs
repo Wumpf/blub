@@ -1,10 +1,48 @@
+use super::shader::*;
 use rand::prelude::*;
+use std::path::Path;
+
+struct HybridFluidComputePipelines {
+    transfer_velocity_to_grid: wgpu::ComputePipeline,
+    transfer_velocity_to_particles: wgpu::ComputePipeline,
+}
+
+impl HybridFluidComputePipelines {
+    fn new(device: &wgpu::Device, pipeline_layout: &wgpu::PipelineLayout, shader_dir: &ShaderDirectory) -> Option<Self> {
+        let shader_transfer_velocity_to_grid = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_grid.comp"))?;
+        let shader_transfer_velocity_to_particles = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_particles.comp"))?;
+
+        Some(HybridFluidComputePipelines {
+            transfer_velocity_to_grid: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                layout: pipeline_layout,
+                compute_stage: wgpu::ProgrammableStageDescriptor {
+                    module: &shader_transfer_velocity_to_grid,
+                    entry_point: SHADER_ENTRY_POINT_NAME,
+                },
+            }),
+            transfer_velocity_to_particles: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                layout: pipeline_layout,
+                compute_stage: wgpu::ProgrammableStageDescriptor {
+                    module: &shader_transfer_velocity_to_particles,
+                    entry_point: SHADER_ENTRY_POINT_NAME,
+                },
+            }),
+        })
+    }
+}
 
 pub struct FluidWorld {
     //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
-    grid_dimension: cgmath::Vector3<u32>,
+    grid_dimension: wgpu::Extent3d,
 
     particles: wgpu::Buffer,
+    mac_grid_vx: wgpu::Texture,
+    mac_grid_vy: wgpu::Texture,
+    mac_grid_vz: wgpu::Texture,
+
+    pipeline_layout: wgpu::PipelineLayout,
+    compute_pipelines: HybridFluidComputePipelines,
+
     num_particles: u32,
 }
 
@@ -12,7 +50,8 @@ pub struct FluidWorld {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Particle {
-    // Particle positions are in grid space.
+    // Particle positions are in grid space to simplify shader computation
+    // (no scaling/translation needed until we're rendering or interacting with other objects!)
     position: cgmath::Point3<f32>,
     padding: f32,
 }
@@ -29,7 +68,36 @@ impl FluidWorld {
     // (seems to be widely accepted as the default)
     const PARTICLES_PER_GRID_CELL: u32 = 8;
 
-    pub fn new(device: &wgpu::Device, grid_dimension: cgmath::Vector3<u32>) -> Self {
+    pub fn new(device: &wgpu::Device, grid_dimension: wgpu::Extent3d, shader_dir: &ShaderDirectory) -> Self {
+        let grid_component_desc = wgpu::TextureDescriptor {
+            size: grid_dimension,
+            array_layer_count: 1,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::R32Float,
+            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
+        };
+
+        // todo: Structure this stuff in a more clever way.
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            bindings: &[
+                // Particle buffer
+                wgpu::BindGroupLayoutBinding {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty: wgpu::BindingType::StorageBuffer {
+                        dynamic: false,
+                        readonly: true,
+                    },
+                },
+            ],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[&bind_group_layout],
+        });
+        let compute_pipelines = HybridFluidComputePipelines::new(device, &pipeline_layout, shader_dir).unwrap();
+
         FluidWorld {
             //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
             grid_dimension,
@@ -39,16 +107,29 @@ impl FluidWorld {
                 size: 1,
                 usage: wgpu::BufferUsage::STORAGE,
             }),
+            mac_grid_vx: device.create_texture(&grid_component_desc),
+            mac_grid_vy: device.create_texture(&grid_component_desc),
+            mac_grid_vz: device.create_texture(&grid_component_desc),
+
+            pipeline_layout,
+            compute_pipelines,
+
             num_particles: 0,
         }
     }
 
     fn clamp_to_grid(&self, grid_cor: cgmath::Point3<f32>) -> cgmath::Point3<u32> {
         cgmath::Point3::new(
-            self.grid_dimension.x.min(grid_cor.x as u32),
-            self.grid_dimension.y.min(grid_cor.y as u32),
-            self.grid_dimension.z.min(grid_cor.z as u32),
+            self.grid_dimension.width.min(grid_cor.x as u32),
+            self.grid_dimension.height.min(grid_cor.y as u32),
+            self.grid_dimension.depth.min(grid_cor.z as u32),
         )
+    }
+
+    pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
+        if let Some(pipelines) = HybridFluidComputePipelines::new(device, &self.pipeline_layout, shader_dir) {
+            self.compute_pipelines = pipelines;
+        }
     }
 
     // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
@@ -97,5 +178,16 @@ impl FluidWorld {
     }
 
     // todo: timing
-    pub fn step(&self) {}
+    pub fn step(&self, cpass: &mut wgpu::ComputePass) {
+        // Transfer velocities to grid.
+        // cpass.set_pipeline(pipeline);
+        // cpass.set_bind_group(index, bind_group, offsets);
+        // cpass.dispatch(self.num_particles, 1, 1);
+
+        // Resolves forces on grid.
+
+        // Transfer velocities to particles.
+
+        // Advect particles.
+    }
 }

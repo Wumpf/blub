@@ -1,6 +1,7 @@
 #version 450
 
 #include "uniform_buffers.glsl"
+#include "particles.glsl"
 
 out gl_PerVertex {
     vec4 gl_Position;
@@ -8,17 +9,6 @@ out gl_PerVertex {
 
 layout(location = 0) out vec3 out_WorldPosition;
 layout(location = 1) out vec3 out_ParticleWorldPosition;
-
-struct Particle
-{
-    vec3 Position;
-    float Padding;
-};
-
-layout(binding = 1) buffer ParticleBuffer
-{
-    Particle Particles[];
-};
 
 const vec2 quadPositions[4] = vec2[4](
     vec2(-1.0, -1.0),
