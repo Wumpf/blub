@@ -2,7 +2,7 @@
 extern crate lazy_static;
 
 mod camera;
-mod fluid_world;
+mod hybrid_fluid;
 mod particle_renderer;
 mod rendertimer;
 mod shader;
@@ -75,7 +75,7 @@ pub struct Application {
 
     shader_dir: shader::ShaderDirectory,
     particle_renderer: particle_renderer::ParticleRenderer,
-    fluid_world: fluid_world::FluidWorld,
+    hybrid_fluid: hybrid_fluid::HybridFluid,
 
     camera: camera::Camera,
     ubo_camera: camera::CameraUniformBuffer,
@@ -109,7 +109,7 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let ubo_camera = camera::CameraUniformBuffer::new(&device);
 
-        let mut fluid_world = fluid_world::FluidWorld::new(
+        let mut hybrid_fluid = hybrid_fluid::HybridFluid::new(
             &device,
             wgpu::Extent3d {
                 width: 128,
@@ -118,13 +118,13 @@ impl Application {
             },
             &shader_dir,
         );
-        fluid_world.add_fluid_cube(
+        hybrid_fluid.add_fluid_cube(
             &device,
             cgmath::Point3::new(1.0, 1.0, 1.0),
             cgmath::Point3::new(32.0, 64.0 - 2.0, 64.0 - 2.0),
         );
 
-        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera, &fluid_world);
+        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera, &hybrid_fluid);
 
         Application {
             window,
@@ -136,7 +136,7 @@ impl Application {
 
             shader_dir,
             particle_renderer,
-            fluid_world,
+            hybrid_fluid,
 
             camera: camera::Camera::new(),
             ubo_camera,
@@ -204,7 +204,7 @@ impl Application {
         if self.shader_dir.detected_change() {
             println!("reloading shaders...");
             self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
-            self.fluid_world.try_reload_shaders(&self.device, &self.shader_dir);
+            self.hybrid_fluid.try_reload_shaders(&self.device, &self.shader_dir);
         }
         self.camera.update(&self.timer);
     }
@@ -219,7 +219,7 @@ impl Application {
 
         {
             let mut cpass = encoder.begin_compute_pass();
-            self.fluid_world.step(&mut cpass);
+            self.hybrid_fluid.step(&mut cpass);
         }
 
         {
@@ -247,7 +247,7 @@ impl Application {
                 }),
             });
 
-            self.particle_renderer.draw(&mut rpass, self.fluid_world.num_particles());
+            self.particle_renderer.draw(&mut rpass, self.hybrid_fluid.num_particles());
         }
         self.command_queue.submit(&[encoder.finish()]);
 

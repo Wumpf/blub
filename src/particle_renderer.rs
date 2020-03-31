@@ -2,7 +2,7 @@
 // The idea is to have different render backend for the fluid, which one being the particle renderer which renders the fluid as particles (sprites)
 
 use super::camera::CameraUniformBuffer;
-use super::fluid_world::*;
+use super::hybrid_fluid::*;
 use super::shader::*;
 use std::path::Path;
 
@@ -13,7 +13,12 @@ pub struct ParticleRenderer {
 }
 
 impl ParticleRenderer {
-    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, ubo_camera: &CameraUniformBuffer, fluid_world: &FluidWorld) -> ParticleRenderer {
+    pub fn new(
+        device: &wgpu::Device,
+        shader_dir: &ShaderDirectory,
+        ubo_camera: &CameraUniformBuffer,
+        hybrid_fluid: &HybridFluid,
+    ) -> ParticleRenderer {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             bindings: &[
                 // Camera uniform buffer
@@ -51,8 +56,8 @@ impl ParticleRenderer {
                 wgpu::Binding {
                     binding: 1,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: fluid_world.particle_buffer(),
-                        range: 0..fluid_world.particle_buffer_size(),
+                        buffer: hybrid_fluid.particle_buffer(),
+                        range: 0..hybrid_fluid.particle_buffer_size(),
                     },
                 },
             ],

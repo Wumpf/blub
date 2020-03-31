@@ -31,7 +31,7 @@ impl HybridFluidComputePipelines {
     }
 }
 
-pub struct FluidWorld {
+pub struct HybridFluid {
     //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
     grid_dimension: wgpu::Extent3d,
 
@@ -58,12 +58,12 @@ struct Particle {
 
 // #[repr(C)]
 // #[derive(Clone, Copy)]
-// pub struct FluidWorldUniformBufferContent {
+// pub struct HybridFluidUniformBufferContent {
 //     pub num_particles: u32,
 // }
-// pub type FluidWorldUniformBuffer = UniformBuffer<FluidWorldUniformBufferContent>;
+// pub type HybridFluidUniformBuffer = UniformBuffer<HybridFluidUniformBufferContent>;
 
-impl FluidWorld {
+impl HybridFluid {
     // particles are distributed 2x2x2 within a single gridcell
     // (seems to be widely accepted as the default)
     const PARTICLES_PER_GRID_CELL: u32 = 8;
@@ -98,7 +98,7 @@ impl FluidWorld {
         });
         let compute_pipelines = HybridFluidComputePipelines::new(device, &pipeline_layout, shader_dir).unwrap();
 
-        FluidWorld {
+        HybridFluid {
             //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
             grid_dimension,
 
