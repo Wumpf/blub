@@ -125,9 +125,9 @@ impl ParticleRenderer {
         }
     }
 
-    pub fn draw(&self, rpass: &mut wgpu::RenderPass, num_particles: u32) {
+    pub fn draw(&self, rpass: &mut wgpu::RenderPass, num_particles: u64) {
         rpass.set_pipeline(&self.render_pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
-        rpass.draw(0..4, 0..num_particles);
+        rpass.draw(0..4, 0..num_particles as u32);
     }
 }
