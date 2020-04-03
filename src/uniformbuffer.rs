@@ -18,10 +18,6 @@ impl<Content: Copy + 'static> UniformBuffer<Content> {
         }
     }
 
-    pub fn buffer(&self) -> &wgpu::Buffer {
-        &self.buffer
-    }
-
     pub fn size(&self) -> u64 {
         std::mem::size_of::<Content>() as u64
     }
@@ -29,6 +25,13 @@ impl<Content: Copy + 'static> UniformBuffer<Content> {
     pub fn update_content(&self, encoder: &mut wgpu::CommandEncoder, device: &wgpu::Device, content: Content) {
         let buffer = device.create_buffer_mapped(1, wgpu::BufferUsage::COPY_SRC).fill_from_slice(&[content]);
         encoder.copy_buffer_to_buffer(&buffer, 0, &self.buffer, 0, std::mem::size_of_val(&content) as u64);
+    }
+
+    pub fn binding_resource(&self) -> wgpu::BindingResource {
+        wgpu::BindingResource::Buffer {
+            buffer: &self.buffer,
+            range: 0..self.size(),
+        }
     }
 }
 

@@ -7,6 +7,7 @@ mod particle_renderer;
 mod rendertimer;
 mod shader;
 mod uniformbuffer;
+mod wgpu_utils;
 
 use std::path::Path;
 use winit::{

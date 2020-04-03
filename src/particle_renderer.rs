@@ -4,6 +4,7 @@
 use super::camera::CameraUniformBuffer;
 use super::hybrid_fluid::*;
 use super::shader::*;
+use crate::wgpu_utils::*;
 use std::path::Path;
 
 pub struct ParticleRenderer {
@@ -19,49 +20,19 @@ impl ParticleRenderer {
         ubo_camera: &CameraUniformBuffer,
         hybrid_fluid: &HybridFluid,
     ) -> ParticleRenderer {
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            bindings: &[
-                // Camera uniform buffer
-                wgpu::BindGroupLayoutBinding {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::UniformBuffer { dynamic: false },
-                },
-                // Particle buffer
-                wgpu::BindGroupLayoutBinding {
-                    binding: 1,
-                    visibility: wgpu::ShaderStage::VERTEX,
-                    ty: wgpu::BindingType::StorageBuffer {
-                        dynamic: false,
-                        readonly: true,
-                    },
-                },
-            ],
-        });
+        let bind_group_layout = BindGroupLayoutBuilder::new()
+            .next_binding_rendering(wgpu::BindingType::UniformBuffer { dynamic: false })
+            .next_binding_vertex(bindingtype_storagebuffer_readonly())
+            .create(device);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout.layout],
         });
         let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout, shader_dir).unwrap();
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            bindings: &[
-                wgpu::Binding {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
-                        buffer: ubo_camera.buffer(),
-                        range: 0..ubo_camera.size(),
-                    },
-                },
-                wgpu::Binding {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Buffer {
-                        buffer: hybrid_fluid.particle_buffer(),
-                        range: 0..hybrid_fluid.particle_buffer_size(),
-                    },
-                },
-            ],
-        });
+        let bind_group = BindGroupBuilder::new(&bind_group_layout)
+            .resource(ubo_camera.binding_resource())
+            .resource(hybrid_fluid.particle_binding_resource())
+            .create(device);
 
         ParticleRenderer {
             render_pipeline,

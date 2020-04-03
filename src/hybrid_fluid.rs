@@ -1,4 +1,5 @@
-use super::shader::*;
+use crate::shader::*;
+use crate::wgpu_utils::*;
 use rand::prelude::*;
 use std::path::Path;
 
@@ -73,19 +74,6 @@ struct Particle {
 // }
 // pub type HybridFluidUniformBuffer = UniformBuffer<HybridFluidUniformBufferContent>;
 
-fn storagebuffer_readonly() -> wgpu::BindingType {
-    wgpu::BindingType::StorageBuffer {
-        dynamic: false,
-        readonly: true,
-    }
-}
-fn storagebuffer_readwrite() -> wgpu::BindingType {
-    wgpu::BindingType::StorageBuffer {
-        dynamic: false,
-        readonly: false,
-    }
-}
-
 impl HybridFluid {
     // particles are distributed 2x2x2 within a single gridcell
     // (seems to be widely accepted as the default)
@@ -93,52 +81,27 @@ impl HybridFluid {
 
     // TODO: Split up/simplify all this binding generation code!
     pub fn new(device: &wgpu::Device, grid_dimension: wgpu::Extent3d, max_num_particles: u64, shader_dir: &ShaderDirectory) -> Self {
-        let group_layout_read_particles = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            bindings: &[wgpu::BindGroupLayoutBinding {
-                binding: 0,
-                visibility: wgpu::ShaderStage::COMPUTE,
-                ty: storagebuffer_readonly(),
-            }],
-        });
-        let group_layout_write_particles = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            bindings: &[wgpu::BindGroupLayoutBinding {
-                binding: 0,
-                visibility: wgpu::ShaderStage::COMPUTE,
-                ty: storagebuffer_readwrite(),
-            }],
-        });
-        let group_layout_volumes = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            bindings: &[
-                // Write volume.
-                wgpu::BindGroupLayoutBinding {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::StorageTexture {
-                        dimension: wgpu::TextureViewDimension::D3,
-                    },
-                },
-                // Read volume.
-                wgpu::BindGroupLayoutBinding {
-                    binding: 1,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::SampledTexture {
-                        multisampled: false,
-                        dimension: wgpu::TextureViewDimension::D3,
-                    },
-                },
-            ],
-        });
+        let group_layout_read_particles = BindGroupLayoutBuilder::new()
+            .next_binding_compute(bindingtype_storagebuffer_readonly())
+            .create(device);
+        let group_layout_write_particles = BindGroupLayoutBuilder::new()
+            .next_binding_compute(bindingtype_storagebuffer_readwrite())
+            .create(device);
+        let group_layout_volumes = BindGroupLayoutBuilder::new()
+            .next_binding_compute(bindingtype_storagetexture_3d())
+            .next_binding_compute(bindingtype_texture_3d())
+            .create(device);
 
         let pipeline_layout_write_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&group_layout_write_particles, &group_layout_volumes],
+            bind_group_layouts: &[&group_layout_write_particles.layout, &group_layout_volumes.layout],
         });
         let pipeline_layout_read_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&group_layout_read_particles, &group_layout_volumes],
+            bind_group_layouts: &[&group_layout_read_particles.layout, &group_layout_volumes.layout],
         });
         let compute_pipelines =
             HybridFluidComputePipelines::new(device, &pipeline_layout_write_particles, &pipeline_layout_read_particles, shader_dir).unwrap();
 
-        let velocity_grid_desc = wgpu::TextureDescriptor {
+        let velocity_texture_desc = wgpu::TextureDescriptor {
             size: grid_dimension,
             array_layer_count: 1,
             mip_level_count: 1,
@@ -147,49 +110,23 @@ impl HybridFluid {
             format: wgpu::TextureFormat::Rgba32Float,
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
         };
-        let velocity_grids = [device.create_texture(&velocity_grid_desc), device.create_texture(&velocity_grid_desc)];
-
-        let velocity_grid_texture_view_desc = wgpu::TextureViewDescriptor {
-            format: velocity_grid_desc.format,
-            dimension: wgpu::TextureViewDimension::D3,
-            aspect: wgpu::TextureAspect::default(),
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            array_layer_count: 1,
-        };
-        let texture_view_velocity_grids = [
-            velocity_grids[0].create_view(&velocity_grid_texture_view_desc),
-            velocity_grids[1].create_view(&velocity_grid_texture_view_desc),
+        let velocity_grids = [
+            device.create_texture(&velocity_texture_desc),
+            device.create_texture(&velocity_texture_desc),
         ];
-
+        let texture_view_velocity_grids = [
+            velocity_grids[0].create_view(&default_textureview(&velocity_texture_desc)),
+            velocity_grids[1].create_view(&default_textureview(&velocity_texture_desc)),
+        ];
         let bind_group_velocity_grids = [
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &group_layout_volumes,
-                bindings: &[
-                    wgpu::Binding {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_view_velocity_grids[0]),
-                    },
-                    wgpu::Binding {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&texture_view_velocity_grids[1]),
-                    },
-                ],
-            }),
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &group_layout_volumes,
-                bindings: &[
-                    wgpu::Binding {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_view_velocity_grids[1]),
-                    },
-                    wgpu::Binding {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&texture_view_velocity_grids[0]),
-                    },
-                ],
-            }),
+            BindGroupBuilder::new(&group_layout_volumes)
+                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[0]))
+                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[1]))
+                .create(device),
+            BindGroupBuilder::new(&group_layout_volumes)
+                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[1]))
+                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[0]))
+                .create(device),
         ];
 
         let particle_buffer_size = max_num_particles * std::mem::size_of::<Particle>() as u64;
@@ -198,21 +135,16 @@ impl HybridFluid {
             usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::STORAGE_READ | wgpu::BufferUsage::COPY_DST,
         });
 
-        let particles_bindings = [wgpu::Binding {
-            binding: 0,
-            resource: wgpu::BindingResource::Buffer {
-                buffer: &particles,
-                range: 0..particle_buffer_size,
-            },
-        }];
-        let bind_group_write_particles = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &group_layout_write_particles,
-            bindings: &particles_bindings,
-        });
-        let bind_group_read_particles = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &group_layout_read_particles,
-            bindings: &particles_bindings,
-        });
+        let particle_resourceview = wgpu::BindingResource::Buffer {
+            buffer: &particles,
+            range: 0..particle_buffer_size,
+        };
+        let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
+            .resource(particle_resourceview.clone())
+            .create(device);
+        let bind_group_read_particles = BindGroupBuilder::new(&group_layout_read_particles)
+            .resource(particle_resourceview.clone())
+            .create(device);
 
         HybridFluid {
             //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
@@ -303,8 +235,11 @@ impl HybridFluid {
         self.num_particles
     }
 
-    pub fn particle_buffer(&self) -> &wgpu::Buffer {
-        &self.particles
+    pub fn particle_binding_resource(&self) -> wgpu::BindingResource {
+        wgpu::BindingResource::Buffer {
+            buffer: &self.particles,
+            range: 0..self.particle_buffer_size(),
+        }
     }
 
     pub fn particle_buffer_size(&self) -> u64 {
