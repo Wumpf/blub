@@ -1,9 +1,11 @@
 use crate::wgpu_utils::bindings::*;
+use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use rand::prelude::*;
 use std::path::Path;
 
 struct HybridFluidComputePipelines {
+    clear_grid: wgpu::ComputePipeline,
     transfer_velocity_to_grid: wgpu::ComputePipeline,
     transfer_velocity_to_particles: wgpu::ComputePipeline,
 }
@@ -17,22 +19,12 @@ impl HybridFluidComputePipelines {
     ) -> Option<Self> {
         let shader_transfer_velocity_to_grid = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_grid.comp"))?;
         let shader_transfer_velocity_to_particles = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_particles.comp"))?;
+        let shader_clear_grid = shader_dir.load_shader_module(device, Path::new("clear_grid.comp"))?;
 
         Some(HybridFluidComputePipelines {
-            transfer_velocity_to_grid: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                layout: pipeline_layout_read_particles,
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &shader_transfer_velocity_to_grid,
-                    entry_point: SHADER_ENTRY_POINT_NAME,
-                },
-            }),
-            transfer_velocity_to_particles: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                layout: pipeline_layout_write_particles,
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &shader_transfer_velocity_to_particles,
-                    entry_point: SHADER_ENTRY_POINT_NAME,
-                },
-            }),
+            clear_grid: create_compute_pipeline(device, pipeline_layout_read_particles, &shader_clear_grid),
+            transfer_velocity_to_grid: create_compute_pipeline(device, pipeline_layout_read_particles, &shader_transfer_velocity_to_grid),
+            transfer_velocity_to_particles: create_compute_pipeline(device, pipeline_layout_write_particles, &shader_transfer_velocity_to_particles),
         })
     }
 }
@@ -45,7 +37,6 @@ pub struct HybridFluid {
     bind_group_write_particles: wgpu::BindGroup,
     bind_group_read_particles: wgpu::BindGroup,
 
-    velocity_grids: [wgpu::Texture; 2],
     bind_group_velocity_grids: [wgpu::BindGroup; 2],
 
     pipeline_layout_write_particles: wgpu::PipelineLayout,
@@ -157,7 +148,6 @@ impl HybridFluid {
             bind_group_write_particles,
             bind_group_read_particles,
 
-            velocity_grids,
             bind_group_velocity_grids,
 
             pipeline_layout_write_particles,
@@ -251,6 +241,19 @@ impl HybridFluid {
 
     // todo: timing
     pub fn step(&self, cpass: &mut wgpu::ComputePass) {
+        // note on setting bind groups:
+        // As of writing, webgpu-rs silently does nothing on dispatch if pipeline layout doesn't match currently set bind groups.
+        // Leaving out set_bind_group for already bound resources is fine, but this will then also not emit any barrier at all!
+        // TODO: Create a ticket on this? Is this a bug that needs reporting?
+
+        // clear grid
+        // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
+        // (might still be faster because RT clear operations are usually very quick :/)
+        cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
+        cpass.set_bind_group(0, &self.bind_group_read_particles, &[]);
+        cpass.set_bind_group(1, &self.bind_group_velocity_grids[0], &[]);
+        cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
+
         // Transfer velocities to grid. (write grid, read particles)
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
         cpass.set_bind_group(0, &self.bind_group_read_particles, &[]);
