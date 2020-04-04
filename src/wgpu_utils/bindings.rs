@@ -67,6 +67,10 @@ impl BindGroupLayoutBuilder {
         self.next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT, ty)
     }
 
+    pub fn next_binding_all(self, ty: wgpu::BindingType) -> Self {
+        self.next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT | wgpu::ShaderStage::COMPUTE, ty)
+    }
+
     pub fn create(self, device: &wgpu::Device) -> BindGroupLayoutWithDesc {
         BindGroupLayoutWithDesc {
             layout: device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { bindings: &self.bindings }),

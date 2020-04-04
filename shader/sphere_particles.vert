@@ -1,7 +1,7 @@
 #version 450
 
 #include "particles.glsl"
-#include "uniform_buffers.glsl"
+#include "per_frame_resources.glsl"
 
 out gl_PerVertex { vec4 gl_Position; };
 

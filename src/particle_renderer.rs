@@ -1,10 +1,9 @@
 // TODO: Not a particle renderer yet.
 // The idea is to have different render backend for the fluid, which one being the particle renderer which renders the fluid as particles (sprites)
 
-use super::camera::CameraUniformBuffer;
-use super::hybrid_fluid::*;
-use super::wgpu_utils::shader::*;
+use crate::hybrid_fluid::*;
 use crate::wgpu_utils::bindings::*;
+use crate::wgpu_utils::shader::*;
 use std::path::Path;
 
 pub struct ParticleRenderer {
@@ -17,21 +16,19 @@ impl ParticleRenderer {
     pub fn new(
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
-        ubo_camera: &CameraUniformBuffer,
+        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
         hybrid_fluid: &HybridFluid,
     ) -> ParticleRenderer {
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding_vertex(bindingtype_storagebuffer_readonly())
-            .next_binding_rendering(wgpu::BindingType::UniformBuffer { dynamic: false })
             .create(device);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&bind_group_layout.layout],
+            bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
         });
         let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout, shader_dir).unwrap();
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
             .resource(hybrid_fluid.particle_binding_resource())
-            .resource(ubo_camera.binding_resource())
             .create(device);
 
         ParticleRenderer {
@@ -98,7 +95,7 @@ impl ParticleRenderer {
 
     pub fn draw(&self, rpass: &mut wgpu::RenderPass, num_particles: u64) {
         rpass.set_pipeline(&self.render_pipeline);
-        rpass.set_bind_group(0, &self.bind_group, &[]);
+        rpass.set_bind_group(1, &self.bind_group, &[]);
         rpass.draw(0..4, 0..num_particles as u32);
     }
 }

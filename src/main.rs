@@ -6,10 +6,12 @@ extern crate more_asserts;
 mod camera;
 mod hybrid_fluid;
 mod particle_renderer;
+mod per_frame_resources;
 mod rendertimer;
 mod screen;
 mod wgpu_utils;
 
+use per_frame_resources::*;
 use screen::*;
 use std::path::Path;
 use wgpu_utils::shader;
@@ -33,7 +35,7 @@ pub struct Application {
     hybrid_fluid: hybrid_fluid::HybridFluid,
 
     camera: camera::Camera,
-    ubo_camera: camera::CameraUniformBuffer,
+    per_frame_resources: PerFrameResources,
 
     timer: rendertimer::RenderTimer,
 }
@@ -62,7 +64,7 @@ impl Application {
         let screen = Screen::new(&device, &window_surface, window.inner_size());
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
-        let ubo_camera = camera::CameraUniformBuffer::new(&device);
+        let per_frame_resources = PerFrameResources::new(&device);
 
         let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
 
@@ -75,6 +77,7 @@ impl Application {
             },
             1000000,
             &shader_dir,
+            per_frame_resources.bind_group_layout(),
         );
         hybrid_fluid.add_fluid_cube(
             &device,
@@ -83,7 +86,8 @@ impl Application {
             cgmath::Point3::new(32.0, 64.0 - 2.0, 64.0 - 2.0),
         );
 
-        let particle_renderer = particle_renderer::ParticleRenderer::new(&device, &shader_dir, &ubo_camera, &hybrid_fluid);
+        let particle_renderer =
+            particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &hybrid_fluid);
 
         command_queue.submit(&[init_encoder.finish()]);
 
@@ -100,7 +104,7 @@ impl Application {
             hybrid_fluid,
 
             camera: camera::Camera::new(),
-            ubo_camera,
+            per_frame_resources,
 
             timer: rendertimer::RenderTimer::new(),
         }
@@ -176,11 +180,12 @@ impl Application {
         let (frame, depth_view) = self.screen.get_next_frame();
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
 
-        self.ubo_camera
-            .update_content(&mut encoder, &self.device, self.camera.fill_uniform_buffer(aspect_ratio));
+        self.per_frame_resources
+            .update_gpu_data(&mut encoder, &self.device, &self.camera, aspect_ratio);
 
         {
             let mut cpass = encoder.begin_compute_pass();
+            cpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
             self.hybrid_fluid.step(&mut cpass);
         }
 
@@ -209,6 +214,7 @@ impl Application {
                 }),
             });
 
+            rpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
             self.particle_renderer.draw(&mut rpass, self.hybrid_fluid.num_particles());
         }
         self.command_queue.submit(&[encoder.finish()]);

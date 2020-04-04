@@ -1,6 +1,7 @@
 #version 450
 
 #include "particles.glsl"
+#include "per_frame_resources.glsl"
 
 void main() {
     uint particle_index = gl_GlobalInvocationID.x;

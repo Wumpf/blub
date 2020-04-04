@@ -71,7 +71,13 @@ impl HybridFluid {
     const PARTICLES_PER_GRID_CELL: u32 = 8;
 
     // TODO: Split up/simplify all this binding generation code!
-    pub fn new(device: &wgpu::Device, grid_dimension: wgpu::Extent3d, max_num_particles: u64, shader_dir: &ShaderDirectory) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        grid_dimension: wgpu::Extent3d,
+        max_num_particles: u64,
+        shader_dir: &ShaderDirectory,
+        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
         let group_layout_read_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(bindingtype_storagebuffer_readonly())
             .create(device);
@@ -81,14 +87,21 @@ impl HybridFluid {
         let group_layout_volumes = BindGroupLayoutBuilder::new()
             .next_binding_compute(bindingtype_storagetexture_3d())
             .next_binding_compute(bindingtype_texture_3d())
-            .next_binding_compute(wgpu::BindingType::Sampler)
             .create(device);
 
         let pipeline_layout_write_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&group_layout_write_particles.layout, &group_layout_volumes.layout],
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_write_particles.layout,
+                &group_layout_volumes.layout,
+            ],
         });
         let pipeline_layout_read_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&group_layout_read_particles.layout, &group_layout_volumes.layout],
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_read_particles.layout,
+                &group_layout_volumes.layout,
+            ],
         });
         let compute_pipelines =
             HybridFluidComputePipelines::new(device, &pipeline_layout_write_particles, &pipeline_layout_read_particles, shader_dir).unwrap();
@@ -111,19 +124,14 @@ impl HybridFluid {
             velocity_grids[1].create_view(&default_textureview(&velocity_texture_desc)),
         ];
 
-        // todo: have these standard sampler reusable. Best we put samplers just in a special binding group that has all global never changing resources!
-        let trilinear_sampler = device.create_sampler(&simple_sampler(wgpu::AddressMode::ClampToEdge, wgpu::FilterMode::Linear));
-
         let bind_group_velocity_grids = [
             BindGroupBuilder::new(&group_layout_volumes)
                 .texture(&texture_view_velocity_grids[0])
                 .texture(&texture_view_velocity_grids[1])
-                .sampler(&trilinear_sampler)
                 .create(device),
             BindGroupBuilder::new(&group_layout_volumes)
                 .texture(&texture_view_velocity_grids[1])
                 .texture(&texture_view_velocity_grids[0])
-                .sampler(&trilinear_sampler)
                 .create(device),
         ];
 
@@ -250,14 +258,14 @@ impl HybridFluid {
         // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
         // (might still be faster because RT clear operations are usually very quick :/)
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
-        cpass.set_bind_group(0, &self.bind_group_read_particles, &[]);
-        cpass.set_bind_group(1, &self.bind_group_velocity_grids[0], &[]);
+        cpass.set_bind_group(1, &self.bind_group_read_particles, &[]);
+        cpass.set_bind_group(2, &self.bind_group_velocity_grids[0], &[]);
         cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
 
         // Transfer velocities to grid. (write grid, read particles)
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
-        cpass.set_bind_group(0, &self.bind_group_read_particles, &[]);
-        cpass.set_bind_group(1, &self.bind_group_velocity_grids[0], &[]);
+        cpass.set_bind_group(1, &self.bind_group_read_particles, &[]);
+        cpass.set_bind_group(2, &self.bind_group_velocity_grids[0], &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Apply global forces (write grid)
@@ -266,8 +274,8 @@ impl HybridFluid {
 
         // Transfer velocities to particles. (read grid, write particles)
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_particles);
-        cpass.set_bind_group(0, &self.bind_group_write_particles, &[]);
-        cpass.set_bind_group(1, &self.bind_group_velocity_grids[1], &[]);
+        cpass.set_bind_group(1, &self.bind_group_write_particles, &[]);
+        cpass.set_bind_group(2, &self.bind_group_velocity_grids[1], &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Advect particles.  (write particles)

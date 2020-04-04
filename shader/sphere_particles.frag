@@ -1,6 +1,6 @@
 #version 450
 
-#include "uniform_buffers.glsl"
+#include "per_frame_resources.glsl"
 #include "utilities.glsl"
 
 layout(location = 0) in vec3 in_WorldPosition;
