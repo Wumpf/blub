@@ -48,7 +48,7 @@ impl Camera {
             active_move_commands: Default::default(),
             mouse_delta: (0.0, 0.0),
 
-            translation_speed: 4.0,
+            translation_speed: 8.0,
             rotation_speed: 0.001,
         }
     }
