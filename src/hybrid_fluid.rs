@@ -90,6 +90,7 @@ impl HybridFluid {
         let group_layout_volumes = BindGroupLayoutBuilder::new()
             .next_binding_compute(bindingtype_storagetexture_3d())
             .next_binding_compute(bindingtype_texture_3d())
+            .next_binding_compute(wgpu::BindingType::Sampler)
             .create(device);
 
         let pipeline_layout_write_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -118,14 +119,20 @@ impl HybridFluid {
             velocity_grids[0].create_view(&default_textureview(&velocity_texture_desc)),
             velocity_grids[1].create_view(&default_textureview(&velocity_texture_desc)),
         ];
+
+        // todo: have these standard sampler reusable. Best we put samplers just in a special binding group that has all global never changing resources!
+        let trilinear_sampler = device.create_sampler(&simple_sampler(wgpu::AddressMode::ClampToEdge, wgpu::FilterMode::Linear));
+
         let bind_group_velocity_grids = [
             BindGroupBuilder::new(&group_layout_volumes)
-                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[0]))
-                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[1]))
+                .texture(&texture_view_velocity_grids[0])
+                .texture(&texture_view_velocity_grids[1])
+                .sampler(&trilinear_sampler)
                 .create(device),
             BindGroupBuilder::new(&group_layout_volumes)
-                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[1]))
-                .resource(wgpu::BindingResource::TextureView(&texture_view_velocity_grids[0]))
+                .texture(&texture_view_velocity_grids[1])
+                .texture(&texture_view_velocity_grids[0])
+                .sampler(&trilinear_sampler)
                 .create(device),
         ];
 
@@ -135,15 +142,11 @@ impl HybridFluid {
             usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::STORAGE_READ | wgpu::BufferUsage::COPY_DST,
         });
 
-        let particle_resourceview = wgpu::BindingResource::Buffer {
-            buffer: &particles,
-            range: 0..particle_buffer_size,
-        };
         let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
-            .resource(particle_resourceview.clone())
+            .buffer(&particles, 0..particle_buffer_size)
             .create(device);
         let bind_group_read_particles = BindGroupBuilder::new(&group_layout_read_particles)
-            .resource(particle_resourceview.clone())
+            .buffer(&particles, 0..particle_buffer_size)
             .create(device);
 
         HybridFluid {
@@ -252,7 +255,7 @@ impl HybridFluid {
         cpass.set_bind_group(0, &self.bind_group_read_particles, &[]);
         cpass.set_bind_group(1, &self.bind_group_velocity_grids[0], &[]);
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
-        // cpass.dispatch(self.num_particles, 1, 1);
+        cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Apply global forces (write grid)
 
@@ -262,7 +265,7 @@ impl HybridFluid {
         cpass.set_bind_group(0, &self.bind_group_write_particles, &[]);
         cpass.set_bind_group(1, &self.bind_group_velocity_grids[0], &[]);
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_particles);
-        // cpass.dispatch(self.num_particles, 1, 1);
+        cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Advect particles.  (write particles)
     }

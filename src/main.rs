@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate more_asserts;
 
 mod camera;
 mod hybrid_fluid;
@@ -202,7 +204,8 @@ impl Application {
     }
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        if self.screen.resolution != size {
+        // occasionally window size drops to zero which causes crashes along the way
+        if self.screen.resolution != size && size.width != 0 && size.height != 0 {
             self.screen = Screen::new(&self.device, &self.window_surface, size);
         }
     }

@@ -16,3 +16,4 @@ enumflags2 = "^0.6"
 rand = { version="0.7.3", features=["small_rng"] }
 regex = "1"
 lazy_static = "1.4"
+more-asserts = "0.2"

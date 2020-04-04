@@ -75,6 +75,8 @@ impl BindGroupLayoutBuilder {
     }
 }
 
+// Builder for wgpu::BindGroups following the exact layout from a wgpu::BindGroupLayout
+// Makes life simpler by assuming that order of elements in the bind group is equal to order of elements in the bind group layout.
 pub struct BindGroupBuilder<'a> {
     layout_with_desc: &'a BindGroupLayoutWithDesc,
     bindings: Vec<wgpu::Binding<'a>>,
@@ -89,15 +91,26 @@ impl<'a> BindGroupBuilder<'a> {
     }
 
     // Uses same binding index as binding group layout at the same ordering
-    pub fn resource(&mut self, resource: wgpu::BindingResource<'a>) -> &mut Self {
+    pub fn resource(mut self, resource: wgpu::BindingResource<'a>) -> Self {
+        assert_lt!(self.bindings.len(), self.layout_with_desc.bindings.len());
         self.bindings.push(wgpu::Binding {
             binding: self.layout_with_desc.bindings[self.bindings.len()].binding,
             resource,
         });
         self
     }
+    pub fn buffer(self, buffer: &'a wgpu::Buffer, range: std::ops::Range<wgpu::BufferAddress>) -> Self {
+        self.resource(wgpu::BindingResource::Buffer { buffer, range })
+    }
+    pub fn sampler(self, sampler: &'a wgpu::Sampler) -> Self {
+        self.resource(wgpu::BindingResource::Sampler(sampler))
+    }
+    pub fn texture(self, texture_view: &'a wgpu::TextureView) -> Self {
+        self.resource(wgpu::BindingResource::TextureView(texture_view))
+    }
 
     pub fn create(&self, device: &wgpu::Device) -> wgpu::BindGroup {
+        assert_eq!(self.bindings.len(), self.layout_with_desc.bindings.len());
         let descriptor = wgpu::BindGroupDescriptor {
             layout: &self.layout_with_desc.layout,
             bindings: &self.bindings,
@@ -129,5 +142,19 @@ pub fn default_textureview(texture_desc: &wgpu::TextureDescriptor) -> wgpu::Text
         level_count: texture_desc.mip_level_count,
         base_array_layer: 0,
         array_layer_count: texture_desc.array_layer_count,
+    }
+}
+
+pub fn simple_sampler(address_mode: wgpu::AddressMode, filter_mode: wgpu::FilterMode) -> wgpu::SamplerDescriptor {
+    wgpu::SamplerDescriptor {
+        address_mode_u: address_mode,
+        address_mode_v: address_mode,
+        address_mode_w: address_mode,
+        mag_filter: filter_mode,
+        min_filter: filter_mode,
+        mipmap_filter: filter_mode,
+        lod_min_clamp: 0.0,
+        lod_max_clamp: std::f32::MAX,
+        compare_function: wgpu::CompareFunction::Always,
     }
 }
