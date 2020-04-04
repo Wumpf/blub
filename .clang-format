@@ -1,0 +1,5 @@
+---
+# Clang format is exclusively used for glsl in this project
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 150

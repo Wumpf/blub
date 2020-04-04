@@ -2,7 +2,4 @@
 
 #include "particles.glsl"
 
-void main()
-{
-
-}
+void main() {}
