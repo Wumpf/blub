@@ -1,5 +1,5 @@
 use super::rendertimer::RenderTimer;
-use super::uniformbuffer::*;
+use super::wgpu_utils::uniformbuffer::*;
 use cgmath::prelude::*;
 use enumflags2::BitFlags;
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};

@@ -7,11 +7,10 @@ mod camera;
 mod hybrid_fluid;
 mod particle_renderer;
 mod rendertimer;
-mod shader;
-mod uniformbuffer;
 mod wgpu_utils;
 
 use std::path::Path;
+use wgpu_utils::shader;
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},

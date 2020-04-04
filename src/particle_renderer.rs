@@ -3,8 +3,8 @@
 
 use super::camera::CameraUniformBuffer;
 use super::hybrid_fluid::*;
-use super::shader::*;
-use crate::wgpu_utils::*;
+use super::wgpu_utils::shader::*;
+use crate::wgpu_utils::bindings::*;
 use std::path::Path;
 
 pub struct ParticleRenderer {

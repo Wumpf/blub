@@ -1,5 +1,5 @@
-use crate::shader::*;
-use crate::wgpu_utils::*;
+use crate::wgpu_utils::bindings::*;
+use crate::wgpu_utils::shader::*;
 use rand::prelude::*;
 use std::path::Path;
 
