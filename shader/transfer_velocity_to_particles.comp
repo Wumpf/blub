@@ -1,3 +1,10 @@
 #version 450
 
-void main() {}
+#include "particles.glsl"
+
+void main() {
+    uint particle_index = gl_GlobalInvocationID.x;
+    vec3 position = Particles[particle_index].Position;
+
+    Particles[particle_index].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / imageSize(VelocityGridWrite)).xyz;
+}

@@ -20,14 +20,14 @@ impl HybridFluidComputePipelines {
 
         Some(HybridFluidComputePipelines {
             transfer_velocity_to_grid: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                layout: pipeline_layout_write_particles,
+                layout: pipeline_layout_read_particles,
                 compute_stage: wgpu::ProgrammableStageDescriptor {
                     module: &shader_transfer_velocity_to_grid,
                     entry_point: SHADER_ENTRY_POINT_NAME,
                 },
             }),
             transfer_velocity_to_particles: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                layout: pipeline_layout_read_particles,
+                layout: pipeline_layout_write_particles,
                 compute_stage: wgpu::ProgrammableStageDescriptor {
                     module: &shader_transfer_velocity_to_particles,
                     entry_point: SHADER_ENTRY_POINT_NAME,
@@ -252,9 +252,9 @@ impl HybridFluid {
     // todo: timing
     pub fn step(&self, cpass: &mut wgpu::ComputePass) {
         // Transfer velocities to grid. (write grid, read particles)
+        cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
         cpass.set_bind_group(0, &self.bind_group_read_particles, &[]);
         cpass.set_bind_group(1, &self.bind_group_velocity_grids[0], &[]);
-        cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Apply global forces (write grid)
@@ -262,9 +262,9 @@ impl HybridFluid {
         // Resolves forces on grid. (write grid, read grid)
 
         // Transfer velocities to particles. (read grid, write particles)
-        cpass.set_bind_group(0, &self.bind_group_write_particles, &[]);
-        cpass.set_bind_group(1, &self.bind_group_velocity_grids[0], &[]);
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_particles);
+        cpass.set_bind_group(0, &self.bind_group_write_particles, &[]);
+        cpass.set_bind_group(1, &self.bind_group_velocity_grids[1], &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Advect particles.  (write particles)

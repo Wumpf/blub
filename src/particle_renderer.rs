@@ -21,8 +21,8 @@ impl ParticleRenderer {
         hybrid_fluid: &HybridFluid,
     ) -> ParticleRenderer {
         let bind_group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_rendering(wgpu::BindingType::UniformBuffer { dynamic: false })
             .next_binding_vertex(bindingtype_storagebuffer_readonly())
+            .next_binding_rendering(wgpu::BindingType::UniformBuffer { dynamic: false })
             .create(device);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout.layout],
@@ -30,8 +30,8 @@ impl ParticleRenderer {
         let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout, shader_dir).unwrap();
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
-            .resource(ubo_camera.binding_resource())
             .resource(hybrid_fluid.particle_binding_resource())
+            .resource(ubo_camera.binding_resource())
             .create(device);
 
         ParticleRenderer {

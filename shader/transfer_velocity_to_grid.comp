@@ -2,4 +2,9 @@
 
 #include "particles.glsl"
 
-void main() {}
+void main() {
+    uint particle_index = gl_GlobalInvocationID.x;
+    vec3 position = Particles[particle_index].Position;
+
+    imageStore(VelocityGridWrite, ivec3(position), vec4(position, 0.0));
+}
