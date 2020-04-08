@@ -12,7 +12,7 @@ impl PerFrameResources {
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding_rendering(wgpu::BindingType::UniformBuffer { dynamic: false })
             .next_binding_all(wgpu::BindingType::Sampler { comparison: false })
-            .create(device, "PerFrameResources");
+            .create(device, "BindGroupLayout: PerFrameResources");
 
         let ubo_camera = camera::CameraUniformBuffer::new(&device);
         let trilinear_sampler = device.create_sampler(&simple_sampler(wgpu::AddressMode::ClampToEdge, wgpu::FilterMode::Linear));
@@ -20,7 +20,7 @@ impl PerFrameResources {
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
             .resource(ubo_camera.binding_resource())
             .sampler(&trilinear_sampler)
-            .create(device, "PerFrameResources");
+            .create(device, "BindGroup: PerFrameResources");
 
         PerFrameResources {
             ubo_camera,

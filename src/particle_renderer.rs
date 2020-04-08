@@ -21,7 +21,7 @@ impl ParticleRenderer {
     ) -> ParticleRenderer {
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding_vertex(bindingtype_storagebuffer_readonly())
-            .create(device, "ParticleRenderer - Read Particles");
+            .create(device, "BindGroupLayout: ParticleRenderer, Read Particles");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
         });
@@ -29,7 +29,7 @@ impl ParticleRenderer {
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
             .resource(hybrid_fluid.particle_binding_resource())
-            .create(device, "ParticleRenderer - Read Particles");
+            .create(device, "BindGroup: ParticleRenderer, Read Particles");
 
         ParticleRenderer {
             render_pipeline,

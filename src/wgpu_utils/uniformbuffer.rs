@@ -8,7 +8,7 @@ pub struct UniformBuffer<Content> {
 impl<Content: Copy + 'static> UniformBuffer<Content> {
     pub fn new(device: &wgpu::Device) -> UniformBuffer<Content> {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("UniformBuffer - {}", std::any::type_name::<Content>())),
+            label: Some(&format!("UniformBuffer: {}", std::any::type_name::<Content>())),
             size: std::mem::size_of::<Content>() as u64,
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });
@@ -26,7 +26,7 @@ impl<Content: Copy + 'static> UniformBuffer<Content> {
     pub fn update_content(&self, encoder: &mut wgpu::CommandEncoder, device: &wgpu::Device, content: Content) {
         let size = std::mem::size_of_val(&content) as wgpu::BufferAddress;
         let mapped_buffer = device.create_buffer_mapped(&wgpu::BufferDescriptor {
-            label: Some(&format!("UniformBuffer Update - {}", std::any::type_name::<Content>())),
+            label: Some(&format!("UniformBuffer Update: {}", std::any::type_name::<Content>())),
             size,
             usage: wgpu::BufferUsage::COPY_SRC,
         });

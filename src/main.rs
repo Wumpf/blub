@@ -185,7 +185,7 @@ impl Application {
         let aspect_ratio = self.screen.aspect_ratio();
         let (frame, depth_view) = self.screen.get_next_frame();
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Frame Main Encoder"),
+            label: Some("Encoder: Frame Main"),
         });
 
         self.per_frame_resources

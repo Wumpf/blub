@@ -22,7 +22,7 @@ impl Screen {
             },
         );
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Screen DepthBuffer"),
+            label: Some("Texture: Screen DepthBuffer"),
             size: wgpu::Extent3d {
                 width: resolution.width,
                 height: resolution.height,
