@@ -1,16 +1,3 @@
-pub fn bindingtype_storagebuffer_readonly() -> wgpu::BindingType {
-    wgpu::BindingType::StorageBuffer {
-        dynamic: false,
-        readonly: true,
-    }
-}
-pub fn bindingtype_storagebuffer_readwrite() -> wgpu::BindingType {
-    wgpu::BindingType::StorageBuffer {
-        dynamic: false,
-        readonly: false,
-    }
-}
-
 pub struct BindGroupLayoutWithDesc {
     pub layout: wgpu::BindGroupLayout,
     pub bindings: Vec<wgpu::BindGroupLayoutEntry>,

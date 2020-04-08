@@ -1,4 +1,5 @@
-use crate::wgpu_utils::bindings::*;
+use crate::wgpu_utils::binding_builder::*;
+use crate::wgpu_utils::binding_types::*;
 use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use rand::prelude::*;
@@ -34,15 +35,14 @@ pub struct HybridFluid {
     grid_dimension: wgpu::Extent3d,
 
     particles: wgpu::Buffer,
-    bind_group_write_particles: wgpu::BindGroup,
-    bind_group_read_particles: wgpu::BindGroup,
-
-    bind_group_velocity_grids: [wgpu::BindGroup; 2],
 
     pipeline_layout_write_particles: wgpu::PipelineLayout,
     pipeline_layout_read_particles: wgpu::PipelineLayout,
 
     compute_pipelines: HybridFluidComputePipelines,
+    bind_group_write_particles: wgpu::BindGroup,
+    bind_group_read_particles: wgpu::BindGroup,
+    bind_group_velocity_grids: [wgpu::BindGroup; 2],
 
     num_particles: u64,
     max_num_particles: u64,
@@ -58,13 +58,6 @@ struct Particle {
     padding: f32,
 }
 
-// #[repr(C)]
-// #[derive(Clone, Copy)]
-// pub struct HybridFluidUniformBufferContent {
-//     pub num_particles: u32,
-// }
-// pub type HybridFluidUniformBuffer = UniformBuffer<HybridFluidUniformBufferContent>;
-
 impl HybridFluid {
     // particles are distributed 2x2x2 within a single gridcell
     // (seems to be widely accepted as the default)
@@ -79,23 +72,14 @@ impl HybridFluid {
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let group_layout_read_particles = BindGroupLayoutBuilder::new()
-            .next_binding_compute(bindingtype_storagebuffer_readonly())
+            .next_binding_compute(bindingtype_buffer(true))
             .create(device, "BindGroupLayout: ParticlesReadOnly");
         let group_layout_write_particles = BindGroupLayoutBuilder::new()
-            .next_binding_compute(bindingtype_storagebuffer_readwrite())
+            .next_binding_compute(bindingtype_buffer(false))
             .create(device, "BindGroupLayout: ParticlesReadWrite");
         let group_layout_volumes = BindGroupLayoutBuilder::new()
-            .next_binding_compute(wgpu::BindingType::StorageTexture {
-                dimension: wgpu::TextureViewDimension::D3,
-                component_type: wgpu::TextureComponentType::Float,
-                format: wgpu::TextureFormat::Rgba32Float,
-                readonly: false,
-            })
-            .next_binding_compute(wgpu::BindingType::SampledTexture {
-                multisampled: false,
-                component_type: wgpu::TextureComponentType::Float,
-                dimension: wgpu::TextureViewDimension::D3,
-            })
+            .next_binding_compute(bindingtype_image3d(wgpu::TextureFormat::Rgba32Float, false))
+            .next_binding_compute(bindingtype_texture3D())
             .create(device, "BindGroupLayout: VelocityGrids");
 
         let pipeline_layout_write_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -281,7 +265,7 @@ impl HybridFluid {
 
         // Transfer velocities to grid. (write grid, read particles)
         cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
-        cpass.set_bind_group(1, &self.bind_group_read_particles, &[]);
+        cpass.set_bind_group(1, &self.bind_group_write_particles, &[]);
         cpass.set_bind_group(2, &self.bind_group_velocity_grids[0], &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 

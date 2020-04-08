@@ -2,7 +2,8 @@
 // The idea is to have different render backend for the fluid, which one being the particle renderer which renders the fluid as particles (sprites)
 
 use crate::hybrid_fluid::*;
-use crate::wgpu_utils::bindings::*;
+use crate::wgpu_utils::binding_builder::*;
+use crate::wgpu_utils::binding_types::*;
 use crate::wgpu_utils::shader::*;
 use std::path::Path;
 
@@ -20,7 +21,7 @@ impl ParticleRenderer {
         hybrid_fluid: &HybridFluid,
     ) -> ParticleRenderer {
         let bind_group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_vertex(bindingtype_storagebuffer_readonly())
+            .next_binding_vertex(bindingtype_buffer(true))
             .create(device, "BindGroupLayout: ParticleRenderer, Read Particles");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
