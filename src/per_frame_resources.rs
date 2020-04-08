@@ -1,6 +1,6 @@
 use crate::camera;
 use crate::wgpu_utils::binding_builder::*;
-use crate::wgpu_utils::binding_types::*;
+use crate::wgpu_utils::*;
 
 pub struct PerFrameResources {
     ubo_camera: camera::CameraUniformBuffer,
@@ -11,8 +11,8 @@ pub struct PerFrameResources {
 impl PerFrameResources {
     pub fn new(device: &wgpu::Device) -> Self {
         let bind_group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_rendering(bindingtype_uniform())
-            .next_binding_all(bindingtype_sampler())
+            .next_binding_rendering(binding_glsl::uniform())
+            .next_binding_all(binding_glsl::sampler())
             .create(device, "BindGroupLayout: PerFrameResources");
 
         let ubo_camera = camera::CameraUniformBuffer::new(&device);

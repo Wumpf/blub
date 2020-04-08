@@ -1,7 +1,7 @@
 use crate::wgpu_utils::binding_builder::*;
-use crate::wgpu_utils::binding_types::*;
 use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
+use crate::wgpu_utils::*;
 use rand::prelude::*;
 use std::path::Path;
 
@@ -72,14 +72,14 @@ impl HybridFluid {
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let group_layout_read_particles = BindGroupLayoutBuilder::new()
-            .next_binding_compute(bindingtype_buffer(true))
+            .next_binding_compute(binding_glsl::buffer(true))
             .create(device, "BindGroupLayout: ParticlesReadOnly");
         let group_layout_write_particles = BindGroupLayoutBuilder::new()
-            .next_binding_compute(bindingtype_buffer(false))
+            .next_binding_compute(binding_glsl::buffer(false))
             .create(device, "BindGroupLayout: ParticlesReadWrite");
         let group_layout_volumes = BindGroupLayoutBuilder::new()
-            .next_binding_compute(bindingtype_image3d(wgpu::TextureFormat::Rgba32Float, false))
-            .next_binding_compute(bindingtype_texture3D())
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::Rgba32Float, false))
+            .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: VelocityGrids");
 
         let pipeline_layout_write_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

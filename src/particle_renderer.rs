@@ -3,8 +3,8 @@
 
 use crate::hybrid_fluid::*;
 use crate::wgpu_utils::binding_builder::*;
-use crate::wgpu_utils::binding_types::*;
 use crate::wgpu_utils::shader::*;
+use crate::wgpu_utils::*;
 use std::path::Path;
 
 pub struct ParticleRenderer {
@@ -21,7 +21,7 @@ impl ParticleRenderer {
         hybrid_fluid: &HybridFluid,
     ) -> ParticleRenderer {
         let bind_group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_vertex(bindingtype_buffer(true))
+            .next_binding_vertex(binding_glsl::buffer(true))
             .create(device, "BindGroupLayout: ParticleRenderer, Read Particles");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
