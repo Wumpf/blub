@@ -10,25 +10,14 @@ pub fn bindingtype_storagebuffer_readwrite() -> wgpu::BindingType {
         readonly: false,
     }
 }
-pub fn bindingtype_storagetexture_3d() -> wgpu::BindingType {
-    wgpu::BindingType::StorageTexture {
-        dimension: wgpu::TextureViewDimension::D3,
-    }
-}
-pub fn bindingtype_texture_3d() -> wgpu::BindingType {
-    wgpu::BindingType::SampledTexture {
-        multisampled: false,
-        dimension: wgpu::TextureViewDimension::D3,
-    }
-}
 
 pub struct BindGroupLayoutWithDesc {
     pub layout: wgpu::BindGroupLayout,
-    pub bindings: Vec<wgpu::BindGroupLayoutBinding>,
+    pub bindings: Vec<wgpu::BindGroupLayoutEntry>,
 }
 
 pub struct BindGroupLayoutBuilder {
-    bindings: Vec<wgpu::BindGroupLayoutBinding>,
+    bindings: Vec<wgpu::BindGroupLayoutEntry>,
     next_binding_index: u32,
 }
 
@@ -40,7 +29,7 @@ impl BindGroupLayoutBuilder {
         }
     }
 
-    pub fn binding(mut self, binding: wgpu::BindGroupLayoutBinding) -> Self {
+    pub fn binding(mut self, binding: wgpu::BindGroupLayoutEntry) -> Self {
         self.next_binding_index = binding.binding + 1;
         self.bindings.push(binding);
         self
@@ -48,7 +37,7 @@ impl BindGroupLayoutBuilder {
 
     pub fn next_binding(self, visibility: wgpu::ShaderStage, ty: wgpu::BindingType) -> Self {
         let binding = self.next_binding_index;
-        self.binding(wgpu::BindGroupLayoutBinding { binding, visibility, ty })
+        self.binding(wgpu::BindGroupLayoutEntry { binding, visibility, ty })
     }
 
     pub fn next_binding_compute(self, ty: wgpu::BindingType) -> Self {
@@ -71,9 +60,12 @@ impl BindGroupLayoutBuilder {
         self.next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT | wgpu::ShaderStage::COMPUTE, ty)
     }
 
-    pub fn create(self, device: &wgpu::Device) -> BindGroupLayoutWithDesc {
+    pub fn create(self, device: &wgpu::Device, label: &str) -> BindGroupLayoutWithDesc {
         BindGroupLayoutWithDesc {
-            layout: device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { bindings: &self.bindings }),
+            layout: device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                bindings: &self.bindings,
+                label: Some(label),
+            }),
             bindings: self.bindings,
         }
     }
@@ -113,11 +105,12 @@ impl<'a> BindGroupBuilder<'a> {
         self.resource(wgpu::BindingResource::TextureView(texture_view))
     }
 
-    pub fn create(&self, device: &wgpu::Device) -> wgpu::BindGroup {
+    pub fn create(&self, device: &wgpu::Device, label: &str) -> wgpu::BindGroup {
         assert_eq!(self.bindings.len(), self.layout_with_desc.bindings.len());
         let descriptor = wgpu::BindGroupDescriptor {
             layout: &self.layout_with_desc.layout,
             bindings: &self.bindings,
+            label: Some(label),
         };
         device.create_bind_group(&descriptor)
     }
@@ -159,6 +152,6 @@ pub fn simple_sampler(address_mode: wgpu::AddressMode, filter_mode: wgpu::Filter
         mipmap_filter: filter_mode,
         lod_min_clamp: 0.0,
         lod_max_clamp: std::f32::MAX,
-        compare_function: wgpu::CompareFunction::Always,
+        compare: wgpu::CompareFunction::Always,
     }
 }

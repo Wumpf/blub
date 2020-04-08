@@ -8,6 +8,7 @@ pub struct UniformBuffer<Content> {
 impl<Content: Copy + 'static> UniformBuffer<Content> {
     pub fn new(device: &wgpu::Device) -> UniformBuffer<Content> {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("UniformBuffer - {}", std::any::type_name::<Content>())),
             size: std::mem::size_of::<Content>() as u64,
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });
@@ -23,8 +24,16 @@ impl<Content: Copy + 'static> UniformBuffer<Content> {
     }
 
     pub fn update_content(&self, encoder: &mut wgpu::CommandEncoder, device: &wgpu::Device, content: Content) {
-        let buffer = device.create_buffer_mapped(1, wgpu::BufferUsage::COPY_SRC).fill_from_slice(&[content]);
-        encoder.copy_buffer_to_buffer(&buffer, 0, &self.buffer, 0, std::mem::size_of_val(&content) as u64);
+        let size = std::mem::size_of_val(&content) as wgpu::BufferAddress;
+        let mapped_buffer = device.create_buffer_mapped(&wgpu::BufferDescriptor {
+            label: Some(&format!("UniformBuffer Update - {}", std::any::type_name::<Content>())),
+            size,
+            usage: wgpu::BufferUsage::COPY_SRC,
+        });
+        unsafe {
+            std::ptr::copy((&content as *const Content) as *const u8, mapped_buffer.data.as_mut_ptr(), size as usize);
+        }
+        encoder.copy_buffer_to_buffer(&mapped_buffer.finish(), 0, &self.buffer, 0, size);
     }
 
     pub fn binding_resource(&self) -> wgpu::BindingResource {

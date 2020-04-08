@@ -18,10 +18,11 @@ impl Screen {
                 format: Self::FORMAT_BACKBUFFER,
                 width: resolution.width,
                 height: resolution.height,
-                present_mode: wgpu::PresentMode::NoVsync,
+                present_mode: wgpu::PresentMode::Immediate,
             },
         );
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Screen DepthBuffer"),
             size: wgpu::Extent3d {
                 width: resolution.width,
                 height: resolution.height,
@@ -47,6 +48,6 @@ impl Screen {
     }
 
     pub fn get_next_frame(&mut self) -> (wgpu::SwapChainOutput, &wgpu::TextureView) {
-        (self.swap_chain.get_next_texture(), &self.depth_view)
+        (self.swap_chain.get_next_texture().unwrap(), &self.depth_view)
     }
 }

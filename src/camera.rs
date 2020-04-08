@@ -4,12 +4,10 @@ use cgmath::prelude::*;
 use enumflags2::BitFlags;
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-// WGPU actually specifies Y to go up in NDC (Metal/DX12 coordinate system, not Vulkan)
-// Change for WGPU-RS imminent https://github.com/gfx-rs/wgpu-rs/pull/218 / https://github.com/gfx-rs/wgpu/commit/2e9610e8c956447cf8f4c35f5909cab2f1b9dbbe
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
-    0.0, -1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
     0.0, 0.0, 0.5, 0.0,
     0.0, 0.0, 0.5, 1.0,
 );

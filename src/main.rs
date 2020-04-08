@@ -41,7 +41,7 @@ pub struct Application {
 }
 
 impl Application {
-    fn new(event_loop: &EventLoop<()>) -> Application {
+    async fn new(event_loop: &EventLoop<()>) -> Application {
         let window = WindowBuilder::new()
             .with_title("Blub")
             .with_resizable(true)
@@ -49,24 +49,30 @@ impl Application {
             .build(&event_loop)
             .unwrap();
 
-        let adapter = wgpu::Adapter::request(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            backends: wgpu::BackendBit::PRIMARY,
-        })
+        let window_surface = wgpu::Surface::create(&window);
+        let adapter = wgpu::Adapter::request(
+            &wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&window_surface),
+            },
+            wgpu::BackendBit::PRIMARY,
+        )
+        .await
         .unwrap();
 
-        let (device, mut command_queue) = adapter.request_device(&wgpu::DeviceDescriptor {
-            extensions: wgpu::Extensions { anisotropic_filtering: true },
-            limits: wgpu::Limits::default(),
-        });
+        let (device, command_queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                extensions: wgpu::Extensions { anisotropic_filtering: true },
+                limits: wgpu::Limits::default(),
+            })
+            .await;
 
-        let window_surface = wgpu::Surface::create(&window);
         let screen = Screen::new(&device, &window_surface, window.inner_size());
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let per_frame_resources = PerFrameResources::new(&device);
 
-        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
+        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Init Encoder") });
 
         let mut hybrid_fluid = hybrid_fluid::HybridFluid::new(
             &device,
@@ -178,7 +184,9 @@ impl Application {
     fn draw(&mut self) {
         let aspect_ratio = self.screen.aspect_ratio();
         let (frame, depth_view) = self.screen.get_next_frame();
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Frame Main Encoder"),
+        });
 
         self.per_frame_resources
             .update_gpu_data(&mut encoder, &self.device, &self.camera, aspect_ratio);
@@ -226,6 +234,6 @@ impl Application {
 
 fn main() {
     let event_loop = EventLoop::new();
-    let application = Application::new(&event_loop);
+    let application = futures::executor::block_on(Application::new(&event_loop));
     application.run(event_loop);
 }

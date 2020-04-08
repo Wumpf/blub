@@ -21,7 +21,7 @@ impl ParticleRenderer {
     ) -> ParticleRenderer {
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding_vertex(bindingtype_storagebuffer_readonly())
-            .create(device);
+            .create(device, "ParticleRenderer - Read Particles");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
         });
@@ -29,7 +29,7 @@ impl ParticleRenderer {
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
             .resource(hybrid_fluid.particle_binding_resource())
-            .create(device);
+            .create(device, "ParticleRenderer - Read Particles");
 
         ParticleRenderer {
             render_pipeline,
@@ -79,8 +79,11 @@ impl ParticleRenderer {
                 stencil_read_mask: 0,
                 stencil_write_mask: 0,
             }),
-            index_format: wgpu::IndexFormat::Uint16,
-            vertex_buffers: &[],
+            vertex_state: wgpu::VertexStateDescriptor {
+                index_format: wgpu::IndexFormat::Uint16,
+                vertex_buffers: &[],
+            },
+
             sample_count: 1,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
@@ -93,7 +96,7 @@ impl ParticleRenderer {
         }
     }
 
-    pub fn draw(&self, rpass: &mut wgpu::RenderPass, num_particles: u64) {
+    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, num_particles: u64) {
         rpass.set_pipeline(&self.render_pipeline);
         rpass.set_bind_group(1, &self.bind_group, &[]);
         rpass.draw(0..4, 0..num_particles as u32);
