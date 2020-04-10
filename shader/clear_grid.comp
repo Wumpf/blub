@@ -1,6 +1,0 @@
-#version 450
-
-#include "particles.glsl"
-#include "per_frame_resources.glsl"
-
-void main() { imageStore(VelocityGridWrite, ivec3(gl_GlobalInvocationID), vec4(0.0, 0.0, 0.0, 0.0)); }

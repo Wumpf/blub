@@ -105,30 +105,6 @@ impl<'a> BindGroupBuilder<'a> {
 
 // Shortcuts for resource views
 
-pub fn default_textureview(texture_desc: &wgpu::TextureDescriptor) -> wgpu::TextureViewDescriptor {
-    let dimension = match texture_desc.dimension {
-        wgpu::TextureDimension::D1 => wgpu::TextureViewDimension::D1,
-        wgpu::TextureDimension::D2 => {
-            if texture_desc.array_layer_count > 1 {
-                wgpu::TextureViewDimension::D2Array
-            } else {
-                wgpu::TextureViewDimension::D2
-            }
-        }
-        wgpu::TextureDimension::D3 => wgpu::TextureViewDimension::D3,
-    };
-
-    wgpu::TextureViewDescriptor {
-        format: texture_desc.format,
-        dimension: dimension,
-        aspect: wgpu::TextureAspect::default(),
-        base_mip_level: 0,
-        level_count: texture_desc.mip_level_count,
-        base_array_layer: 0,
-        array_layer_count: texture_desc.array_layer_count,
-    }
-}
-
 pub fn simple_sampler(address_mode: wgpu::AddressMode, filter_mode: wgpu::FilterMode) -> wgpu::SamplerDescriptor {
     wgpu::SamplerDescriptor {
         address_mode_u: address_mode,

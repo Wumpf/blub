@@ -11,12 +11,14 @@ pub struct HybridFluid {
 
     particles: wgpu::Buffer,
 
-    bind_group_write_particles: wgpu::BindGroup,
-    bind_group_read_particles: wgpu::BindGroup,
-    bind_group_velocity_grids: [wgpu::BindGroup; 2],
+    bind_group_particles_rw: wgpu::BindGroup,
+    bind_group_particles_ro: wgpu::BindGroup,
+    bind_group_vgrids: [wgpu::BindGroup; 2],
+    bind_group_llgrid_rw: wgpu::BindGroup,
+    bind_group_llgrid_ro: wgpu::BindGroup,
 
-    pipeline_clear_grid: ReloadableComputePipeline,
-    pipeline_velocity_to_grid: ReloadableComputePipeline,
+    pipeline_clear_grids: ReloadableComputePipeline,
+    pipeline_build_llgrid: ReloadableComputePipeline,
     pipeline_velocity_to_particles: ReloadableComputePipeline,
 
     num_particles: u64,
@@ -46,46 +48,68 @@ impl HybridFluid {
         shader_dir: &ShaderDirectory,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
-        let group_layout_read_particles = BindGroupLayoutBuilder::new()
+        let group_layout_particles_ro = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(true))
             .create(device, "BindGroupLayout: ParticlesReadOnly");
-        let group_layout_write_particles = BindGroupLayoutBuilder::new()
+        let group_layout_particles_rw = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
             .create(device, "BindGroupLayout: ParticlesReadWrite");
         let group_layout_volumes = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::Rgba32Float, false))
             .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: VelocityGrids");
+        let group_layout_llgrid_rw = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false))
+            .create(device, "BindGroupLayout: Linked List Dual Grid");
+        let group_layout_llgrid_ro = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, true))
+            .create(device, "BindGroupLayout: Linked List Dual Grid");
 
-        let velocity_texture_desc = wgpu::TextureDescriptor {
-            label: Some("Texture: Velocity Grid"),
+        let bind_group_vgrids = {
+            let velocity_texture_desc = wgpu::TextureDescriptor {
+                label: Some("Texture: Velocity Grid"),
+                size: grid_dimension,
+                array_layer_count: 1,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D3,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
+            };
+            let vgrids = [
+                device.create_texture(&velocity_texture_desc),
+                device.create_texture(&velocity_texture_desc),
+            ];
+            let texture_view_vgrids = [vgrids[0].create_default_view(), vgrids[1].create_default_view()];
+            [
+                BindGroupBuilder::new(&group_layout_volumes)
+                    .texture(&texture_view_vgrids[0])
+                    .texture(&texture_view_vgrids[1])
+                    .create(device, "BindGroup: VelocityGrids2"),
+                BindGroupBuilder::new(&group_layout_volumes)
+                    .texture(&texture_view_vgrids[1])
+                    .texture(&texture_view_vgrids[0])
+                    .create(device, "BindGroup: VelocityGrids1"),
+            ]
+        };
+
+        let llgrid = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Texture: Linked List Grid"),
             size: grid_dimension,
             array_layer_count: 1,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
-        };
-        let velocity_grids = [
-            device.create_texture(&velocity_texture_desc),
-            device.create_texture(&velocity_texture_desc),
-        ];
-        let texture_view_velocity_grids = [
-            velocity_grids[0].create_view(&default_textureview(&velocity_texture_desc)),
-            velocity_grids[1].create_view(&default_textureview(&velocity_texture_desc)),
-        ];
-
-        let bind_group_velocity_grids = [
-            BindGroupBuilder::new(&group_layout_volumes)
-                .texture(&texture_view_velocity_grids[0])
-                .texture(&texture_view_velocity_grids[1])
-                .create(device, "BindGroup: VelocityGrids2"),
-            BindGroupBuilder::new(&group_layout_volumes)
-                .texture(&texture_view_velocity_grids[1])
-                .texture(&texture_view_velocity_grids[0])
-                .create(device, "BindGroup: VelocityGrids1"),
-        ];
+            format: wgpu::TextureFormat::R32Uint,
+            usage: wgpu::TextureUsage::STORAGE,
+        });
+        let llgrid_view = llgrid.create_default_view();
+        let bind_group_llgrid_rw = BindGroupBuilder::new(&group_layout_llgrid_rw)
+            .texture(&llgrid_view)
+            .create(device, "BindGroup: LinkedListGridRW");
+        let bind_group_llgrid_ro = BindGroupBuilder::new(&group_layout_llgrid_ro)
+            .texture(&llgrid_view)
+            .create(device, "BindGroup: LinkedListGridRO");
 
         let particle_buffer_size = max_num_particles * std::mem::size_of::<Particle>() as u64;
         let particles = device.create_buffer(&wgpu::BufferDescriptor {
@@ -94,24 +118,33 @@ impl HybridFluid {
             usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::STORAGE_READ | wgpu::BufferUsage::COPY_DST,
         });
 
-        let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
+        let bind_group_particles_rw = BindGroupBuilder::new(&group_layout_particles_rw)
             .buffer(&particles, 0..particle_buffer_size)
             .create(device, "BindGroup: ParticlesReadWrite");
-        let bind_group_read_particles = BindGroupBuilder::new(&group_layout_read_particles)
+        let bind_group_particles_ro = BindGroupBuilder::new(&group_layout_particles_ro)
             .buffer(&particles, 0..particle_buffer_size)
             .create(device, "BindGroup: ParticlesReadOnly");
 
-        let layout_write_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_clear_grids = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_write_particles.layout,
+                &group_layout_particles_ro.layout,
                 &group_layout_volumes.layout,
+                &group_layout_llgrid_rw.layout,
             ],
         }));
-        let layout_read_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_build_llgrid = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_read_particles.layout,
+                &group_layout_particles_rw.layout,
+                &group_layout_volumes.layout,
+                &group_layout_llgrid_rw.layout,
+            ],
+        }));
+        let layout_particle_rw = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_particles_rw.layout,
                 &group_layout_volumes.layout,
             ],
         }));
@@ -121,15 +154,17 @@ impl HybridFluid {
             grid_dimension,
 
             particles,
-            bind_group_write_particles,
-            bind_group_read_particles,
-            bind_group_velocity_grids,
+            bind_group_particles_rw,
+            bind_group_particles_ro,
+            bind_group_vgrids,
+            bind_group_llgrid_rw,
+            bind_group_llgrid_ro,
 
-            pipeline_clear_grid: ReloadableComputePipeline::new(device, &layout_write_particles, shader_dir, Path::new("clear_grid.comp")),
-            pipeline_velocity_to_grid: ReloadableComputePipeline::new(device, &layout_read_particles, shader_dir, Path::new("velocity_to_grid.comp")),
+            pipeline_clear_grids: ReloadableComputePipeline::new(device, &layout_clear_grids, shader_dir, Path::new("clear_grids.comp")),
+            pipeline_build_llgrid: ReloadableComputePipeline::new(device, &layout_build_llgrid, shader_dir, Path::new("build_llgrid.comp")),
             pipeline_velocity_to_particles: ReloadableComputePipeline::new(
                 device,
-                &layout_write_particles,
+                &layout_particle_rw,
                 shader_dir,
                 Path::new("velocity_to_particles.comp"),
             ),
@@ -148,8 +183,8 @@ impl HybridFluid {
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        let _ = self.pipeline_clear_grid.try_reload_shader(device, shader_dir);
-        let _ = self.pipeline_velocity_to_grid.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_clear_grids.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_build_llgrid.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_velocity_to_particles.try_reload_shader(device, shader_dir);
     }
 
@@ -225,20 +260,23 @@ impl HybridFluid {
         // note on setting bind groups:
         // As of writing, webgpu-rs silently does nothing on dispatch if pipeline layout doesn't match currently set bind groups.
         // Leaving out set_bind_group for already bound resources is fine, but this will then also not emit any barrier at all!
-        // TODO: Create a ticket on this? Is this a bug that needs reporting?
+        // TODO: Updated webgpu-rs by now, need to confirm. Otherwise: Create a ticket on this? Is this a bug that needs reporting?
 
-        // clear grid
+        // clear front velocity and linkedlist grid
         // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
         // (might still be faster because RT clear operations are usually very quick :/)
-        cpass.set_pipeline(self.pipeline_clear_grid.pipeline());
-        cpass.set_bind_group(1, &self.bind_group_write_particles, &[]);
-        cpass.set_bind_group(2, &self.bind_group_velocity_grids[0], &[]);
+        cpass.set_pipeline(self.pipeline_clear_grids.pipeline());
+        cpass.set_bind_group(1, &self.bind_group_particles_ro, &[]);
+        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]);
+        cpass.set_bind_group(3, &self.bind_group_llgrid_rw, &[]);
         cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
 
+        // Gather particles in linked lists on a dual grid
         // Transfer velocities to grid. (write grid, read particles)
-        cpass.set_pipeline(self.pipeline_velocity_to_grid.pipeline());
-        cpass.set_bind_group(1, &self.bind_group_read_particles, &[]);
-        cpass.set_bind_group(2, &self.bind_group_velocity_grids[0], &[]);
+        cpass.set_pipeline(self.pipeline_build_llgrid.pipeline());
+        cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
+        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]);
+        cpass.set_bind_group(3, &self.bind_group_llgrid_rw, &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Apply global forces (write grid)
@@ -247,8 +285,8 @@ impl HybridFluid {
 
         // Transfer velocities to particles. (read grid, write particles)
         cpass.set_pipeline(self.pipeline_velocity_to_particles.pipeline());
-        cpass.set_bind_group(1, &self.bind_group_write_particles, &[]);
-        cpass.set_bind_group(2, &self.bind_group_velocity_grids[1], &[]);
+        cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
+        cpass.set_bind_group(2, &self.bind_group_vgrids[1], &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Advect particles.  (write particles)
