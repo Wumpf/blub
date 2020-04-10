@@ -15,7 +15,7 @@ pub enum ShaderStage {
 // (could make customizable, but forcing this has perks as well)
 pub const SHADER_ENTRY_POINT_NAME: &str = "main";
 
-fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option<Vec<u32>> {
+fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Result<Vec<u32>, ()> {
     let kind = match stage {
         ShaderStage::Vertex => shaderc::ShaderKind::Vertex,
         ShaderStage::Fragment => shaderc::ShaderKind::Fragment,
@@ -31,21 +31,21 @@ fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Option
             }
 
             match wgpu::read_spirv(std::io::Cursor::new(&compile_result.as_binary_u8())) {
-                Ok(spirv) => Some(spirv),
+                Ok(spirv) => Ok(spirv),
                 Err(io_error) => {
-                    println!("Compilation suceeded, but wgpu::read_spirv failed: {}", io_error);
-                    None
+                    println!("Compilation succeeded, but wgpu::read_spirv failed: {}", io_error);
+                    Err(())
                 }
             }
         }
         Err(compile_error) => {
             println!("{}", compile_error);
-            None
+            Err(())
         }
     }
 }
 
-fn load_glsl_and_resolve_includes(path: &Path) -> Option<String> {
+fn load_glsl_and_resolve_includes(path: &Path) -> Result<String, ()> {
     match std::fs::read_to_string(&path) {
         Ok(glsl_code) => {
             lazy_static! {
@@ -65,10 +65,10 @@ fn load_glsl_and_resolve_includes(path: &Path) -> Option<String> {
                             ))
                             .as_str();
                         match load_glsl_and_resolve_includes(&path.parent().unwrap().join(included_file)) {
-                            Some(included_code) => expanded_code.push(included_code),
-                            None => {
+                            Ok(included_code) => expanded_code.push(included_code),
+                            Err(()) => {
                                 println!("Failed to process include \"{:?}\"line {}:\n\t{}", path, line_number, line);
-                                return None;
+                                return Err(());
                             }
                         }
                         expanded_code.push(format!("#line {}", line_number + 2));
@@ -79,11 +79,11 @@ fn load_glsl_and_resolve_includes(path: &Path) -> Option<String> {
                 }
             }
 
-            Some(expanded_code.join("\n"))
+            Ok(expanded_code.join("\n"))
         }
         Err(err) => {
             println!("Failed to read shader file \"{:?}\": {}", path, err);
-            None
+            Err(())
         }
     }
 }
@@ -114,12 +114,12 @@ impl ShaderDirectory {
     }
 
     // Checks if any change was detected in the shader directory.
-    // Right now notifies any all changes in the directory, if too slow consider filtering & distinguishing shaders.
+    // Right now notifies any changes in the directory, if too slow consider filtering & distinguishing shaders.
     pub fn detected_change(&self) -> bool {
         self.detected_change.swap(false, Ordering::Relaxed)
     }
 
-    pub fn load_shader_module(&self, device: &wgpu::Device, relative_filename: &Path) -> Option<wgpu::ShaderModule> {
+    pub fn load_shader_module(&self, device: &wgpu::Device, relative_filename: &Path) -> Result<wgpu::ShaderModule, ()> {
         let path = self.directory.join(relative_filename);
 
         let shader_stage = match path.extension().and_then(OsStr::to_str) {
@@ -128,16 +128,12 @@ impl ShaderDirectory {
             Some("comp") => ShaderStage::Compute,
             _ => {
                 println!("Did not recognize file extension for shader file \"{:?}\"", path);
-                return None;
+                return Err(());
             }
         };
 
-        match load_glsl_and_resolve_includes(&path) {
-            Some(glsl_code) => match compile_glsl(&glsl_code, &relative_filename.to_str().unwrap(), shader_stage) {
-                Some(spirv) => Some(device.create_shader_module(&spirv)),
-                None => None,
-            },
-            None => None,
-        }
+        let glsl_code = load_glsl_and_resolve_includes(&path)?;
+        let spirv = compile_glsl(&glsl_code, &relative_filename.to_str().unwrap(), shader_stage)?;
+        Ok(device.create_shader_module(&spirv))
     }
 }

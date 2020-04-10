@@ -43,11 +43,11 @@ impl ParticleRenderer {
         device: &wgpu::Device,
         pipeline_layout: &wgpu::PipelineLayout,
         shader_dir: &ShaderDirectory,
-    ) -> Option<wgpu::RenderPipeline> {
+    ) -> Result<wgpu::RenderPipeline, ()> {
         let vs_module = shader_dir.load_shader_module(device, Path::new("sphere_particles.vert"))?;
         let fs_module = shader_dir.load_shader_module(device, Path::new("sphere_particles.frag"))?;
 
-        Some(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        Ok(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
@@ -92,7 +92,7 @@ impl ParticleRenderer {
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        if let Some(render_pipeline) = Self::create_pipeline_state(device, &self.pipeline_layout, shader_dir) {
+        if let Ok(render_pipeline) = Self::create_pipeline_state(device, &self.pipeline_layout, shader_dir) {
             self.render_pipeline = render_pipeline;
         }
     }

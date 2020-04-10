@@ -17,12 +17,12 @@ impl HybridFluidComputePipelines {
         pipeline_layout_write_particles: &wgpu::PipelineLayout,
         pipeline_layout_read_particles: &wgpu::PipelineLayout,
         shader_dir: &ShaderDirectory,
-    ) -> Option<Self> {
+    ) -> Result<Self, ()> {
         let shader_transfer_velocity_to_grid = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_grid.comp"))?;
         let shader_transfer_velocity_to_particles = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_particles.comp"))?;
         let shader_clear_grid = shader_dir.load_shader_module(device, Path::new("clear_grid.comp"))?;
 
-        Some(HybridFluidComputePipelines {
+        Ok(HybridFluidComputePipelines {
             clear_grid: create_compute_pipeline(device, pipeline_layout_read_particles, &shader_clear_grid),
             transfer_velocity_to_grid: create_compute_pipeline(device, pipeline_layout_read_particles, &shader_transfer_velocity_to_grid),
             transfer_velocity_to_particles: create_compute_pipeline(device, pipeline_layout_write_particles, &shader_transfer_velocity_to_particles),
@@ -171,7 +171,7 @@ impl HybridFluid {
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        if let Some(pipelines) = HybridFluidComputePipelines::new(
+        if let Ok(pipelines) = HybridFluidComputePipelines::new(
             device,
             &self.pipeline_layout_write_particles,
             &self.pipeline_layout_read_particles,
