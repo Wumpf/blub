@@ -19,6 +19,7 @@ pub struct HybridFluid {
 
     pipeline_clear_grids: ReloadableComputePipeline,
     pipeline_build_llgrid: ReloadableComputePipeline,
+    pipeline_build_vgrid: ReloadableComputePipeline,
     pipeline_velocity_to_particles: ReloadableComputePipeline,
 
     num_particles: u64,
@@ -32,7 +33,9 @@ struct Particle {
     // Particle positions are in grid space to simplify shader computation
     // (no scaling/translation needed until we're rendering or interacting with other objects!)
     position: cgmath::Point3<f32>,
-    padding: f32,
+    linked_list_next: u32,
+    velocity: cgmath::Point3<f32>,
+    padding1: f32,
 }
 
 impl HybridFluid {
@@ -141,6 +144,14 @@ impl HybridFluid {
                 &group_layout_llgrid_rw.layout,
             ],
         }));
+        let layout_build_vgrid = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_particles_ro.layout,
+                &group_layout_volumes.layout,
+                &group_layout_llgrid_ro.layout,
+            ],
+        }));
         let layout_particle_rw = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
@@ -162,6 +173,7 @@ impl HybridFluid {
 
             pipeline_clear_grids: ReloadableComputePipeline::new(device, &layout_clear_grids, shader_dir, Path::new("clear_grids.comp")),
             pipeline_build_llgrid: ReloadableComputePipeline::new(device, &layout_build_llgrid, shader_dir, Path::new("build_llgrid.comp")),
+            pipeline_build_vgrid: ReloadableComputePipeline::new(device, &layout_build_vgrid, shader_dir, Path::new("build_vgrid.comp")),
             pipeline_velocity_to_particles: ReloadableComputePipeline::new(
                 device,
                 &layout_particle_rw,
@@ -185,6 +197,7 @@ impl HybridFluid {
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
         let _ = self.pipeline_clear_grids.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_build_llgrid.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_build_vgrid.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_velocity_to_particles.try_reload_shader(device, shader_dir);
     }
 
@@ -217,16 +230,19 @@ impl HybridFluid {
         let mut rng: rand::rngs::SmallRng = rand::SeedableRng::seed_from_u64(num_new_particles as u64);
         let new_particles =
             unsafe { std::slice::from_raw_parts_mut(particle_buffer_mapping.data.as_mut_ptr() as *mut Particle, num_new_particles as usize) };
-        for (i, position) in new_particles.iter_mut().enumerate() {
+        for (i, particle) in new_particles.iter_mut().enumerate() {
             //let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
             let cell = cgmath::Point3::new(
                 (i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
                 (i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
                 (i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
             );
-            *position = Particle {
-                position: (cell + rng.gen::<cgmath::Vector3<f32>>()),
-                padding: i as f32,
+            let position = cell + rng.gen::<cgmath::Vector3<f32>>();
+            *particle = Particle {
+                position,
+                linked_list_next: 0xFFFFFFFF,
+                velocity: position, // todo
+                padding1: 0.0,
             };
         }
 
@@ -271,13 +287,20 @@ impl HybridFluid {
         cpass.set_bind_group(3, &self.bind_group_llgrid_rw, &[]);
         cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
 
-        // Gather particles in linked lists on a dual grid
+        // Create particle linked lists and write heads in dual grids
         // Transfer velocities to grid. (write grid, read particles)
         cpass.set_pipeline(self.pipeline_build_llgrid.pipeline());
         cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
-        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]);
+        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]); // todo: No access to this.
         cpass.set_bind_group(3, &self.bind_group_llgrid_rw, &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
+
+        // Gather velocities in velocity grid.
+        cpass.set_pipeline(self.pipeline_build_vgrid.pipeline());
+        cpass.set_bind_group(1, &self.bind_group_particles_ro, &[]);
+        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]);
+        cpass.set_bind_group(3, &self.bind_group_llgrid_ro, &[]);
+        cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
 
         // Apply global forces (write grid)
 

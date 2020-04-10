@@ -2,6 +2,8 @@
 
 #version 450
 
+#define NEED_PARTICLE_WRITE
+#define NEED_LLGRID_WRITE
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
 
@@ -11,7 +13,12 @@ void main() {
     vec3 position = Particles[particleIndex].Position;
     ivec3 nearestDualGridCell = ivec3(position);
 
-    // Invalid index is 0!
+    // Set own index to invalid.
+    Particles[particleIndex].LinkedListNext = INVALID_LINKED_LIST_PTR;
+
+    // Remember, indices in grid are offset by +1.
     uint prevParticleIndex = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
-    // todo
+    if (prevParticleIndex != INVALID_LINKED_LIST_PTR) {
+        Particles[prevParticleIndex].LinkedListNext = particleIndex;
+    }
 }

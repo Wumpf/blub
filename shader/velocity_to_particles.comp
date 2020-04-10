@@ -1,5 +1,6 @@
 #version 450
 
+#define NEED_PARTICLE_WRITE
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
 
@@ -7,5 +8,9 @@ void main() {
     uint particle_index = gl_GlobalInvocationID.x;
     vec3 position = Particles[particle_index].Position;
 
-    Particles[particle_index].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / imageSize(VelocityGridWrite)).xyz;
+    // contraption for debugging.
+    if (Particles[particle_index].Padding1 < 1.0) {
+        Particles[particle_index].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / imageSize(VelocityGridWrite)).xyz;
+        Particles[particle_index].Padding1 += 1.0;
+    }
 }

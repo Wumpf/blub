@@ -1,0 +1,39 @@
+// Builds velocity grid from particles and llgrid
+
+#version 450
+
+#include "particles.glsl"
+#include "per_frame_resources.glsl"
+#include "utilities.glsl"
+
+void gatherVelocitiesFromLinkedList(inout vec4 velocityAndWeight, vec3 velocityGridPosition, ivec3 llgridCoord) {
+    uint particleIndex = imageLoad(LinkedListDualGrid, llgridCoord).r - 1;
+
+    // for (int i = 0; i < 16 && particleIndex != INVALID_LINKED_LIST_PTR; ++i) {
+    while (particleIndex != INVALID_LINKED_LIST_PTR) {
+        float weight = 1.0 / lengthsq(velocityGridPosition, Particles[particleIndex].Position);
+        velocityAndWeight += vec4(Particles[particleIndex].Velocity * weight, weight);
+        particleIndex = Particles[particleIndex].LinkedListNext;
+    }
+}
+
+void main() {
+    vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    vec4 velocityAndWeight = vec4(0.0);
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(0, 1, 0));
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(0, 1, 1));
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(0, 0, 0));
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(0, 0, 1));
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(1, 1, 0));
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(1, 1, 1));
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(1, 0, 0));
+    gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(1, 0, 1));
+
+    if (velocityAndWeight.w > 0) {
+        velocityAndWeight.xyz /= velocityAndWeight.w;
+        imageStore(VelocityGridWrite, gridCoord, velocityAndWeight);
+    }
+
+    // todo: Apply global forces.
+}

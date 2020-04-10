@@ -2,10 +2,11 @@
 
 #version 450
 
+#define NEED_LLGRID_WRITE
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
 
 void main() {
-    imageStore(LinkedListDualGrid, ivec3(gl_GlobalInvocationID), uvec4(INVALID_LINKED_LIST_PTR));
+    imageStore(LinkedListDualGrid, ivec3(gl_GlobalInvocationID), uvec4(0));
     imageStore(VelocityGridWrite, ivec3(gl_GlobalInvocationID), vec4(0.0));
 }
