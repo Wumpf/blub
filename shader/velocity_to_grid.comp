@@ -1,0 +1,28 @@
+#version 450
+
+#include "particles.glsl"
+#include "per_frame_resources.glsl"
+
+// vec4[8] computeParticleGridPositionAndWeights(vec3 position) {
+//     vec3 weights = fract(position);
+//     vec3 weightsInv = vec3(1.0) - weights;
+//     vec3 minPos = position - weights;
+//     vec4 gridPositionsAndWeights[8] = {
+//         vec4(minPos + vec3(0, 0, 0), weights.x * weights.y * weights.z),
+//         vec4(minPos + vec3(0, 1, 0), weights.x * weightsInv.y * weights.z),
+//         vec4(minPos + vec3(1, 0, 0), weightsInv.x * weights.y * weights.z),
+//         vec4(minPos + vec3(1, 1, 0), weightsInv.x * weightsInv.y * weights.z),
+//         vec4(minPos + vec3(0, 0, 1), weights.x * weights.y * weightsInv.z),
+//         vec4(minPos + vec3(0, 1, 1), weights.x * weightsInv.y * weightsInv.z),
+//         vec4(minPos + vec3(1, 0, 1), weightsInv.x * weights.y * weightsInv.z),
+//         vec4(minPos + vec3(1, 1, 1), weightsInv.x * weightsInv.y * weightsInv.z),
+//     };
+//     return gridPositionsAndWeights;
+// }
+
+void main() {
+    uint particle_index = gl_GlobalInvocationID.x;
+    vec3 position = Particles[particle_index].Position;
+
+    imageStore(VelocityGridWrite, ivec3(position), vec4(position, 0.0));
+}

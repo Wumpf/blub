@@ -3,32 +3,7 @@ use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
 use rand::prelude::*;
-use std::path::Path;
-
-struct HybridFluidComputePipelines {
-    clear_grid: wgpu::ComputePipeline,
-    transfer_velocity_to_grid: wgpu::ComputePipeline,
-    transfer_velocity_to_particles: wgpu::ComputePipeline,
-}
-
-impl HybridFluidComputePipelines {
-    fn new(
-        device: &wgpu::Device,
-        pipeline_layout_write_particles: &wgpu::PipelineLayout,
-        pipeline_layout_read_particles: &wgpu::PipelineLayout,
-        shader_dir: &ShaderDirectory,
-    ) -> Result<Self, ()> {
-        let shader_transfer_velocity_to_grid = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_grid.comp"))?;
-        let shader_transfer_velocity_to_particles = shader_dir.load_shader_module(device, Path::new("transfer_velocity_to_particles.comp"))?;
-        let shader_clear_grid = shader_dir.load_shader_module(device, Path::new("clear_grid.comp"))?;
-
-        Ok(HybridFluidComputePipelines {
-            clear_grid: create_compute_pipeline(device, pipeline_layout_read_particles, &shader_clear_grid),
-            transfer_velocity_to_grid: create_compute_pipeline(device, pipeline_layout_read_particles, &shader_transfer_velocity_to_grid),
-            transfer_velocity_to_particles: create_compute_pipeline(device, pipeline_layout_write_particles, &shader_transfer_velocity_to_particles),
-        })
-    }
-}
+use std::{path::Path, rc::Rc};
 
 pub struct HybridFluid {
     //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
@@ -36,13 +11,13 @@ pub struct HybridFluid {
 
     particles: wgpu::Buffer,
 
-    pipeline_layout_write_particles: wgpu::PipelineLayout,
-    pipeline_layout_read_particles: wgpu::PipelineLayout,
-
-    compute_pipelines: HybridFluidComputePipelines,
     bind_group_write_particles: wgpu::BindGroup,
     bind_group_read_particles: wgpu::BindGroup,
     bind_group_velocity_grids: [wgpu::BindGroup; 2],
+
+    pipeline_clear_grid: ReloadableComputePipeline,
+    pipeline_velocity_to_grid: ReloadableComputePipeline,
+    pipeline_velocity_to_particles: ReloadableComputePipeline,
 
     num_particles: u64,
     max_num_particles: u64,
@@ -81,23 +56,6 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::Rgba32Float, false))
             .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: VelocityGrids");
-
-        let pipeline_layout_write_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[
-                per_frame_bind_group_layout,
-                &group_layout_write_particles.layout,
-                &group_layout_volumes.layout,
-            ],
-        });
-        let pipeline_layout_read_particles = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[
-                per_frame_bind_group_layout,
-                &group_layout_read_particles.layout,
-                &group_layout_volumes.layout,
-            ],
-        });
-        let compute_pipelines =
-            HybridFluidComputePipelines::new(device, &pipeline_layout_write_particles, &pipeline_layout_read_particles, shader_dir).unwrap();
 
         let velocity_texture_desc = wgpu::TextureDescriptor {
             label: Some("Texture: Velocity Grid"),
@@ -143,6 +101,21 @@ impl HybridFluid {
             .buffer(&particles, 0..particle_buffer_size)
             .create(device, "BindGroup: ParticlesReadOnly");
 
+        let layout_write_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_write_particles.layout,
+                &group_layout_volumes.layout,
+            ],
+        }));
+        let layout_read_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_read_particles.layout,
+                &group_layout_volumes.layout,
+            ],
+        }));
+
         HybridFluid {
             //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
             grid_dimension,
@@ -150,12 +123,16 @@ impl HybridFluid {
             particles,
             bind_group_write_particles,
             bind_group_read_particles,
-
             bind_group_velocity_grids,
 
-            pipeline_layout_write_particles,
-            pipeline_layout_read_particles,
-            compute_pipelines,
+            pipeline_clear_grid: ReloadableComputePipeline::new(device, &layout_write_particles, shader_dir, Path::new("clear_grid.comp")),
+            pipeline_velocity_to_grid: ReloadableComputePipeline::new(device, &layout_read_particles, shader_dir, Path::new("velocity_to_grid.comp")),
+            pipeline_velocity_to_particles: ReloadableComputePipeline::new(
+                device,
+                &layout_write_particles,
+                shader_dir,
+                Path::new("velocity_to_particles.comp"),
+            ),
 
             num_particles: 0,
             max_num_particles,
@@ -171,14 +148,9 @@ impl HybridFluid {
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        if let Ok(pipelines) = HybridFluidComputePipelines::new(
-            device,
-            &self.pipeline_layout_write_particles,
-            &self.pipeline_layout_read_particles,
-            shader_dir,
-        ) {
-            self.compute_pipelines = pipelines;
-        }
+        let _ = self.pipeline_clear_grid.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_velocity_to_grid.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_velocity_to_particles.try_reload_shader(device, shader_dir);
     }
 
     // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
@@ -258,14 +230,14 @@ impl HybridFluid {
         // clear grid
         // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
         // (might still be faster because RT clear operations are usually very quick :/)
-        cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
-        cpass.set_bind_group(1, &self.bind_group_read_particles, &[]);
+        cpass.set_pipeline(self.pipeline_clear_grid.pipeline());
+        cpass.set_bind_group(1, &self.bind_group_write_particles, &[]);
         cpass.set_bind_group(2, &self.bind_group_velocity_grids[0], &[]);
         cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
 
         // Transfer velocities to grid. (write grid, read particles)
-        cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_grid);
-        cpass.set_bind_group(1, &self.bind_group_write_particles, &[]);
+        cpass.set_pipeline(self.pipeline_velocity_to_grid.pipeline());
+        cpass.set_bind_group(1, &self.bind_group_read_particles, &[]);
         cpass.set_bind_group(2, &self.bind_group_velocity_grids[0], &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
@@ -274,7 +246,7 @@ impl HybridFluid {
         // Resolves forces on grid. (write grid, read grid)
 
         // Transfer velocities to particles. (read grid, write particles)
-        cpass.set_pipeline(&self.compute_pipelines.transfer_velocity_to_particles);
+        cpass.set_pipeline(self.pipeline_velocity_to_particles.pipeline());
         cpass.set_bind_group(1, &self.bind_group_write_particles, &[]);
         cpass.set_bind_group(2, &self.bind_group_velocity_grids[1], &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
