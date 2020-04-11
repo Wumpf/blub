@@ -55,7 +55,9 @@ impl Application {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&window_surface),
             },
-            wgpu::BackendBit::PRIMARY,
+            // Didn't get it to work with DX12 so far: Issues with bindings in compute pipelines.
+            // Some (!) of these issues are fixed with https://github.com/gfx-rs/wgpu/pull/572
+            wgpu::BackendBit::PRIMARY, //wgpu::BackendBit::DX12,
         )
         .await
         .unwrap();
@@ -88,8 +90,8 @@ impl Application {
         hybrid_fluid.add_fluid_cube(
             &device,
             &mut init_encoder,
-            cgmath::Point3::new(1.0, 1.0, 1.0),
-            cgmath::Point3::new(32.0, 64.0 - 2.0, 64.0 - 2.0),
+            cgmath::Point3::new(2.0, 2.0, 2.0),
+            cgmath::Point3::new(32.0, 62.0, 62.0),
         );
 
         let particle_renderer =

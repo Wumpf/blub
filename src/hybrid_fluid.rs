@@ -4,6 +4,7 @@ use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
 use rand::prelude::*;
 use std::{path::Path, rc::Rc};
+use uniformbuffer::PaddedVector3;
 
 pub struct HybridFluid {
     //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
@@ -34,8 +35,7 @@ struct Particle {
     // (no scaling/translation needed until we're rendering or interacting with other objects!)
     position: cgmath::Point3<f32>,
     linked_list_next: u32,
-    velocity: cgmath::Point3<f32>,
-    padding1: f32,
+    velocity: PaddedVector3,
 }
 
 impl HybridFluid {
@@ -128,10 +128,12 @@ impl HybridFluid {
             .buffer(&particles, 0..particle_buffer_size)
             .create(device, "BindGroup: ParticlesReadOnly");
 
+        // Note that layouts directly correspond to DX12 root signatures.
+        // We want to avoid having many of them and share as much as we can, but since WebGPU needs to set barriers for everything that is not readonly it's a tricky tradeoff.
         let layout_clear_grids = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_particles_ro.layout,
+                &group_layout_particles_ro.layout, // If we do empty layout, we need to remove possible shader access! (at least DX12 debug layer enforces this)
                 &group_layout_volumes.layout,
                 &group_layout_llgrid_rw.layout,
             ],
@@ -157,6 +159,7 @@ impl HybridFluid {
                 per_frame_bind_group_layout,
                 &group_layout_particles_rw.layout,
                 &group_layout_volumes.layout,
+                &group_layout_llgrid_ro.layout,
             ],
         }));
 
@@ -241,8 +244,7 @@ impl HybridFluid {
             *particle = Particle {
                 position,
                 linked_list_next: 0xFFFFFFFF,
-                velocity: position, // todo
-                padding1: 0.0,
+                velocity: cgmath::vec3(0.0, 0.0, 0.0).into(),
             };
         }
 
@@ -274,9 +276,7 @@ impl HybridFluid {
     // todo: timing
     pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>) {
         // note on setting bind groups:
-        // As of writing, webgpu-rs silently does nothing on dispatch if pipeline layout doesn't match currently set bind groups.
-        // Leaving out set_bind_group for already bound resources is fine, but this will then also not emit any barrier at all!
-        // TODO: Updated webgpu-rs by now, need to confirm. Otherwise: Create a ticket on this? Is this a bug that needs reporting?
+        // As of writing, webgpu-rs silently does nothing on dispatch if pipeline layout doesn't perfectly match currently set bind groups.
 
         // clear front velocity and linkedlist grid
         // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
@@ -291,14 +291,11 @@ impl HybridFluid {
         // Transfer velocities to grid. (write grid, read particles)
         cpass.set_pipeline(self.pipeline_build_llgrid.pipeline());
         cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
-        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]); // todo: No access to this.
-        cpass.set_bind_group(3, &self.bind_group_llgrid_rw, &[]);
         cpass.dispatch(self.num_particles as u32, 1, 1);
 
         // Gather velocities in velocity grid.
         cpass.set_pipeline(self.pipeline_build_vgrid.pipeline());
         cpass.set_bind_group(1, &self.bind_group_particles_ro, &[]);
-        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]);
         cpass.set_bind_group(3, &self.bind_group_llgrid_ro, &[]);
         cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
 

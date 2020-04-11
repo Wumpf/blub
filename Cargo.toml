@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 wgpu = "0.5"
+#wgpu = { git = "https://github.com/Wumpf/wgpu-rs", rev = "use-wumpf-wgpu-fork" }
 winit = "0.22"
 shaderc = "0.6"
 notify = "5.0.0-pre.2"

@@ -26,7 +26,7 @@ pub struct PerFrameResources {
 impl PerFrameResources {
     pub fn new(device: &wgpu::Device) -> Self {
         let bind_group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_rendering(binding_glsl::uniform())
+            .next_binding_all(binding_glsl::uniform())
             .next_binding_all(binding_glsl::sampler())
             .create(device, "BindGroupLayout: PerFrameResources");
 
@@ -60,7 +60,7 @@ impl PerFrameResources {
                 camera: camera.fill_uniform_buffer(aspect_ratio),
 
                 total_passed_time: timer.time_since_start().as_secs_f32(),
-                delta_time: timer.frame_delta_time().as_secs_f32().min(0.0000000001),
+                delta_time: timer.frame_delta_time().as_secs_f32().min(std::f32::EPSILON),
                 padding0: 0.0,
                 padding1: 0.0,
             },

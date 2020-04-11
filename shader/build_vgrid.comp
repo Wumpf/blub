@@ -32,8 +32,11 @@ void main() {
 
     if (velocityAndWeight.w > 0) {
         velocityAndWeight.xyz /= velocityAndWeight.w;
+
+        // Apply global forces.
+        // todo: make configurable
+        velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * DeltaTime;
+
         imageStore(VelocityGridWrite, gridCoord, velocityAndWeight);
     }
-
-    // todo: Apply global forces.
 }

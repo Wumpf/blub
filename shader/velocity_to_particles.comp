@@ -9,8 +9,10 @@ void main() {
     vec3 position = Particles[particle_index].Position;
 
     // contraption for debugging.
-    if (Particles[particle_index].Padding1 < 1.0) {
-        Particles[particle_index].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / imageSize(VelocityGridWrite)).xyz;
-        Particles[particle_index].Padding1 += 1.0;
-    }
+    // if (Particles[particle_index].Padding1 < 1.0) {
+    //    Particles[particle_index].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / imageSize(VelocityGridWrite)).xyz;
+    //    Particles[particle_index].Padding1 += 1.0;
+    //}
+
+    Particles[particle_index].Velocity = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / imageSize(VelocityGridWrite)).xyz;
 }

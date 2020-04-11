@@ -39,9 +39,9 @@ impl BindGroupLayoutBuilder {
         self.next_binding(wgpu::ShaderStage::VERTEX, ty)
     }
 
-    pub fn next_binding_rendering(self, ty: wgpu::BindingType) -> Self {
-        self.next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT, ty)
-    }
+    //pub fn next_binding_rendering(self, ty: wgpu::BindingType) -> Self {
+    //    self.next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT, ty)
+    //}
 
     pub fn next_binding_all(self, ty: wgpu::BindingType) -> Self {
         self.next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT | wgpu::ShaderStage::COMPUTE, ty)

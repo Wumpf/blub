@@ -23,8 +23,12 @@ fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Result
     };
 
     let mut compiler = shaderc::Compiler::new().unwrap();
-    //let mut options = shaderc::CompileOptions::new().unwrap();
-    match compiler.compile_into_spirv(glsl_code, kind, identifier, SHADER_ENTRY_POINT_NAME, None) {
+    let mut options = shaderc::CompileOptions::new().unwrap();
+    //options.set_hlsl_io_mapping(true);
+    options.set_warnings_as_errors();
+    // options.set_optimization_level(shaderc::OptimizationLevel::Zero);
+    // options.set_include_callback // TODO: Use this (didn't notice this option)
+    match compiler.compile_into_spirv(glsl_code, kind, identifier, SHADER_ENTRY_POINT_NAME, Some(&options)) {
         Ok(compile_result) => {
             if compile_result.get_num_warnings() > 0 {
                 println!("warnings when compiling {}:\n{}", identifier, compile_result.get_warning_messages());
@@ -134,6 +138,15 @@ impl ShaderDirectory {
 
         let glsl_code = load_glsl_and_resolve_includes(&path)?;
         let spirv = compile_glsl(&glsl_code, &relative_filename.to_str().unwrap(), shader_stage)?;
+
+        // Write out the spirv shader for debugging purposes
+        // {
+        //     use std::io::prelude::*;
+        //     let mut file = std::fs::File::create("last-shader.spv").unwrap();
+        //     let data: &[u8] = unsafe { std::slice::from_raw_parts(spirv.as_ptr() as *const u8, spirv.len() * 4) };
+        //     file.write_all(data).unwrap();
+        // }
+
         Ok(device.create_shader_module(&spirv))
     }
 }
