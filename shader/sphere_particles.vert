@@ -15,11 +15,11 @@ void main() {
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
 
     // Spanning billboards is easy!
-    vec3 toCamera = CameraPosition - out_ParticleWorldPosition;
+    vec3 toCamera = Camera.Position - out_ParticleWorldPosition;
     float distanceToCameraSq = dot(toCamera, toCamera);
     float distanceToCameraInv = inversesqrt(distanceToCameraSq);
     vec3 particleNormal = toCamera * distanceToCameraInv;
-    vec3 particleRight = normalize(cross(particleNormal, CameraUp)); // It's spheres so any orthogonal vector would do.
+    vec3 particleRight = normalize(cross(particleNormal, Camera.Up)); // It's spheres so any orthogonal vector would do.
     vec3 particleUp = cross(particleRight, particleNormal);
     vec3 quadPosition = (quadPositions[gl_VertexIndex].x * particleRight + quadPositions[gl_VertexIndex].y * particleUp);
 
@@ -38,5 +38,5 @@ void main() {
     // modifiedRadius = length(toCamera) * radius / sqrt(distanceToCameraSq - radius * radius);
     // out_WorldPosition = out_ParticleWorldPosition + quadPosition * modifiedRadius;
 
-    gl_Position = ViewProjection * vec4(out_WorldPosition, 1.0);
+    gl_Position = Camera.ViewProjection * vec4(out_WorldPosition, 1.0);
 }

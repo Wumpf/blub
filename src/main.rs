@@ -189,7 +189,7 @@ impl Application {
         });
 
         self.per_frame_resources
-            .update_gpu_data(&mut encoder, &self.device, &self.camera, aspect_ratio);
+            .update_gpu_data(&mut encoder, &self.device, &self.camera, &self.timer, aspect_ratio);
 
         {
             let mut cpass = encoder.begin_compute_pass();

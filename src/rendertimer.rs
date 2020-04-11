@@ -25,9 +25,9 @@ impl RenderTimer {
     }
 
     // Time passed since startup. Kept constant for the duration of this frame.
-    // pub fn time_since_start(&self) -> Duration {
-    //     self.time_since_startup
-    // }
+    pub fn time_since_start(&self) -> Duration {
+        self.time_since_startup
+    }
 
     // Duration of the previous frame.
     pub fn frame_delta_time(&self) -> Duration {

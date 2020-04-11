@@ -13,8 +13,8 @@ void main() {
 
     // Sphere intersect raycast. Given how obscure our vertex positions are, this is the easiest!
     // (uses equation based intersect: rayOrigin + t * rayDir, ||sphereOrigin-pointOnSphere||= r*r, [...])
-    vec3 rayDir = normalize(in_WorldPosition - CameraPosition);
-    vec3 particleCenterToCamera = CameraPosition - in_ParticleWorldPosition; // (often denoted as oc == OriginCenter)
+    vec3 rayDir = normalize(in_WorldPosition - Camera.Position);
+    vec3 particleCenterToCamera = Camera.Position - in_ParticleWorldPosition; // (often denoted as oc == OriginCenter)
     float b = dot(particleCenterToCamera, rayDir);
     float c = dot(particleCenterToCamera, particleCenterToCamera) - radius * radius;
     float discr = b * b - c;
@@ -22,7 +22,7 @@ void main() {
         discard; // todo: antialias?
     float cameraDistance = -b - sqrt(discr);
 
-    vec3 sphereWorldPos = CameraPosition + cameraDistance * rayDir;
+    vec3 sphereWorldPos = Camera.Position + cameraDistance * rayDir;
     vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / radius;
 
     // via https://www.iquilezles.org/www/articles/outdoorslighting/outdoorslighting.htm

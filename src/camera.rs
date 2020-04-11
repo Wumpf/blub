@@ -150,5 +150,3 @@ pub struct CameraUniformBufferContent {
     pub up: PaddedVector3,
     pub direction: PaddedVector3,
 }
-
-pub type CameraUniformBuffer = UniformBuffer<CameraUniformBufferContent>;
