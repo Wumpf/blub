@@ -6,7 +6,7 @@ use uniformbuffer::UniformBuffer;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct PerFrameUniformContent {
+struct PerFrameUniformBufferContent {
     pub camera: camera::CameraUniformBufferContent,
 
     pub total_passed_time: f32,
@@ -15,7 +15,7 @@ struct PerFrameUniformContent {
     pub padding1: f32,
 }
 
-type PerFrameUniformBuffer = UniformBuffer<PerFrameUniformContent>;
+type PerFrameUniformBuffer = UniformBuffer<PerFrameUniformBufferContent>;
 
 pub struct PerFrameResources {
     ubo: PerFrameUniformBuffer,
@@ -56,7 +56,7 @@ impl PerFrameResources {
         self.ubo.update_content(
             encoder,
             device,
-            PerFrameUniformContent {
+            PerFrameUniformBufferContent {
                 camera: camera.fill_uniform_buffer(aspect_ratio),
 
                 total_passed_time: timer.time_since_start().as_secs_f32(),
