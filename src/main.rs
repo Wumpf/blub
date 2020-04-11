@@ -2,6 +2,8 @@
 extern crate lazy_static;
 #[macro_use]
 extern crate more_asserts;
+#[macro_use]
+extern crate log;
 
 mod camera;
 mod hybrid_fluid;
@@ -176,7 +178,7 @@ impl Application {
 
     fn update(&mut self) {
         if self.shader_dir.detected_change() {
-            println!("reloading shaders...");
+            info!("reloading shaders...");
             self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
             self.hybrid_fluid.try_reload_shaders(&self.device, &self.shader_dir);
         }
@@ -235,6 +237,7 @@ impl Application {
 }
 
 fn main() {
+    env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info"));
     let event_loop = EventLoop::new();
     let application = futures::executor::block_on(Application::new(&event_loop));
     application.run(event_loop);

@@ -31,19 +31,19 @@ fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Result
     match compiler.compile_into_spirv(glsl_code, kind, identifier, SHADER_ENTRY_POINT_NAME, Some(&options)) {
         Ok(compile_result) => {
             if compile_result.get_num_warnings() > 0 {
-                println!("warnings when compiling {}:\n{}", identifier, compile_result.get_warning_messages());
+                warn!("warnings when compiling {}:\n{}", identifier, compile_result.get_warning_messages());
             }
 
             match wgpu::read_spirv(std::io::Cursor::new(&compile_result.as_binary_u8())) {
                 Ok(spirv) => Ok(spirv),
                 Err(io_error) => {
-                    println!("Compilation succeeded, but wgpu::read_spirv failed: {}", io_error);
+                    error!("Compilation succeeded, but wgpu::read_spirv failed: {}", io_error);
                     Err(())
                 }
             }
         }
         Err(compile_error) => {
-            println!("{}", compile_error);
+            error!("{}", compile_error);
             Err(())
         }
     }
@@ -71,7 +71,7 @@ fn load_glsl_and_resolve_includes(path: &Path) -> Result<String, ()> {
                         match load_glsl_and_resolve_includes(&path.parent().unwrap().join(included_file)) {
                             Ok(included_code) => expanded_code.push(included_code),
                             Err(()) => {
-                                println!("Failed to process include \"{:?}\"line {}:\n\t{}", path, line_number, line);
+                                error!("Failed to process include \"{:?}\"line {}:\n\t{}", path, line_number, line);
                                 return Err(());
                             }
                         }
@@ -86,7 +86,7 @@ fn load_glsl_and_resolve_includes(path: &Path) -> Result<String, ()> {
             Ok(expanded_code.join("\n"))
         }
         Err(err) => {
-            println!("Failed to read shader file \"{:?}\": {}", path, err);
+            error!("Failed to read shader file \"{:?}\": {}", path, err);
             Err(())
         }
     }
@@ -105,7 +105,7 @@ impl ShaderDirectory {
         let detected_change_evt_ref = detected_change.clone();
         let mut watcher: notify::RecommendedWatcher = notify::Watcher::new_immediate(move |res| match res {
             Ok(_) => detected_change_evt_ref.store(true, Ordering::Relaxed),
-            Err(e) => println!("Failed to create filewatcher: {:?}", e),
+            Err(e) => error!("Failed to create filewatcher: {:?}", e),
         })
         .unwrap();
         watcher.watch(path, notify::RecursiveMode::Recursive).unwrap();
@@ -131,7 +131,7 @@ impl ShaderDirectory {
             Some("vert") => ShaderStage::Vertex,
             Some("comp") => ShaderStage::Compute,
             _ => {
-                println!("Did not recognize file extension for shader file \"{:?}\"", path);
+                error!("Did not recognize file extension for shader file \"{:?}\"", path);
                 return Err(());
             }
         };

@@ -9,7 +9,7 @@ impl Screen {
     pub const FORMAT_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn new(device: &wgpu::Device, window_surface: &wgpu::Surface, resolution: winit::dpi::PhysicalSize<u32>) -> Self {
-        println!("creating screen with {:?}", resolution);
+        info!("creating screen with {:?}", resolution);
 
         let swap_chain = device.create_swap_chain(
             window_surface,
