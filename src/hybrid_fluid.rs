@@ -63,10 +63,10 @@ impl HybridFluid {
             .create(device, "BindGroupLayout: VelocityGrids");
         let group_layout_llgrid_rw = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false))
-            .create(device, "BindGroupLayout: Linked List Dual Grid");
+            .create(device, "BindGroupLayout: Linked List Dual Grid ReadWrite");
         let group_layout_llgrid_ro = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, true))
-            .create(device, "BindGroupLayout: Linked List Dual Grid");
+            .create(device, "BindGroupLayout: Linked List Dual Grid ReadOnly");
 
         let bind_group_vgrids = {
             let velocity_texture_desc = wgpu::TextureDescriptor {
@@ -130,36 +130,30 @@ impl HybridFluid {
 
         // Note that layouts directly correspond to DX12 root signatures.
         // We want to avoid having many of them and share as much as we can, but since WebGPU needs to set barriers for everything that is not readonly it's a tricky tradeoff.
-        let layout_clear_grids = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        // Considering that all pipelines here require UAV barriers anyways a few more or less won't make too much difference (... is that true?).
+        // Therefore we're compromising for less layouts & easier to maintain code.
+        let layout_particles_to_grid = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_particles_ro.layout, // If we do empty layout, we need to remove possible shader access! (at least DX12 debug layer enforces this)
-                &group_layout_volumes.layout,
+                &group_layout_particles_rw.layout, // not needed for clearing pass, ignored
                 &group_layout_llgrid_rw.layout,
+                &group_layout_volumes.layout,
             ],
         }));
-        let layout_build_llgrid = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[
-                per_frame_bind_group_layout,
-                &group_layout_particles_rw.layout,
-                &group_layout_volumes.layout,
-                &group_layout_llgrid_rw.layout,
-            ],
-        }));
-        let layout_build_vgrid = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_build_grids = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_particles_ro.layout,
+                &group_layout_llgrid_ro.layout, // only needed on first step, but keeping readonly bound shouldn't matter
                 &group_layout_volumes.layout,
-                &group_layout_llgrid_ro.layout,
             ],
         }));
-        let layout_particle_rw = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_grid_to_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_particles_rw.layout,
-                &group_layout_volumes.layout,
-                &group_layout_llgrid_ro.layout,
+                &group_layout_llgrid_ro.layout, // not needed, but keeping readonly bound shouldn't matter
+                &group_layout_volumes.layout,   // todo: Use pure read-only grid?
             ],
         }));
 
@@ -174,12 +168,12 @@ impl HybridFluid {
             bind_group_llgrid_rw,
             bind_group_llgrid_ro,
 
-            pipeline_clear_grids: ReloadableComputePipeline::new(device, &layout_clear_grids, shader_dir, Path::new("clear_grids.comp")),
-            pipeline_build_llgrid: ReloadableComputePipeline::new(device, &layout_build_llgrid, shader_dir, Path::new("build_llgrid.comp")),
-            pipeline_build_vgrid: ReloadableComputePipeline::new(device, &layout_build_vgrid, shader_dir, Path::new("build_vgrid.comp")),
+            pipeline_clear_grids: ReloadableComputePipeline::new(device, &layout_particles_to_grid, shader_dir, Path::new("clear_grids.comp")),
+            pipeline_build_llgrid: ReloadableComputePipeline::new(device, &layout_particles_to_grid, shader_dir, Path::new("build_llgrid.comp")),
+            pipeline_build_vgrid: ReloadableComputePipeline::new(device, &layout_build_grids, shader_dir, Path::new("build_vgrid.comp")),
             pipeline_velocity_to_particles: ReloadableComputePipeline::new(
                 device,
-                &layout_particle_rw,
+                &layout_grid_to_particles,
                 shader_dir,
                 Path::new("velocity_to_particles.comp"),
             ),
@@ -205,7 +199,6 @@ impl HybridFluid {
     }
 
     // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
-    // todo: Removes all previously added particles.
     pub fn add_fluid_cube(
         &mut self,
         device: &wgpu::Device,
@@ -275,40 +268,57 @@ impl HybridFluid {
 
     // todo: timing
     pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>) {
-        // note on setting bind groups:
-        // As of writing, webgpu-rs silently does nothing on dispatch if pipeline layout doesn't perfectly match currently set bind groups.
+        const COMPUTE_LOCAL_SIZE_FLUID: wgpu::Extent3d = wgpu::Extent3d {
+            width: 8,
+            height: 8,
+            depth: 8,
+        };
+        const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
 
-        // clear front velocity and linkedlist grid
-        // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
-        // (might still be faster because RT clear operations are usually very quick :/)
-        cpass.set_pipeline(self.pipeline_clear_grids.pipeline());
-        cpass.set_bind_group(1, &self.bind_group_particles_ro, &[]);
-        cpass.set_bind_group(2, &self.bind_group_vgrids[0], &[]);
-        cpass.set_bind_group(3, &self.bind_group_llgrid_rw, &[]);
-        cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
+        // grouped by layouts.
+        {
+            // clear pass doesn't need particle write access, but this reduces amount of needed layouts.
+            cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
+            cpass.set_bind_group(2, &self.bind_group_llgrid_rw, &[]);
+            cpass.set_bind_group(3, &self.bind_group_vgrids[0], &[]);
 
-        // Create particle linked lists and write heads in dual grids
-        // Transfer velocities to grid. (write grid, read particles)
-        cpass.set_pipeline(self.pipeline_build_llgrid.pipeline());
-        cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
-        cpass.dispatch(self.num_particles as u32, 1, 1);
+            // clear front velocity and linkedlist grid
+            // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
+            // (might still be faster because RT clear operations are usually very quick :/)
+            cpass.set_pipeline(self.pipeline_clear_grids.pipeline());
+            cpass.dispatch(
+                self.grid_dimension.width / COMPUTE_LOCAL_SIZE_FLUID.width,
+                self.grid_dimension.height / COMPUTE_LOCAL_SIZE_FLUID.height,
+                self.grid_dimension.depth / COMPUTE_LOCAL_SIZE_FLUID.depth,
+            );
 
-        // Gather velocities in velocity grid.
-        cpass.set_pipeline(self.pipeline_build_vgrid.pipeline());
-        cpass.set_bind_group(1, &self.bind_group_particles_ro, &[]);
-        cpass.set_bind_group(3, &self.bind_group_llgrid_ro, &[]);
-        cpass.dispatch(self.grid_dimension.width, self.grid_dimension.height, self.grid_dimension.depth);
+            // Create particle linked lists and write heads in dual grids
+            // Transfer velocities to grid. (write grid, read particles)
+            cpass.set_pipeline(self.pipeline_build_llgrid.pipeline());
+            cpass.dispatch(self.num_particles as u32 / COMPUTE_LOCAL_SIZE_PARTICLES, 1, 1);
+        }
+        {
+            cpass.set_bind_group(1, &self.bind_group_particles_ro, &[]);
+            cpass.set_bind_group(2, &self.bind_group_llgrid_ro, &[]);
 
-        // Apply global forces (write grid)
+            // Gather velocities in velocity grid and apply global forces.
+            cpass.set_pipeline(self.pipeline_build_vgrid.pipeline());
+            cpass.dispatch(
+                self.grid_dimension.width / COMPUTE_LOCAL_SIZE_FLUID.width,
+                self.grid_dimension.height / COMPUTE_LOCAL_SIZE_FLUID.height,
+                self.grid_dimension.depth / COMPUTE_LOCAL_SIZE_FLUID.depth,
+            );
 
-        // Resolves forces on grid. (write grid, read grid)
+            // Resolves forces on grid. (write grid, read grid)
+        }
+        {
+            // Transfer velocities to particles. (read grid, write particles)
+            cpass.set_pipeline(self.pipeline_velocity_to_particles.pipeline());
+            cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
+            cpass.set_bind_group(3, &self.bind_group_vgrids[1], &[]);
+            cpass.dispatch(self.num_particles as u32 / COMPUTE_LOCAL_SIZE_PARTICLES, 1, 1);
 
-        // Transfer velocities to particles. (read grid, write particles)
-        cpass.set_pipeline(self.pipeline_velocity_to_particles.pipeline());
-        cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
-        cpass.set_bind_group(2, &self.bind_group_vgrids[1], &[]);
-        cpass.dispatch(self.num_particles as u32, 1, 1);
-
-        // Advect particles.  (write particles)
+            // Advect particles.  (write particles)
+        }
     }
 }

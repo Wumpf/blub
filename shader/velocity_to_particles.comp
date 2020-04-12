@@ -1,8 +1,12 @@
 #version 450
 
-#define NEED_PARTICLE_WRITE
+#define PARTICLE_WRITEACCESS
+#include "fluid_volumes.glsl"
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
+#include "utilities.glsl"
+
+COMPUTE_PASS_PARTICLES
 
 void main() {
     uint particle_index = gl_GlobalInvocationID.x;

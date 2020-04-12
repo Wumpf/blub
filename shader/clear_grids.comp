@@ -2,9 +2,14 @@
 
 #version 450
 
-#define NEED_LLGRID_WRITE
+// we're not writing particles, but in order to have less layouts we don't set readonly flag.
+#define PARTICLE_WRITEACCESS
+#define LLGRID_WRITEACCESS
+#include "fluid_volumes.glsl"
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
+
+COMPUTE_PASS_VOLUME
 
 void main() {
     imageStore(LinkedListDualGrid, ivec3(gl_GlobalInvocationID), uvec4(0));

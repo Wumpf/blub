@@ -1,10 +1,14 @@
 // Builds velocity grid from particles and llgrid
+// Uses shepard interpolation on particles.
 
 #version 450
 
+#include "fluid_volumes.glsl"
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
 #include "utilities.glsl"
+
+COMPUTE_PASS_VOLUME
 
 void gatherVelocitiesFromLinkedList(inout vec4 velocityAndWeight, vec3 velocityGridPosition, ivec3 llgridCoord) {
     uint particleIndex = imageLoad(LinkedListDualGrid, llgridCoord).r - 1;
