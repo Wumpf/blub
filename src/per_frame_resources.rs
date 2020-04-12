@@ -60,7 +60,7 @@ impl PerFrameResources {
                 camera: camera.fill_uniform_buffer(aspect_ratio),
 
                 total_passed_time: timer.time_since_start().as_secs_f32(),
-                delta_time: timer.frame_delta_time().as_secs_f32().min(std::f32::EPSILON),
+                delta_time: timer.frame_delta_time().as_secs_f32().max(std::f32::EPSILON),
                 padding0: 0.0,
                 padding1: 0.0,
             },

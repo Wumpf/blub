@@ -10,7 +10,7 @@ layout(set = 0, binding = 0) uniform PerFrameConstants {
     CameraData Camera;
 
     float TotalPassedTime;
-    float DeltaTime; // How long a previous frame took
+    float DeltaTime; // How long a previous frame took in seconds
 };
 
 layout(set = 0, binding = 1) uniform sampler SamplerTrilinear;

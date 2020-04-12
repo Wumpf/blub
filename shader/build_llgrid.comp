@@ -16,16 +16,9 @@ COMPUTE_PASS_PARTICLES
 
 void main() {
     uint particleIndex = gl_GlobalInvocationID.x;
-
     vec3 position = Particles[particleIndex].Position;
     ivec3 nearestDualGridCell = ivec3(position);
 
-    // Set own index to invalid.
-    Particles[particleIndex].LinkedListNext = INVALID_LINKED_LIST_PTR;
-
     // Remember, indices in grid are offset by +1.
-    uint prevParticleIndex = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
-    if (prevParticleIndex != INVALID_LINKED_LIST_PTR) {
-        Particles[prevParticleIndex].LinkedListNext = particleIndex;
-    }
+    Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
 }
