@@ -76,9 +76,7 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let per_frame_resources = PerFrameResources::new(&device);
 
-        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Init Encoder") });
-
-        let mut hybrid_fluid = hybrid_fluid::HybridFluid::new(
+        let hybrid_fluid = hybrid_fluid::HybridFluid::new(
             &device,
             wgpu::Extent3d {
                 width: 128,
@@ -89,17 +87,9 @@ impl Application {
             &shader_dir,
             per_frame_resources.bind_group_layout(),
         );
-        hybrid_fluid.add_fluid_cube(
-            &device,
-            &mut init_encoder,
-            cgmath::Point3::new(2.0, 2.0, 2.0),
-            cgmath::Point3::new(32.0, 62.0, 62.0),
-        );
 
         let particle_renderer =
             particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &hybrid_fluid);
-
-        command_queue.submit(&[init_encoder.finish()]);
 
         Application {
             window,
@@ -146,11 +136,11 @@ impl Application {
                                     ..
                                 },
                             ..
-                        } => {
-                            if virtual_keycode == VirtualKeyCode::Escape {
-                                *control_flow = ControlFlow::Exit;
-                            }
-                        }
+                        } => match virtual_keycode {
+                            VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
+                            VirtualKeyCode::Space => self.restart_simulation(),
+                            _ => {}
+                        },
                         _ => {}
                     }
                 }
@@ -167,6 +157,24 @@ impl Application {
                 _ => (),
             }
         });
+    }
+
+    pub fn restart_simulation(&mut self) {
+        self.timer.reset();
+
+        let mut init_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Particle Init Encoder"),
+        });
+
+        self.hybrid_fluid.reset();
+        self.hybrid_fluid.add_fluid_cube(
+            &self.device,
+            &mut init_encoder,
+            cgmath::Point3::new(2.0, 2.0, 2.0),
+            cgmath::Point3::new(32.0, 62.0, 62.0),
+        );
+
+        self.command_queue.submit(&[init_encoder.finish()]);
     }
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -239,6 +247,7 @@ impl Application {
 fn main() {
     env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info"));
     let event_loop = EventLoop::new();
-    let application = futures::executor::block_on(Application::new(&event_loop));
+    let mut application = futures::executor::block_on(Application::new(&event_loop));
+    application.restart_simulation();
     application.run(event_loop);
 }

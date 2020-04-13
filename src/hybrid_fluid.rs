@@ -198,6 +198,11 @@ impl HybridFluid {
         let _ = self.pipeline_velocity_to_particles.try_reload_shader(device, shader_dir);
     }
 
+    // Clears all state (i.e. removes fluid particles)
+    pub fn reset(&mut self) {
+        self.num_particles = 0;
+    }
+
     // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
     pub fn add_fluid_cube(
         &mut self,

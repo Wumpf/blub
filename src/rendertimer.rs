@@ -10,12 +10,14 @@ pub struct RenderTimer {
 
 impl RenderTimer {
     pub fn new() -> RenderTimer {
-        RenderTimer {
+        let mut timer = RenderTimer {
             timestamp_startup: Instant::now(),
             timestamp_last_frame: Instant::now(),
-            time_since_startup: Duration::from_millis(0),
-            last_frame_duration: Duration::from_millis(16), // Zero sized frames could cause issues.
-        }
+            time_since_startup: Default::default(),
+            last_frame_duration: Default::default(),
+        };
+        timer.reset();
+        timer
     }
 
     pub fn on_frame_submitted(&mut self) {
@@ -32,5 +34,10 @@ impl RenderTimer {
     // Duration of the previous frame.
     pub fn frame_delta_time(&self) -> Duration {
         self.last_frame_duration
+    }
+
+    pub fn reset(&mut self) {
+        self.time_since_startup = Duration::from_millis(0);
+        self.last_frame_duration = Duration::from_millis(16); // Zero sized frames could cause issues.
     }
 }
