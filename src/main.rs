@@ -9,8 +9,8 @@ mod camera;
 mod hybrid_fluid;
 mod particle_renderer;
 mod per_frame_resources;
-mod rendertimer;
 mod screen;
+mod timer;
 mod wgpu_utils;
 
 use per_frame_resources::*;
@@ -39,7 +39,7 @@ pub struct Application {
     camera: camera::Camera,
     per_frame_resources: PerFrameResources,
 
-    timer: rendertimer::RenderTimer,
+    timer: timer::Timer,
 }
 
 impl Application {
@@ -106,7 +106,7 @@ impl Application {
             camera: camera::Camera::new(),
             per_frame_resources,
 
-            timer: rendertimer::RenderTimer::new(),
+            timer: timer::Timer::new(timer::SimulationTimeConfiguration::OneStepPerFrame),
         }
     }
 
@@ -160,7 +160,7 @@ impl Application {
     }
 
     pub fn restart_simulation(&mut self) {
-        self.timer.reset();
+        self.timer = timer::Timer::new(timer::SimulationTimeConfiguration::OneStepPerFrame);
 
         let mut init_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Particle Init Encoder"),
@@ -207,6 +207,7 @@ impl Application {
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
             self.hybrid_fluid.step(&mut cpass);
+            self.timer.on_simulation_step_completed();
         }
 
         {

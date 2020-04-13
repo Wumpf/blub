@@ -1,5 +1,5 @@
 use crate::camera;
-use crate::rendertimer::RenderTimer;
+use crate::timer;
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::*;
 use uniformbuffer::UniformBuffer;
@@ -8,11 +8,7 @@ use uniformbuffer::UniformBuffer;
 #[derive(Clone, Copy)]
 struct PerFrameUniformBufferContent {
     pub camera: camera::CameraUniformBufferContent,
-
-    pub total_passed_time: f32,
-    pub delta_time: f32,
-    pub padding0: f32,
-    pub padding1: f32,
+    pub time: timer::FrameTimeUniformBufferContent,
 }
 
 type PerFrameUniformBuffer = UniformBuffer<PerFrameUniformBufferContent>;
@@ -50,7 +46,7 @@ impl PerFrameResources {
         encoder: &mut wgpu::CommandEncoder,
         device: &wgpu::Device,
         camera: &camera::Camera,
-        timer: &RenderTimer,
+        timer: &timer::Timer,
         aspect_ratio: f32,
     ) {
         self.ubo.update_content(
@@ -58,11 +54,7 @@ impl PerFrameResources {
             device,
             PerFrameUniformBufferContent {
                 camera: camera.fill_uniform_buffer(aspect_ratio),
-
-                total_passed_time: timer.time_since_start().as_secs_f32(),
-                delta_time: timer.frame_delta_time().as_secs_f32().max(std::f32::EPSILON),
-                padding0: 0.0,
-                padding1: 0.0,
+                time: timer.fill_uniform_buffer(),
             },
         );
     }

@@ -1,4 +1,4 @@
-use super::rendertimer::RenderTimer;
+use super::timer::Timer;
 use super::wgpu_utils::uniformbuffer::*;
 use cgmath::prelude::*;
 use enumflags2::BitFlags;
@@ -95,7 +95,7 @@ impl Camera {
         }
     }
 
-    pub fn update(&mut self, timer: &RenderTimer) {
+    pub fn update(&mut self, timer: &Timer) {
         if self.movement_locked == false {
             let right = self.direction.cross(self.rotational_up).normalize();
 

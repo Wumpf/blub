@@ -6,11 +6,17 @@ struct CameraData {
     vec4 Direction;
 };
 
-layout(set = 0, binding = 0) uniform PerFrameConstants {
-    CameraData Camera;
-
-    float TotalPassedTime;
-    float DeltaTime; // How long a previous frame took in seconds
+// All timings in seconds.
+struct TimerData {
+    float TotalPassed;           // How much time has passed in the real world since rendering started.
+    float FrameDelta;            // How long a previous frame took in seconds
+    float SimulationTotalPassed; // How much time has passed in the simulation *excluding any steps in the current frame*
+    float SimulationDelta;       // How much we're advancing the simulation for each step in the current frame.
 };
 
-layout(set = 0, binding = 1) uniform sampler SamplerTrilinear;
+layout(set = 0, binding = 0) uniform PerFrameConstants {
+    CameraData Camera;
+    TimerData Time;
+};
+
+layout(set = 0, binding = 1) uniform sampler SamplerTrilinearClamp;

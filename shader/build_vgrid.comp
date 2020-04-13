@@ -39,7 +39,7 @@ void main() {
 
         // Apply global forces.
         // todo: make configurable
-        velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * DeltaTime;
+        velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
 
         imageStore(VelocityGridWrite, gridCoord, velocityAndWeight);
     }
