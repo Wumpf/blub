@@ -15,14 +15,32 @@
 COMPUTE_PASS_PARTICLES
 
 void main() {
-    uint particle_index = gl_GlobalInvocationID.x;
-    vec3 position = Particles[particle_index].Position;
+    uint particleIndex = gl_GlobalInvocationID.x;
+    if (particleIndex >= NumParticles)
+        return;
+
+    ivec3 gridSize = textureSize(VelocityGridRead, 0);
 
     // contraption for debugging.
-    // if (Particles[particle_index].Padding1 < 1.0) {
-    //    Particles[particle_index].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / imageSize(VelocityGridWrite)).xyz;
-    //    Particles[particle_index].Padding1 += 1.0;
+    // if (Particles[particleIndex].Padding1 < 1.0) {
+    //    Particles[particleIndex].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinearClamp), position /
+    //    imageSize(VelocityGridWrite)).xyz; Particles[particleIndex].Padding1 += 1.0;
     //}
 
-    Particles[particle_index].Velocity = texture(sampler3D(VelocityGridRead, SamplerTrilinear), position / textureSize(VelocityGridRead, 0)).xyz;
+    // Fetch position from grid, trilinearly interpolated.
+    vec3 originalPosition = Particles[particleIndex].Position;
+    vec3 originalPositionGridTextureSpace = originalPosition / gridSize + 0.5 / gridSize;
+    vec3 newVelocity = texture(sampler3D(VelocityGridRead, SamplerTrilinearClamp), originalPositionGridTextureSpace).xyz;
+
+    // Advect
+    // TODO: Try something fancy like Runge Kutta. That would require sampling the grid more often though, so probably not worth it...
+    // also didn't see any impls out there _actually_ doing RK (although many like talking of it...)
+    vec3 newPosition = originalPosition + newVelocity * Time.SimulationDelta; // Euler Step.
+
+    // Enforce boundary.
+    newPosition = clamp(newPosition, vec3(0), gridSize); // wrong since it can clamp movement in a single dimension. But good enough
+
+    // Apply
+    Particles[particleIndex].Velocity = newVelocity;
+    Particles[particleIndex].Position = newPosition;
 }

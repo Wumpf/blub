@@ -10,6 +10,7 @@
 layout(set = 2, binding = 0, r32ui) uniform LLGRID_ACCESS uimage3D LinkedListDualGrid;
 
 // Fluid volumes (both variables point to different ones!)
+// Origin texel represents position (0,0,0), NOT as one might expect (-0.5 / textureSize)
 layout(set = 3, binding = 0, rgba32f) uniform restrict image3D VelocityGridWrite;
 layout(set = 3, binding = 1) uniform texture3D VelocityGridRead;
 

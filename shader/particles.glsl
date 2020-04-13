@@ -22,3 +22,5 @@ layout(set = 1, binding = 0) buffer PARTICLE_ACCESS ParticleBuffer { Particle Pa
 
 // Occupancy calculator: https://xmartlabs.github.io/cuda-calculator/
 #define COMPUTE_PASS_PARTICLES layout(local_size_x = 512, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 1, binding = 1) uniform SimulationProperties { uint NumParticles; };

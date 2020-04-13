@@ -16,6 +16,9 @@ COMPUTE_PASS_PARTICLES
 
 void main() {
     uint particleIndex = gl_GlobalInvocationID.x;
+    if (particleIndex >= NumParticles)
+        return;
+
     vec3 position = Particles[particleIndex].Position;
     ivec3 nearestDualGridCell = ivec3(position);
 

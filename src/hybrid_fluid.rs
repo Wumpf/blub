@@ -1,16 +1,27 @@
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
+use crate::wgpu_utils::uniformbuffer::*;
 use crate::wgpu_utils::*;
 use rand::prelude::*;
 use std::{path::Path, rc::Rc};
 use uniformbuffer::PaddedVector3;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct SimulationPropertiesUniformBufferContent {
+    num_particles: u32,
+    padding0: f32,
+    padding1: f32,
+    padding2: f32,
+}
 
 pub struct HybridFluid {
     //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
     grid_dimension: wgpu::Extent3d,
 
     particles: wgpu::Buffer,
+    simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
 
     bind_group_particles_rw: wgpu::BindGroup,
     bind_group_particles_ro: wgpu::BindGroup,
@@ -23,8 +34,8 @@ pub struct HybridFluid {
     pipeline_build_vgrid: ReloadableComputePipeline,
     pipeline_velocity_to_particles: ReloadableComputePipeline,
 
-    num_particles: u64,
-    max_num_particles: u64,
+    num_particles: u32,
+    max_num_particles: u32,
 }
 
 // todo: probably want to split this up into several buffers
@@ -47,15 +58,17 @@ impl HybridFluid {
     pub fn new(
         device: &wgpu::Device,
         grid_dimension: wgpu::Extent3d,
-        max_num_particles: u64,
+        max_num_particles: u32,
         shader_dir: &ShaderDirectory,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let group_layout_particles_ro = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(true))
+            .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: ParticlesReadOnly");
         let group_layout_particles_rw = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
+            .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: ParticlesReadWrite");
         let group_layout_volumes = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::Rgba32Float, false))
@@ -114,7 +127,9 @@ impl HybridFluid {
             .texture(&llgrid_view)
             .create(device, "BindGroup: LinkedListGridRO");
 
-        let particle_buffer_size = max_num_particles * std::mem::size_of::<Particle>() as u64;
+        let simulation_properties_uniformbuffer = UniformBuffer::new(device);
+
+        let particle_buffer_size = max_num_particles as u64 * std::mem::size_of::<Particle>() as u64;
         let particles = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Buffer: ParticleBuffer"),
             size: particle_buffer_size,
@@ -123,9 +138,11 @@ impl HybridFluid {
 
         let bind_group_particles_rw = BindGroupBuilder::new(&group_layout_particles_rw)
             .buffer(&particles, 0..particle_buffer_size)
+            .resource(simulation_properties_uniformbuffer.binding_resource())
             .create(device, "BindGroup: ParticlesReadWrite");
         let bind_group_particles_ro = BindGroupBuilder::new(&group_layout_particles_ro)
             .buffer(&particles, 0..particle_buffer_size)
+            .resource(simulation_properties_uniformbuffer.binding_resource())
             .create(device, "BindGroup: ParticlesReadOnly");
 
         // Note that layouts directly correspond to DX12 root signatures.
@@ -162,6 +179,8 @@ impl HybridFluid {
             grid_dimension,
 
             particles,
+            simulation_properties_uniformbuffer,
+
             bind_group_particles_rw,
             bind_group_particles_ro,
             bind_group_vgrids,
@@ -218,12 +237,12 @@ impl HybridFluid {
 
         let num_new_particles = self
             .max_num_particles
-            .min(((max_grid.x - min_grid.x) * (max_grid.y - min_grid.y) * (max_grid.z - min_grid.z) * Self::PARTICLES_PER_GRID_CELL) as u64);
+            .min(((max_grid.x - min_grid.x) * (max_grid.y - min_grid.y) * (max_grid.z - min_grid.z) * Self::PARTICLES_PER_GRID_CELL) as u32);
 
         let particle_size = std::mem::size_of::<Particle>() as u64;
         let particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
             label: Some("Buffer: Particle Update"),
-            size: num_new_particles * particle_size,
+            size: num_new_particles as u64 * particle_size,
             usage: wgpu::BufferUsage::COPY_SRC,
         });
 
@@ -234,9 +253,9 @@ impl HybridFluid {
         for (i, particle) in new_particles.iter_mut().enumerate() {
             //let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
             let cell = cgmath::Point3::new(
-                (i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
-                (i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
-                (i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
+                (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
+                (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
+                (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
             );
             let position = cell + rng.gen::<cgmath::Vector3<f32>>();
             *particle = Particle {
@@ -250,13 +269,28 @@ impl HybridFluid {
             &particle_buffer_mapping.finish(),
             0,
             &self.particles,
-            self.num_particles * particle_size,
-            num_new_particles * particle_size,
+            self.num_particles as u64 * particle_size,
+            num_new_particles as u64 * particle_size,
         );
         self.num_particles += num_new_particles;
+
+        self.update_simulation_properties_uniformbuffer(device, init_encoder);
     }
 
-    pub fn num_particles(&self) -> u64 {
+    fn update_simulation_properties_uniformbuffer(&mut self, device: &wgpu::Device, init_encoder: &mut wgpu::CommandEncoder) {
+        self.simulation_properties_uniformbuffer.update_content(
+            init_encoder,
+            device,
+            SimulationPropertiesUniformBufferContent {
+                num_particles: self.num_particles,
+                padding0: 0.0,
+                padding1: 0.0,
+                padding2: 0.0,
+            },
+        );
+    }
+
+    pub fn num_particles(&self) -> u32 {
         self.num_particles
     }
 
@@ -280,6 +314,13 @@ impl HybridFluid {
         };
         const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
 
+        let grid_work_groups = wgpu::Extent3d {
+            width: self.grid_dimension.width / COMPUTE_LOCAL_SIZE_FLUID.width,
+            height: self.grid_dimension.height / COMPUTE_LOCAL_SIZE_FLUID.height,
+            depth: self.grid_dimension.depth / COMPUTE_LOCAL_SIZE_FLUID.depth,
+        };
+        let particle_work_groups = (self.num_particles as u32 + COMPUTE_LOCAL_SIZE_PARTICLES - 1) / COMPUTE_LOCAL_SIZE_PARTICLES;
+
         // grouped by layouts.
         {
             // clear pass doesn't need particle write access, but this reduces amount of needed layouts.
@@ -291,16 +332,12 @@ impl HybridFluid {
             // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
             // (might still be faster because RT clear operations are usually very quick :/)
             cpass.set_pipeline(self.pipeline_clear_grids.pipeline());
-            cpass.dispatch(
-                self.grid_dimension.width / COMPUTE_LOCAL_SIZE_FLUID.width,
-                self.grid_dimension.height / COMPUTE_LOCAL_SIZE_FLUID.height,
-                self.grid_dimension.depth / COMPUTE_LOCAL_SIZE_FLUID.depth,
-            );
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Create particle linked lists and write heads in dual grids
             // Transfer velocities to grid. (write grid, read particles)
             cpass.set_pipeline(self.pipeline_build_llgrid.pipeline());
-            cpass.dispatch(self.num_particles as u32 / COMPUTE_LOCAL_SIZE_PARTICLES, 1, 1);
+            cpass.dispatch(particle_work_groups, 1, 1);
         }
         {
             cpass.set_bind_group(1, &self.bind_group_particles_ro, &[]);
@@ -308,11 +345,7 @@ impl HybridFluid {
 
             // Gather velocities in velocity grid and apply global forces.
             cpass.set_pipeline(self.pipeline_build_vgrid.pipeline());
-            cpass.dispatch(
-                self.grid_dimension.width / COMPUTE_LOCAL_SIZE_FLUID.width,
-                self.grid_dimension.height / COMPUTE_LOCAL_SIZE_FLUID.height,
-                self.grid_dimension.depth / COMPUTE_LOCAL_SIZE_FLUID.depth,
-            );
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Resolves forces on grid. (write grid, read grid)
         }
@@ -321,7 +354,7 @@ impl HybridFluid {
             cpass.set_pipeline(self.pipeline_velocity_to_particles.pipeline());
             cpass.set_bind_group(1, &self.bind_group_particles_rw, &[]);
             cpass.set_bind_group(3, &self.bind_group_vgrids[1], &[]);
-            cpass.dispatch(self.num_particles as u32 / COMPUTE_LOCAL_SIZE_PARTICLES, 1, 1);
+            cpass.dispatch(particle_work_groups, 1, 1);
 
             // Advect particles.  (write particles)
         }
