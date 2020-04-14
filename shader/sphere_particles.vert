@@ -3,6 +3,8 @@
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
 
+layout(set = 1, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
+
 out gl_PerVertex { vec4 gl_Position; };
 
 layout(location = 0) out vec3 out_WorldPosition;

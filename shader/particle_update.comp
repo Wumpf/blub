@@ -1,16 +1,13 @@
 #version 450
 
-// Workaround for bug in shaderc when using textureSize(VelocityGridRead, 0)
-// error: 'textureSize' : required extension not requested: GL_EXT_samplerless_texture_functions
-// Shouldn't happen since we compile for Vulkan.
-// TODO: Minimal repro + bug report
-#extension GL_EXT_samplerless_texture_functions : require
-
-#define PARTICLE_WRITEACCESS
-#include "fluid_volumes.glsl"
+#include "hybrid_fluid.glsl"
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
 #include "utilities.glsl"
+
+layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
+// Origin texel represents position (0,0,0), NOT as one might expect (-0.5 / textureSize)
+layout(set = 2, binding = 1) uniform texture3D VelocityVolume;
 
 COMPUTE_PASS_PARTICLES
 
@@ -19,18 +16,18 @@ void main() {
     if (particleIndex >= NumParticles)
         return;
 
-    ivec3 gridSize = textureSize(VelocityGridRead, 0);
+    ivec3 gridSize = textureSize(VelocityVolume, 0);
 
     // contraption for debugging.
     // if (Particles[particleIndex].Padding1 < 1.0) {
-    //    Particles[particleIndex].Position = texture(sampler3D(VelocityGridRead, SamplerTrilinearClamp), position /
-    //    imageSize(VelocityGridWrite)).xyz; Particles[particleIndex].Padding1 += 1.0;
+    //    Particles[particleIndex].Position = texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), position /
+    //    imageSize(VelocityVolumeWrite)).xyz; Particles[particleIndex].Padding1 += 1.0;
     //}
 
     // Fetch position from grid, trilinearly interpolated.
     vec3 originalPosition = Particles[particleIndex].Position;
     vec3 originalPositionGridTextureSpace = originalPosition / gridSize + 0.5 / gridSize;
-    vec3 newVelocity = texture(sampler3D(VelocityGridRead, SamplerTrilinearClamp), originalPositionGridTextureSpace).xyz;
+    vec3 newVelocity = texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), originalPositionGridTextureSpace).xyz;
 
     // Advect
     // TODO: Try something fancy like Runge Kutta. That would require sampling the grid more often though, so probably not worth it...

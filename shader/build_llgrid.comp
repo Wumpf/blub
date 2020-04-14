@@ -2,15 +2,7 @@
 
 #version 450
 
-// particle access doesn't need to be coherent since every invocation is only accessing it's own.
-#define PARTICLE_WRITEACCESS
-// Not entirely sure here: I'm arguing that if there's no memory coherency,
-// then imageAtomicExchange _could_ work on outdated memory that is not synced with other invocations, i.e. working on outdated data.
-#define LLGRID_WRITEACCESS coherent
-
-#include "fluid_volumes.glsl"
-#include "particles.glsl"
-#include "per_frame_resources.glsl"
+#include "bindings_update_particles_and_grid.glsl"
 
 COMPUTE_PASS_PARTICLES
 

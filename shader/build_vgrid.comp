@@ -3,9 +3,7 @@
 
 #version 450
 
-#include "fluid_volumes.glsl"
-#include "particles.glsl"
-#include "per_frame_resources.glsl"
+#include "bindings_update_particles_and_grid.glsl"
 #include "utilities.glsl"
 
 COMPUTE_PASS_VOLUME
@@ -36,11 +34,11 @@ void main() {
 
     if (velocityAndWeight.w > 0) {
         velocityAndWeight.xyz /= velocityAndWeight.w;
-
-        // Apply global forces.
-        // todo: make configurable
-        velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
-
-        imageStore(VelocityGridWrite, gridCoord, velocityAndWeight);
     }
+
+    // Apply global forces.
+    // todo: make configurable
+    velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
+
+    imageStore(VelocityVolumeWrite, gridCoord, velocityAndWeight);
 }

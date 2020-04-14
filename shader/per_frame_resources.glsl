@@ -10,8 +10,10 @@ struct CameraData {
 struct TimerData {
     float TotalPassed;           // How much time has passed in the real world since rendering started.
     float FrameDelta;            // How long a previous frame took in seconds
-    float SimulationTotalPassed; // How much time has passed in the simulation *excluding any steps in the current frame*
-    float SimulationDelta;       // How much we're advancing the simulation for each step in the current frame.
+    float SimulationTotalPassed; // How much time has passed in the simulation *excluding any steps in the current frame*.
+    // How much we're advancing the simulation for each step in the current frame.
+    // (This implicitly assumes that all steps are equally sized during a frame which may become invalid if we ever attempt a fully adaptive step!)
+    float SimulationDelta;
 };
 
 // Constants that change at max per frame.
