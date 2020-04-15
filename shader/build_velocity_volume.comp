@@ -3,7 +3,7 @@
 
 #version 450
 
-#include "bindings_update_particles_and_grid.glsl"
+#include "bindings_write_particles_volume.glsl"
 #include "utilities.glsl"
 
 COMPUTE_PASS_VOLUME
@@ -40,5 +40,5 @@ void main() {
     // todo: make configurable
     velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
 
-    imageStore(VelocityVolumeWrite, gridCoord, velocityAndWeight);
+    imageStore(VelocityVolume, gridCoord, velocityAndWeight);
 }

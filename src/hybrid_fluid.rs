@@ -24,16 +24,19 @@ pub struct HybridFluid {
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
 
     bind_group_uniform: wgpu::BindGroup,
-    bind_group_update_particles_and_grid: wgpu::BindGroup,
-    bind_group_update_particles: wgpu::BindGroup,
+    bind_group_write_particles_volume: wgpu::BindGroup,
+    bind_group_write_particles: wgpu::BindGroup,
     bind_group_compute_divergence: wgpu::BindGroup,
     bind_group_pressure_write_0: wgpu::BindGroup,
     bind_group_pressure_write_1: wgpu::BindGroup,
 
     pipeline_clear_grids: ReloadableComputePipeline,
-    pipeline_build_llgrid: ReloadableComputePipeline,
-    pipeline_build_vgrid: ReloadableComputePipeline,
+    pipeline_build_linkedlist_volume: ReloadableComputePipeline,
+    pipeline_build_velocity_volume: ReloadableComputePipeline,
     pipeline_compute_divergence: ReloadableComputePipeline,
+    pipeline_pressure_precondition: ReloadableComputePipeline,
+    pipeline_pressure_solve: ReloadableComputePipeline,
+    pipeline_remove_divergence: ReloadableComputePipeline,
     pipeline_particle_update: ReloadableComputePipeline,
 
     num_particles: u32,
@@ -67,12 +70,13 @@ impl HybridFluid {
         let group_layout_uniform = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: HybridFluid Uniform");
-        let group_layout_update_particles_and_grid = BindGroupLayoutBuilder::new()
+        let group_layout_write_particles_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::Rgba32Float, false)) // vgrid
-            .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false)) // llgrid
+            .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
+            .next_binding_compute(binding_glsl::texture2D()) // pressure
             .create(device, "BindGroupLayout: Update Particles and/or Velocity Grid");
-        let group_layout_update_particles = BindGroupLayoutBuilder::new()
+        let group_layout_write_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles
             .next_binding_compute(binding_glsl::texture3D()) // vgrid
             .create(device, "BindGroupLayout: Update Particles and/or Velocity Grid");
@@ -120,12 +124,13 @@ impl HybridFluid {
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
             .resource(simulation_properties_uniformbuffer.binding_resource())
             .create(device, "BindGroup: HybridFluid Uniform");
-        let bind_group_update_particles_and_grid = BindGroupBuilder::new(&group_layout_update_particles_and_grid)
+        let bind_group_write_particles_volume = BindGroupBuilder::new(&group_layout_write_particles_volume)
             .buffer(&particles, 0..particle_buffer_size)
             .texture(&volume_velocity_view)
             .texture(&volume_linked_lists_view)
+            .texture(&volume_pressure0_view)
             .create(device, "BindGroup: Update Particles and/or Velocity Grid");
-        let bind_group_update_particles = BindGroupBuilder::new(&group_layout_update_particles)
+        let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
             .buffer(&particles, 0..particle_buffer_size)
             .texture(&volume_velocity_view)
             .create(device, "BindGroup: Update Particles");
@@ -154,11 +159,11 @@ impl HybridFluid {
         // Considering that all pipelines here require UAV barriers anyways a few more or less won't make too much difference (... is that true?).
         // Therefore we're compromising for less layouts & easier to maintain code (also less binding changes 🤔)
         // TODO: This setup is super coarse now. Need to figure out actual impact and see if splitting down makes sense.
-        let layout_update_particles_and_grid = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_write_particles_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
-                &group_layout_update_particles_and_grid.layout,
+                &group_layout_write_particles_volume.layout,
             ],
         }));
         let layout_pressure_solve = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -168,24 +173,35 @@ impl HybridFluid {
                 &group_layout_pressure_solve.layout,
             ],
         }));
-        let layout_update_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_write_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
-                &group_layout_update_particles.layout,
+                &group_layout_write_particles.layout,
             ],
         }));
 
-        let pipeline_clear_grids =
-            ReloadableComputePipeline::new(device, &layout_update_particles_and_grid, shader_dir, Path::new("clear_grids.comp"));
-        let pipeline_build_llgrid =
-            ReloadableComputePipeline::new(device, &layout_update_particles_and_grid, shader_dir, Path::new("build_llgrid.comp"));
-        let pipeline_build_vgrid =
-            ReloadableComputePipeline::new(device, &layout_update_particles_and_grid, shader_dir, Path::new("build_vgrid.comp"));
+        let pipeline_clear_grids = ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("clear_grids.comp"));
+        let pipeline_build_linkedlist_volume = ReloadableComputePipeline::new(
+            device,
+            &layout_write_particles_volume,
+            shader_dir,
+            Path::new("build_linkedlist_volume.comp"),
+        );
+        let pipeline_build_velocity_volume = ReloadableComputePipeline::new(
+            device,
+            &layout_write_particles_volume,
+            shader_dir,
+            Path::new("build_velocity_volume.comp"),
+        );
         let pipeline_compute_divergence =
             ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("compute_divergence.comp"));
-        let pipeline_particle_update =
-            ReloadableComputePipeline::new(device, &layout_update_particles, shader_dir, Path::new("particle_update.comp"));
+        let pipeline_pressure_precondition =
+            ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("pressure_precondition.comp"));
+        let pipeline_pressure_solve = ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("pressure_solve.comp"));
+        let pipeline_remove_divergence =
+            ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("remove_divergence.comp"));
+        let pipeline_particle_update = ReloadableComputePipeline::new(device, &layout_write_particles, shader_dir, Path::new("particle_update.comp"));
 
         HybridFluid {
             //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
@@ -195,16 +211,19 @@ impl HybridFluid {
             simulation_properties_uniformbuffer,
 
             bind_group_uniform,
-            bind_group_update_particles_and_grid,
-            bind_group_update_particles,
+            bind_group_write_particles_volume,
+            bind_group_write_particles,
             bind_group_compute_divergence,
             bind_group_pressure_write_0,
             bind_group_pressure_write_1,
 
             pipeline_clear_grids,
-            pipeline_build_llgrid,
-            pipeline_build_vgrid,
+            pipeline_build_linkedlist_volume,
+            pipeline_build_velocity_volume,
             pipeline_compute_divergence,
+            pipeline_pressure_precondition,
+            pipeline_pressure_solve,
+            pipeline_remove_divergence,
             pipeline_particle_update,
 
             num_particles: 0,
@@ -222,9 +241,12 @@ impl HybridFluid {
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
         let _ = self.pipeline_clear_grids.try_reload_shader(device, shader_dir);
-        let _ = self.pipeline_build_llgrid.try_reload_shader(device, shader_dir);
-        let _ = self.pipeline_build_vgrid.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_build_linkedlist_volume.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_build_velocity_volume.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_compute_divergence.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_pressure_precondition.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_pressure_solve.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_remove_divergence.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_particle_update.try_reload_shader(device, shader_dir);
     }
 
@@ -336,7 +358,7 @@ impl HybridFluid {
 
         // grouped by layouts.
         {
-            cpass.set_bind_group(2, &self.bind_group_update_particles_and_grid, &[]);
+            cpass.set_bind_group(2, &self.bind_group_write_particles_volume, &[]);
 
             // clear front velocity and linkedlist grid
             // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
@@ -346,11 +368,11 @@ impl HybridFluid {
 
             // Create particle linked lists and write heads in dual grids
             // Transfer velocities to grid. (write grid, read particles)
-            cpass.set_pipeline(self.pipeline_build_llgrid.pipeline());
+            cpass.set_pipeline(self.pipeline_build_linkedlist_volume.pipeline());
             cpass.dispatch(particle_work_groups, 1, 1);
 
             // Gather velocities in velocity grid and apply global forces.
-            cpass.set_pipeline(self.pipeline_build_vgrid.pipeline());
+            cpass.set_pipeline(self.pipeline_build_velocity_volume.pipeline());
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         {
@@ -361,22 +383,28 @@ impl HybridFluid {
 
             // Clear pressure grid.
             // (optional, todo) Precondition pressure
-            cpass.set_bind_group(2, &self.bind_group_pressure_write_0, &[]);
-
-            // Pressure solve
+            cpass.set_pipeline(self.pipeline_pressure_precondition.pipeline());
             cpass.set_bind_group(2, &self.bind_group_pressure_write_1, &[]);
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+
+            // Pressure solve (last step needs to write to target 0, because that's what we read later again)
+            cpass.set_pipeline(self.pipeline_pressure_solve.pipeline());
+            cpass.set_bind_group(2, &self.bind_group_pressure_write_0, &[]);
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         {
-            cpass.set_bind_group(2, &self.bind_group_update_particles, &[]);
+            cpass.set_bind_group(2, &self.bind_group_write_particles_volume, &[]);
 
             // Make velocity grid divergence free
-            // TODO
+            cpass.set_pipeline(self.pipeline_remove_divergence.pipeline());
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+        }
+        {
+            cpass.set_bind_group(2, &self.bind_group_write_particles, &[]);
 
             // Transfer velocities to particles.
             cpass.set_pipeline(self.pipeline_particle_update.pipeline());
             cpass.dispatch(particle_work_groups, 1, 1);
-
-            // Advect particles.  (write particles)
         }
     }
 }

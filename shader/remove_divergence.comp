@@ -1,0 +1,16 @@
+// Subtracts pressure gradient from velocity volume to make it divergence free.
+
+#version 450
+
+#include "bindings_write_particles_volume.glsl"
+#include "utilities.glsl"
+
+COMPUTE_PASS_VOLUME
+
+void main() {
+    vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    vec4 velocity = imageLoad(VelocityVolume, gridCoord);
+    // TODO
+    imageStore(VelocityVolume, gridCoord, velocity);
+}

@@ -21,7 +21,7 @@ void main() {
     // contraption for debugging.
     // if (Particles[particleIndex].Padding1 < 1.0) {
     //    Particles[particleIndex].Position = texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), position /
-    //    imageSize(VelocityVolumeWrite)).xyz; Particles[particleIndex].Padding1 += 1.0;
+    //    imageSize(VelocityVolume)).xyz; Particles[particleIndex].Padding1 += 1.0;
     //}
 
     // Fetch position from grid, trilinearly interpolated.

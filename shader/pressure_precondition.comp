@@ -1,0 +1,20 @@
+// Preconditions the pressure for fast solving.
+// TODO: Just clears right now
+
+#version 450
+
+#include "hybrid_fluid.glsl"
+#include "per_frame_resources.glsl"
+#include "utilities.glsl"
+
+// layout(set = 2, binding = 0) uniform texture3D VelocityVolume;
+// layout(set = 2, binding = 1) uniform texture3D DivergenceVolume;
+// layout(set = 2, binding = 2) uniform texture3D PressureVolumeRead;
+layout(set = 2, binding = 3, r32f) uniform restrict image3D PressureVolumeWrite;
+
+COMPUTE_PASS_VOLUME
+
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    imageStore(PressureVolumeWrite, gridCoord, vec4(0.0));
+}

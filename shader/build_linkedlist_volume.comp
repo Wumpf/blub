@@ -2,7 +2,7 @@
 
 #version 450
 
-#include "bindings_update_particles_and_grid.glsl"
+#include "bindings_write_particles_volume.glsl"
 
 COMPUTE_PASS_PARTICLES
 
