@@ -16,6 +16,18 @@ COMPUTE_PASS_VOLUME
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     float pressure = texelFetch(VelocityVolume, gridCoord, 0).x;
-    // TODO
-    imageStore(PressureVolumeWrite, gridCoord, vec4(pressure));
+    uvec3 maxGridCoord = gl_NumWorkGroups * gl_WorkGroupSize - uvec3(1);
+
+    // jacobi iteration
+    float divergence = texelFetch(DivergenceVolume, gridCoord, 0).x;
+    float x0 = gridCoord.x == 0.0 ? 0.0 : texelFetch(PressureVolumeRead, gridCoord - ivec3(1, 0, 0), 0).x;
+    float x1 = gridCoord.x == maxGridCoord.x ? 0.0 : texelFetch(PressureVolumeRead, gridCoord + ivec3(1, 0, 0), 0).x;
+    float y0 = gridCoord.y == 0.0 ? 0.0 : texelFetch(PressureVolumeRead, gridCoord - ivec3(0, 1, 0), 0).x;
+    float y1 = gridCoord.y == maxGridCoord.y ? 0.0 : texelFetch(PressureVolumeRead, gridCoord + ivec3(0, 1, 0), 0).x;
+    float z0 = gridCoord.z == 0.0 ? 0.0 : texelFetch(PressureVolumeRead, gridCoord - ivec3(0, 0, 1), 0).x;
+    float z1 = gridCoord.z == maxGridCoord.z ? 0.0 : texelFetch(PressureVolumeRead, gridCoord + ivec3(0, 0, 1), 0).x;
+
+    float newPressure = (x0 + x1 + y0 + y1 + z0 + z1 - divergence) * (1.0 / 6.0);
+
+    imageStore(PressureVolumeWrite, gridCoord, vec4(newPressure));
 }

@@ -26,6 +26,7 @@ fn compile_glsl(glsl_code: &str, identifier: &str, stage: ShaderStage) -> Result
     let mut options = shaderc::CompileOptions::new().unwrap();
     //options.set_hlsl_io_mapping(true);
     options.set_warnings_as_errors();
+    options.set_target_env(shaderc::TargetEnv::Vulkan, 0);
     // options.set_optimization_level(shaderc::OptimizationLevel::Zero);
     // options.set_include_callback // TODO: Use this (didn't notice this option)
     match compiler.compile_into_spirv(glsl_code, kind, identifier, SHADER_ENTRY_POINT_NAME, Some(&options)) {

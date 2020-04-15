@@ -10,7 +10,17 @@ COMPUTE_PASS_VOLUME
 void main() {
     vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    vec4 velocity = imageLoad(VelocityVolume, gridCoord);
-    // TODO
-    imageStore(VelocityVolume, gridCoord, velocity);
+
+    // Compute pressure gradient with central differences
+    // todo: boundary wrong?
+    float x0 = texelFetch(PressureVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    float x1 = texelFetch(PressureVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    float y0 = texelFetch(PressureVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    float y1 = texelFetch(PressureVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    float z0 = texelFetch(PressureVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    float z1 = texelFetch(PressureVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    vec3 pressureGradient = (vec3(x1, y1, z1) - vec3(x0, y0, z0)) * 0.5;
+
+    vec3 velocity = imageLoad(VelocityVolume, gridCoord).xyz - pressureGradient;
+    imageStore(VelocityVolume, gridCoord, velocity.xyzz);
 }

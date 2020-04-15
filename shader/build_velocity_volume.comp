@@ -11,9 +11,9 @@ COMPUTE_PASS_VOLUME
 void gatherVelocitiesFromLinkedList(inout vec4 velocityAndWeight, vec3 velocityGridPosition, ivec3 llgridCoord) {
     uint particleIndex = imageLoad(LinkedListDualGrid, llgridCoord).r - 1;
 
-    // for (int i = 0; i < 16 && particleIndex != INVALID_LINKED_LIST_PTR; ++i) {
-    while (particleIndex != INVALID_LINKED_LIST_PTR) {
-        float weight = 1.0 / lengthsq(velocityGridPosition, Particles[particleIndex].Position);
+    // while (particleIndex != INVALID_LINKED_LIST_PTR) {
+    for (int i = 0; i < 32 && particleIndex != INVALID_LINKED_LIST_PTR; ++i) {
+        float weight = 1.0 / (lengthsq(velocityGridPosition, Particles[particleIndex].Position) + 0.00000001);
         velocityAndWeight += vec4(Particles[particleIndex].Velocity * weight, weight);
         particleIndex = Particles[particleIndex].LinkedListNext;
     }
@@ -34,11 +34,11 @@ void main() {
 
     if (velocityAndWeight.w > 0) {
         velocityAndWeight.xyz /= velocityAndWeight.w;
-    }
 
-    // Apply global forces.
-    // todo: make configurable
-    velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
+        // Apply global forces.
+        // todo: make configurable
+        velocityAndWeight.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
+    }
 
     imageStore(VelocityVolume, gridCoord, velocityAndWeight);
 }

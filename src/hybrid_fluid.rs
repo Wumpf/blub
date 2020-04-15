@@ -27,8 +27,7 @@ pub struct HybridFluid {
     bind_group_write_particles_volume: wgpu::BindGroup,
     bind_group_write_particles: wgpu::BindGroup,
     bind_group_compute_divergence: wgpu::BindGroup,
-    bind_group_pressure_write_0: wgpu::BindGroup,
-    bind_group_pressure_write_1: wgpu::BindGroup,
+    bind_group_pressure_write: [wgpu::BindGroup; 2],
 
     pipeline_clear_grids: ReloadableComputePipeline,
     pipeline_build_linkedlist_volume: ReloadableComputePipeline,
@@ -140,18 +139,20 @@ impl HybridFluid {
             .texture(&volume_pressure1_view)
             .texture(&volume_divergence_view)
             .create(device, "BindGroup: Compute Divergence");
-        let bind_group_pressure_write_0 = BindGroupBuilder::new(&group_layout_pressure_solve)
-            .texture(&volume_velocity_view)
-            .texture(&volume_divergence_view)
-            .texture(&volume_pressure1_view)
-            .texture(&volume_pressure0_view)
-            .create(device, "BindGroup: Pressure write 0");
-        let bind_group_pressure_write_1 = BindGroupBuilder::new(&group_layout_pressure_solve)
-            .texture(&volume_velocity_view)
-            .texture(&volume_divergence_view)
-            .texture(&volume_pressure1_view)
-            .texture(&volume_pressure0_view)
-            .create(device, "BindGroup: Pressure write 1");
+        let bind_group_pressure_write = [
+            BindGroupBuilder::new(&group_layout_pressure_solve)
+                .texture(&volume_velocity_view)
+                .texture(&volume_divergence_view)
+                .texture(&volume_pressure1_view)
+                .texture(&volume_pressure0_view)
+                .create(device, "BindGroup: Pressure write 0"),
+            BindGroupBuilder::new(&group_layout_pressure_solve)
+                .texture(&volume_velocity_view)
+                .texture(&volume_divergence_view)
+                .texture(&volume_pressure0_view)
+                .texture(&volume_pressure1_view)
+                .create(device, "BindGroup: Pressure write 1"),
+        ];
 
         // pipeline layouts.
         // Note that layouts directly correspond to DX12 root signatures.
@@ -214,8 +215,7 @@ impl HybridFluid {
             bind_group_write_particles_volume,
             bind_group_write_particles,
             bind_group_compute_divergence,
-            bind_group_pressure_write_0,
-            bind_group_pressure_write_1,
+            bind_group_pressure_write,
 
             pipeline_clear_grids,
             pipeline_build_linkedlist_volume,
@@ -384,13 +384,16 @@ impl HybridFluid {
             // Clear pressure grid.
             // (optional, todo) Precondition pressure
             cpass.set_pipeline(self.pipeline_pressure_precondition.pipeline());
-            cpass.set_bind_group(2, &self.bind_group_pressure_write_1, &[]);
+            cpass.set_bind_group(2, &self.bind_group_pressure_write[0], &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Pressure solve (last step needs to write to target 0, because that's what we read later again)
+            // TODO: how many?
             cpass.set_pipeline(self.pipeline_pressure_solve.pipeline());
-            cpass.set_bind_group(2, &self.bind_group_pressure_write_0, &[]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            for i in 0..32 {
+                cpass.set_bind_group(2, &self.bind_group_pressure_write[(i + 1) % 2], &[]);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            }
         }
         {
             cpass.set_bind_group(2, &self.bind_group_write_particles_volume, &[]);
