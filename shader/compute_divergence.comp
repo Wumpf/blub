@@ -21,8 +21,10 @@ void main() {
     // Don't compute divergence if there's no fluid
     vec4 mid = texelFetch(VelocityVolume, gridCoord, 0);
     float isFluid = mid.w;
-    if (isFluid == 0.0)
+    if (isFluid == 0.0) {
+        imageStore(DivergenceVolume, gridCoord, vec4(0.0));
         return;
+    }
 
     vec4 x0 = texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0);
     vec4 x1 = texelFetch(VelocityVolume, gridCoord + ivec3(1, 0, 0), 0);

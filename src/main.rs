@@ -83,7 +83,7 @@ impl Application {
                 height: 64,
                 depth: 64,
             },
-            1000000,
+            2000000,
             &shader_dir,
             per_frame_resources.bind_group_layout(),
         );
@@ -170,8 +170,8 @@ impl Application {
         self.hybrid_fluid.add_fluid_cube(
             &self.device,
             &mut init_encoder,
-            cgmath::Point3::new(2.0, 2.0, 2.0),
-            cgmath::Point3::new(32.0, 62.0, 62.0),
+            cgmath::Point3::new(0.0, 0.0, 0.0),
+            cgmath::Point3::new(64.0, 40.0, 64.0),
         );
 
         self.command_queue.submit(&[init_encoder.finish()]);

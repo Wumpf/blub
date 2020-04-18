@@ -16,7 +16,9 @@ void main() {
         return;
 
     // Compute pressure gradient with central differences
-    // use clamp for pressures outside the domain
+    // use clamp for pressures outside the domain because that's what would have happend if we had our grid still defined there:
+    // The divergence at that point is 0, and there is (ignoring corners) only one neighboring fluid pressure value, therefore p_boundary-p_fluid=0
+    // (divergence)
     vec3 inverseGridSize = vec3(1.0) / textureSize(PressureVolume, 0);
     float x0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - ivec3(1, 0, 0)) * inverseGridSize, 0).x;
     float x1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + ivec3(1, 0, 0)) * inverseGridSize, 0).x;
