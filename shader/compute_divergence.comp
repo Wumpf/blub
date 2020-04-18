@@ -16,14 +16,21 @@ COMPUTE_PASS_VOLUME
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     vec3 velocity = texelFetch(VelocityVolume, gridCoord, 0).xyz;
+    uvec3 maxGridCoord = gl_NumWorkGroups * gl_WorkGroupSize - uvec3(1);
 
-    float x0 = texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    float x1 = texelFetch(VelocityVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    float y0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).y;
-    float y1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 1, 0), 0).y;
-    float z0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).z;
-    float z1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 0, 1), 0).z;
-    float divergence = ((x1 - x0) + (y1 - y0) + (z1 - z0)) * 0.5;
+    // Don't compute divergence if there's no fluid
+    vec4 mid = texelFetch(VelocityVolume, gridCoord, 0);
+    float isFluid = mid.w;
+    if (isFluid == 0.0)
+        return;
+
+    vec4 x0 = texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0);
+    vec4 x1 = texelFetch(VelocityVolume, gridCoord + ivec3(1, 0, 0), 0);
+    vec4 y0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0);
+    vec4 y1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 1, 0), 0);
+    vec4 z0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0);
+    vec4 z1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 0, 1), 0);
+    float divergence = ((x1.x - x0.x) + (y1.y - y0.y) + (z1.z - z0.z)) * 0.5;
 
     imageStore(DivergenceVolume, gridCoord, vec4(divergence));
 }

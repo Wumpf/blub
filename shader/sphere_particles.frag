@@ -8,7 +8,7 @@ layout(location = 1) in vec3 in_ParticleWorldPosition;
 layout(location = 0) out vec4 out_Color;
 
 void main() {
-    const float radius = 0.5; // todo.
+    const float radius = 0.25; // todo.
     const vec3 lightdir = normalize(vec3(1.0, 2.0, 1.0));
 
     // Sphere intersect raycast. Given how obscure our vertex positions are, this is the easiest!

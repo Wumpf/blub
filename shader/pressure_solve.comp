@@ -15,19 +15,47 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    float pressure = texelFetch(VelocityVolume, gridCoord, 0).x;
     uvec3 maxGridCoord = gl_NumWorkGroups * gl_WorkGroupSize - uvec3(1);
+
+    // keep pressure zero at air and boundary.
+    // TODO: is that correct? Yes we want to sample 0 for pressure if it's not a fluid, but on remove_divergence.comp we don't I think? Let's just try
+    // it once we have something that works float isFluid = texelFetch(VelocityVolume, gridCoord, 0).w; if (isFluid == 0.0)
+    //     return;
+
+    // todo: more boundary conditions than just walls!
+    float numNonSolid = 6.0;
+    if (gridCoord.x == 0.0)
+        numNonSolid -= 1.0;
+    if (gridCoord.z == 0.0)
+        numNonSolid -= 1.0;
+    if (gridCoord.y == 0.0)
+        numNonSolid -= 1.0;
+    if (gridCoord.x == maxGridCoord.x)
+        numNonSolid -= 1.0;
+    if (gridCoord.y == maxGridCoord.y)
+        numNonSolid -= 1.0;
+    if (gridCoord.z == maxGridCoord.z)
+        numNonSolid -= 1.0;
+    if (numNonSolid == 0.0)
+        return;
 
     // jacobi iteration
     float divergence = texelFetch(DivergenceVolume, gridCoord, 0).x;
-    float x0 = gridCoord.x == 0.0 ? 0.0 : texelFetch(PressureVolumeRead, gridCoord - ivec3(1, 0, 0), 0).x;
-    float x1 = gridCoord.x == maxGridCoord.x ? 0.0 : texelFetch(PressureVolumeRead, gridCoord + ivec3(1, 0, 0), 0).x;
-    float y0 = gridCoord.y == 0.0 ? 0.0 : texelFetch(PressureVolumeRead, gridCoord - ivec3(0, 1, 0), 0).x;
-    float y1 = gridCoord.y == maxGridCoord.y ? 0.0 : texelFetch(PressureVolumeRead, gridCoord + ivec3(0, 1, 0), 0).x;
-    float z0 = gridCoord.z == 0.0 ? 0.0 : texelFetch(PressureVolumeRead, gridCoord - ivec3(0, 0, 1), 0).x;
-    float z1 = gridCoord.z == maxGridCoord.z ? 0.0 : texelFetch(PressureVolumeRead, gridCoord + ivec3(0, 0, 1), 0).x;
+    bool isFluidX0 = texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).w != 0.0;
+    bool isFluidX1 = texelFetch(VelocityVolume, gridCoord + ivec3(1, 0, 0), 0).w != 0.0;
+    bool isFluidY0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).w != 0.0;
+    bool isFluidY1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 1, 0), 0).w != 0.0;
+    bool isFluidZ0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).w != 0.0;
+    bool isFluidZ1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 0, 1), 0).w != 0.0;
 
-    float newPressure = (x0 + x1 + y0 + y1 + z0 + z1 - divergence) * (1.0 / 6.0);
+    float pressureX0 = isFluidX0 ? texelFetch(PressureVolumeRead, gridCoord - ivec3(1, 0, 0), 0).x : 0.0;
+    float pressureX1 = isFluidX1 ? texelFetch(PressureVolumeRead, gridCoord + ivec3(1, 0, 0), 0).x : 0.0;
+    float pressureY0 = isFluidY0 ? texelFetch(PressureVolumeRead, gridCoord - ivec3(0, 1, 0), 0).x : 0.0;
+    float pressureY1 = isFluidY1 ? texelFetch(PressureVolumeRead, gridCoord + ivec3(0, 1, 0), 0).x : 0.0;
+    float pressureZ0 = isFluidZ0 ? texelFetch(PressureVolumeRead, gridCoord - ivec3(0, 0, 1), 0).x : 0.0;
+    float pressureZ1 = isFluidZ1 ? texelFetch(PressureVolumeRead, gridCoord + ivec3(0, 0, 1), 0).x : 0.0;
+
+    float newPressure = (pressureX0 + pressureX1 + pressureY0 + pressureY1 + pressureZ0 + pressureZ1 - divergence) / numNonSolid;
 
     imageStore(PressureVolumeWrite, gridCoord, vec4(newPressure));
 }

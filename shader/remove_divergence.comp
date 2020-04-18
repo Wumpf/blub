@@ -11,16 +11,21 @@ void main() {
     vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
+    vec4 currentVelocity = imageLoad(VelocityVolume, gridCoord);
+    if (currentVelocity.w == 0.0)
+        return;
+
     // Compute pressure gradient with central differences
-    // todo: boundary wrong?
-    float x0 = texelFetch(PressureVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    float x1 = texelFetch(PressureVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    float y0 = texelFetch(PressureVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    float y1 = texelFetch(PressureVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    float z0 = texelFetch(PressureVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-    float z1 = texelFetch(PressureVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    // use clamp for pressures outside the domain
+    vec3 inverseGridSize = vec3(1.0) / textureSize(PressureVolume, 0);
+    float x0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - ivec3(1, 0, 0)) * inverseGridSize, 0).x;
+    float x1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + ivec3(1, 0, 0)) * inverseGridSize, 0).x;
+    float y0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - ivec3(0, 1, 0)) * inverseGridSize, 0).x;
+    float y1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + ivec3(0, 1, 0)) * inverseGridSize, 0).x;
+    float z0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - ivec3(0, 0, 1)) * inverseGridSize, 0).x;
+    float z1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + ivec3(0, 0, 1)) * inverseGridSize, 0).x;
     vec3 pressureGradient = (vec3(x1, y1, z1) - vec3(x0, y0, z0)) * 0.5;
 
-    vec3 velocity = imageLoad(VelocityVolume, gridCoord).xyz - pressureGradient;
+    vec3 velocity = currentVelocity.xyz - pressureGradient;
     imageStore(VelocityVolume, gridCoord, velocity.xyzz);
 }

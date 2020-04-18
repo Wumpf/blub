@@ -24,14 +24,17 @@ impl PerFrameResources {
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding_all(binding_glsl::uniform())
             .next_binding_all(binding_glsl::sampler())
+            .next_binding_all(binding_glsl::sampler())
             .create(device, "BindGroupLayout: PerFrameResources");
 
         let ubo = PerFrameUniformBuffer::new(&device);
         let trilinear_sampler = device.create_sampler(&simple_sampler(wgpu::AddressMode::ClampToEdge, wgpu::FilterMode::Linear));
+        let point_sampler = device.create_sampler(&simple_sampler(wgpu::AddressMode::ClampToEdge, wgpu::FilterMode::Nearest));
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
             .resource(ubo.binding_resource())
             .sampler(&trilinear_sampler)
+            .sampler(&point_sampler)
             .create(device, "BindGroup: PerFrameResources");
 
         PerFrameResources {

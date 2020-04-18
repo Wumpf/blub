@@ -29,11 +29,11 @@ pub struct HybridFluid {
     bind_group_compute_divergence: wgpu::BindGroup,
     bind_group_pressure_write: [wgpu::BindGroup; 2],
 
-    pipeline_clear_grids: ReloadableComputePipeline,
+    pipeline_clear_llgrid: ReloadableComputePipeline,
     pipeline_build_linkedlist_volume: ReloadableComputePipeline,
     pipeline_build_velocity_volume: ReloadableComputePipeline,
     pipeline_compute_divergence: ReloadableComputePipeline,
-    pipeline_pressure_precondition: ReloadableComputePipeline,
+    pipeline_clear_pressure: ReloadableComputePipeline,
     pipeline_pressure_solve: ReloadableComputePipeline,
     pipeline_remove_divergence: ReloadableComputePipeline,
     pipeline_particle_update: ReloadableComputePipeline,
@@ -182,7 +182,8 @@ impl HybridFluid {
             ],
         }));
 
-        let pipeline_clear_grids = ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("clear_grids.comp"));
+        let pipeline_clear_llgrid =
+            ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("clear_llgrid.comp"));
         let pipeline_build_linkedlist_volume = ReloadableComputePipeline::new(
             device,
             &layout_write_particles_volume,
@@ -197,8 +198,7 @@ impl HybridFluid {
         );
         let pipeline_compute_divergence =
             ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("compute_divergence.comp"));
-        let pipeline_pressure_precondition =
-            ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("pressure_precondition.comp"));
+        let pipeline_clear_pressure = ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("clear_pressure.comp"));
         let pipeline_pressure_solve = ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("pressure_solve.comp"));
         let pipeline_remove_divergence =
             ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("remove_divergence.comp"));
@@ -217,11 +217,11 @@ impl HybridFluid {
             bind_group_compute_divergence,
             bind_group_pressure_write,
 
-            pipeline_clear_grids,
+            pipeline_clear_llgrid,
             pipeline_build_linkedlist_volume,
             pipeline_build_velocity_volume,
             pipeline_compute_divergence,
-            pipeline_pressure_precondition,
+            pipeline_clear_pressure,
             pipeline_pressure_solve,
             pipeline_remove_divergence,
             pipeline_particle_update,
@@ -240,11 +240,11 @@ impl HybridFluid {
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        let _ = self.pipeline_clear_grids.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_clear_llgrid.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_build_linkedlist_volume.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_build_velocity_volume.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_compute_divergence.try_reload_shader(device, shader_dir);
-        let _ = self.pipeline_pressure_precondition.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_clear_pressure.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_pressure_solve.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_remove_divergence.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_particle_update.try_reload_shader(device, shader_dir);
@@ -363,7 +363,7 @@ impl HybridFluid {
             // clear front velocity and linkedlist grid
             // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
             // (might still be faster because RT clear operations are usually very quick :/)
-            cpass.set_pipeline(self.pipeline_clear_grids.pipeline());
+            cpass.set_pipeline(self.pipeline_clear_llgrid.pipeline());
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Create particle linked lists and write heads in dual grids
@@ -382,15 +382,14 @@ impl HybridFluid {
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Clear pressure grid.
-            // (optional, todo) Precondition pressure
-            cpass.set_pipeline(self.pipeline_pressure_precondition.pipeline());
+            cpass.set_pipeline(self.pipeline_clear_pressure.pipeline());
             cpass.set_bind_group(2, &self.bind_group_pressure_write[0], &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Pressure solve (last step needs to write to target 0, because that's what we read later again)
             // TODO: how many?
             cpass.set_pipeline(self.pipeline_pressure_solve.pipeline());
-            for i in 0..32 {
+            for i in 0..256 {
                 cpass.set_bind_group(2, &self.bind_group_pressure_write[(i + 1) % 2], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             }

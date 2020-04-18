@@ -1,5 +1,4 @@
-// Preconditions the pressure for fast solving.
-// TODO: Just clears right now
+// Clear pressure values
 
 #version 450
 
@@ -14,7 +13,4 @@ layout(set = 2, binding = 3, r32f) uniform restrict image3D PressureVolumeWrite;
 
 COMPUTE_PASS_VOLUME
 
-void main() {
-    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    imageStore(PressureVolumeWrite, gridCoord, vec4(0.0));
-}
+void main() { imageStore(PressureVolumeWrite, ivec3(gl_GlobalInvocationID), vec4(0.0)); }

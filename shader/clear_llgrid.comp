@@ -1,4 +1,4 @@
-// Clears the primary velocity grid and the linked list grid.
+// Clears the linked list grid.
 
 #version 450
 

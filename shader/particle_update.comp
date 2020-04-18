@@ -16,13 +16,7 @@ void main() {
     if (particleIndex >= NumParticles)
         return;
 
-    ivec3 gridSize = textureSize(VelocityVolume, 0);
-
-    // contraption for debugging.
-    // if (Particles[particleIndex].Padding1 < 1.0) {
-    //    Particles[particleIndex].Position = texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), position /
-    //    imageSize(VelocityVolume)).xyz; Particles[particleIndex].Padding1 += 1.0;
-    //}
+    vec3 gridSize = vec3(textureSize(VelocityVolume, 0));
 
     // Fetch position from grid, trilinearly interpolated.
     vec3 originalPosition = Particles[particleIndex].Position;
@@ -35,7 +29,7 @@ void main() {
     vec3 newPosition = originalPosition + newVelocity * Time.SimulationDelta; // Euler Step.
 
     // Enforce boundary.
-    newPosition = clamp(newPosition, vec3(0), gridSize); // wrong since it can clamp movement in a single dimension. But good enough
+    newPosition = clamp(newPosition, vec3(0.5), gridSize - 0.5); // wrong since it can clamp movement in a single dimension. But good enough
 
     // Apply
     Particles[particleIndex].Velocity = newVelocity;

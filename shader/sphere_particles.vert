@@ -13,7 +13,7 @@ layout(location = 1) out vec3 out_ParticleWorldPosition;
 const vec2 quadPositions[4] = vec2[4](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));
 
 void main() {
-    const float radius = 0.5; // todo.
+    const float radius = 0.25; // todo.
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
 
     // Spanning billboards is easy!
