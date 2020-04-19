@@ -33,7 +33,6 @@ pub struct HybridFluid {
     pipeline_build_linkedlist_volume: ReloadableComputePipeline,
     pipeline_build_velocity_volume: ReloadableComputePipeline,
     pipeline_compute_divergence: ReloadableComputePipeline,
-    pipeline_clear_pressure: ReloadableComputePipeline,
     pipeline_pressure_solve: ReloadableComputePipeline,
     pipeline_remove_divergence: ReloadableComputePipeline,
     pipeline_particle_update: ReloadableComputePipeline,
@@ -198,7 +197,6 @@ impl HybridFluid {
         );
         let pipeline_compute_divergence =
             ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("compute_divergence.comp"));
-        let pipeline_clear_pressure = ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("clear_pressure.comp"));
         let pipeline_pressure_solve = ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("pressure_solve.comp"));
         let pipeline_remove_divergence =
             ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("remove_divergence.comp"));
@@ -221,7 +219,6 @@ impl HybridFluid {
             pipeline_build_linkedlist_volume,
             pipeline_build_velocity_volume,
             pipeline_compute_divergence,
-            pipeline_clear_pressure,
             pipeline_pressure_solve,
             pipeline_remove_divergence,
             pipeline_particle_update,
@@ -244,7 +241,6 @@ impl HybridFluid {
         let _ = self.pipeline_build_linkedlist_volume.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_build_velocity_volume.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_compute_divergence.try_reload_shader(device, shader_dir);
-        let _ = self.pipeline_clear_pressure.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_pressure_solve.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_remove_divergence.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_particle_update.try_reload_shader(device, shader_dir);
@@ -381,15 +377,11 @@ impl HybridFluid {
             cpass.set_bind_group(2, &self.bind_group_compute_divergence, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
-            // Clear pressure grid.
-            cpass.set_pipeline(self.pipeline_clear_pressure.pipeline());
-            cpass.set_bind_group(2, &self.bind_group_pressure_write[0], &[]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-
             // Pressure solve (last step needs to write to target 0, because that's what we read later again)
-            // TODO: how many?
+            // We reuse the pressure values from last time as initial guess. Since we run the simulation quite frequently, we don't need a lot of steps.
+            // TODO: how many? Need to measure remaining divergence to make any meaningful statement about this.
             cpass.set_pipeline(self.pipeline_pressure_solve.pipeline());
-            for i in 0..256 {
+            for i in 0..4 {
                 cpass.set_bind_group(2, &self.bind_group_pressure_write[(i + 1) % 2], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             }

@@ -25,7 +25,7 @@ use winit::{
 };
 
 const TIMER_CONFIG: timer::TimeConfiguration = timer::TimeConfiguration::RealtimeRenderingFixedSimulationStep {
-    simulation_delta: std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 60.0) as u64), // 60 simulation steps per second
+    simulation_delta: std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 120.0) as u64), // 120 simulation steps per second
     max_total_step_per_frame: std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 10.0) as u64), // stop catching up if slower than at 10fps
 };
 
@@ -220,9 +220,12 @@ impl Application {
         {
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
+
+            //  if self.timer.total_simulated_time().as_secs_f32() < 10.0 {
             while self.timer.simulation_step_loop() {
                 self.hybrid_fluid.step(&mut cpass);
             }
+            //    }
         }
 
         // Fluid drawing.
