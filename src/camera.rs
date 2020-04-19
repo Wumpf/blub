@@ -105,7 +105,7 @@ impl Camera {
             translation += (self.active_move_commands.contains(MoveCommands::Right) as i32 as f32
                 - self.active_move_commands.contains(MoveCommands::Left) as i32 as f32)
                 * right;
-            translation *= timer.frame_delta_time().as_secs_f32() * self.translation_speed;
+            translation *= timer.frame_delta().as_secs_f32() * self.translation_speed;
             if self.active_move_commands.contains(MoveCommands::SpeedUp) {
                 translation *= 4.0;
             }
