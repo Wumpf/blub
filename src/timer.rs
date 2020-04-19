@@ -12,7 +12,7 @@ pub enum TimeConfiguration {
     },
     // Special recording mode that keeps simulation & rendering time length the same, but still keeps correct statistics.
     Recording {
-        delta: Duration,
+        delta: Duration, // TODO: not enough. want constant n sim steps per frame
     },
 }
 
@@ -35,11 +35,11 @@ pub struct Timer {
     // todo: Keep statistics over the last couple of render frames for display of smooth timings
 
     // render time measures
-    render_total_passed: Duration,
+    total_rendered_time: Duration,
 
     // simulation time
     num_simulation_steps_this_frame: u32,
-    simulation_total_passed: Duration,
+    total_simulated_time: Duration,
     simulation_current_frame_passed: Duration,
     accepted_simulation_to_render_lag: Duration, // time lost that we don't plan on catching up anymore
 }
@@ -52,10 +52,10 @@ impl Timer {
             timestamp_last_frame: Instant::now(),
             last_frame_duration: Duration::from_millis(0),
 
-            render_total_passed: Duration::from_millis(0),
+            total_rendered_time: Duration::from_millis(0),
 
             num_simulation_steps_this_frame: 0,
-            simulation_total_passed: Duration::from_millis(0),
+            total_simulated_time: Duration::from_millis(0),
             simulation_current_frame_passed: Duration::from_millis(0),
             accepted_simulation_to_render_lag: Duration::from_millis(0),
         }
@@ -63,7 +63,7 @@ impl Timer {
 
     pub fn on_frame_submitted(&mut self) {
         self.last_frame_duration = self.timestamp_last_frame.elapsed();
-        self.render_total_passed += self.frame_delta();
+        self.total_rendered_time += self.frame_delta();
         self.timestamp_last_frame = std::time::Instant::now();
         self.simulation_current_frame_passed = Duration::from_millis(0);
         self.num_simulation_steps_this_frame = 0;
@@ -72,14 +72,14 @@ impl Timer {
     pub fn simulation_step_loop(&mut self) -> bool {
         let simulation_delta = self.simulation_delta();
         if self.num_simulation_steps_this_frame > 0 {
-            self.simulation_total_passed += simulation_delta;
+            self.total_simulated_time += simulation_delta;
             self.simulation_current_frame_passed += simulation_delta;
         }
 
         // simulation time shouldn't advance faster than render time
         let residual_time = self
-            .render_total_passed
-            .checked_sub(self.simulation_total_passed + self.accepted_simulation_to_render_lag)
+            .total_rendered_time
+            .checked_sub(self.total_simulated_time + self.accepted_simulation_to_render_lag)
             .unwrap();
         if residual_time < simulation_delta {
             // println!(
@@ -130,21 +130,29 @@ impl Timer {
         .max(Duration::from_nanos(1))
     }
 
-    // Time passed since startup. Kept constant for the duration of this frame.
-    // pub fn time_since_start(&self) -> Duration {
-    //     self.time_since_startup
-    // }
-
     // Duration of the previous frame. (this is not necessarily equal to the time delta!)
     pub fn frame_duration(&self) -> Duration {
         self.last_frame_duration
     }
 
+    // Total render time. (equal to real time if not configured otherwise!)
+    pub fn total_render_time(&self) -> Duration {
+        self.total_rendered_time
+    }
+    // Total time simulated
+    pub fn total_simulated_time(&self) -> Duration {
+        self.total_simulated_time
+    }
+
+    pub fn num_simulation_steps_performed_for_current_frame(&self) -> u32 {
+        self.num_simulation_steps_this_frame
+    }
+
     pub fn fill_uniform_buffer(&self) -> FrameTimeUniformBufferContent {
         FrameTimeUniformBufferContent {
-            total_passed: self.render_total_passed.as_secs_f32(),
+            total_passed: self.total_rendered_time.as_secs_f32(),
             frame_delta: self.frame_delta().as_secs_f32(),
-            simulation_total_passed: self.simulation_total_passed.as_secs_f32(),
+            total_simulated_time: self.total_simulated_time.as_secs_f32(),
             simulation_delta: self.simulation_delta().as_secs_f32().min(1.0 / 60.0),
         }
     }
@@ -153,8 +161,8 @@ impl Timer {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FrameTimeUniformBufferContent {
-    pub total_passed: f32,            // How much time has passed on the rendering clock since rendering started.
-    pub frame_delta: f32,             // How long a previous frame took in seconds.
-    pub simulation_total_passed: f32, // How much time has passed in the simulation *excluding any steps in the current frame*
-    pub simulation_delta: f32,        // How much we're advancing the simulation for each step in the current frame.
+    pub total_passed: f32,         // How much time has passed on the rendering clock since rendering started.
+    pub frame_delta: f32,          // How long a previous frame took in seconds.
+    pub total_simulated_time: f32, // How much time has passed in the simulation *excluding any steps in the current frame*
+    pub simulation_delta: f32,     // How much we're advancing the simulation for each step in the current frame.
 }

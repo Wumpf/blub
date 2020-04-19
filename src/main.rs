@@ -43,6 +43,7 @@ pub struct Application {
 
     camera: camera::Camera,
     per_frame_resources: PerFrameResources,
+    glyph_brush: wgpu_glyph::GlyphBrush<'static, ()>,
 
     timer: timer::Timer,
 }
@@ -96,6 +97,11 @@ impl Application {
         let particle_renderer =
             particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &hybrid_fluid);
 
+        let font = std::fs::read("assets/Roboto Mono.ttf").expect("loading font asset");
+        let glyph_brush = wgpu_glyph::GlyphBrushBuilder::using_font_bytes(font)
+            .expect("create glyph brush")
+            .build(&device, Screen::FORMAT_BACKBUFFER);
+
         Application {
             window,
             window_surface,
@@ -104,6 +110,7 @@ impl Application {
             device,
             command_queue,
 
+            glyph_brush,
             shader_dir,
             particle_renderer,
             hybrid_fluid,
@@ -165,8 +172,6 @@ impl Application {
     }
 
     pub fn restart_simulation(&mut self) {
-        self.timer = timer::Timer::new(TIMER_CONFIG);
-
         let mut init_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Particle Init Encoder"),
         });
@@ -180,6 +185,9 @@ impl Application {
         );
 
         self.command_queue.submit(&[init_encoder.finish()]);
+        self.device.poll(wgpu::Maintain::Wait);
+
+        self.timer = timer::Timer::new(TIMER_CONFIG);
     }
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -208,6 +216,7 @@ impl Application {
         self.per_frame_resources
             .update_gpu_data(&mut encoder, &self.device, &self.camera, &self.timer, aspect_ratio);
 
+        // (GPU) Simulation.
         {
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
@@ -216,6 +225,7 @@ impl Application {
             }
         }
 
+        // Fluid drawing.
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -244,6 +254,36 @@ impl Application {
             rpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
             self.particle_renderer.draw(&mut rpass, self.hybrid_fluid.num_particles());
         }
+        // Text drawing.
+        {
+            let section = wgpu_glyph::Section {
+                text: &format!(
+                    "{:3.2}ms, FPS: {:3.2}\n\
+                     rendered time  {:.2}s\n\
+                     simulated time {:.2}s\n\
+                     num simulation steps {}",
+                    self.timer.frame_duration().as_secs_f64() * 1000.0,
+                    1000.0 / 1000.0 / self.timer.frame_duration().as_secs_f64(),
+                    self.timer.total_render_time().as_secs_f64(),
+                    self.timer.total_simulated_time().as_secs_f64(),
+                    self.timer.num_simulation_steps_performed_for_current_frame(),
+                ),
+                scale: wgpu_glyph::Scale::uniform(20.0),
+                //color: [0.5, 0.5, 0.5, 1.0],
+                ..wgpu_glyph::Section::default() // color, position, etc
+            };
+            self.glyph_brush.queue(section);
+            self.glyph_brush
+                .draw_queued(
+                    &self.device,
+                    &mut encoder,
+                    &frame.view,
+                    self.screen.resolution.width,
+                    self.screen.resolution.height,
+                )
+                .expect("text drawing");
+        }
+
         self.command_queue.submit(&[encoder.finish()]);
 
         std::mem::drop(frame);
