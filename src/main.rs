@@ -6,6 +6,7 @@ extern crate more_asserts;
 extern crate log;
 
 mod camera;
+mod gui;
 mod hybrid_fluid;
 mod particle_renderer;
 mod per_frame_resources;
@@ -40,10 +41,10 @@ pub struct Application {
     shader_dir: shader::ShaderDirectory,
     particle_renderer: particle_renderer::ParticleRenderer,
     hybrid_fluid: hybrid_fluid::HybridFluid,
+    gui: gui::GUI,
 
     camera: camera::Camera,
     per_frame_resources: PerFrameResources,
-    glyph_brush: wgpu_glyph::GlyphBrush<'static, ()>,
 
     timer: timer::Timer,
 }
@@ -70,7 +71,7 @@ impl Application {
         .await
         .unwrap();
 
-        let (device, command_queue) = adapter
+        let (device, mut command_queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 extensions: wgpu::Extensions { anisotropic_filtering: true },
                 limits: wgpu::Limits::default(),
@@ -97,10 +98,7 @@ impl Application {
         let particle_renderer =
             particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &hybrid_fluid);
 
-        let font = std::fs::read("assets/Roboto Mono.ttf").expect("loading font asset");
-        let glyph_brush = wgpu_glyph::GlyphBrushBuilder::using_font_bytes(font)
-            .expect("create glyph brush")
-            .build(&device, Screen::FORMAT_BACKBUFFER);
+        let gui = gui::GUI::new(&device, &window, &mut command_queue);
 
         Application {
             window,
@@ -110,10 +108,10 @@ impl Application {
             device,
             command_queue,
 
-            glyph_brush,
             shader_dir,
             particle_renderer,
             hybrid_fluid,
+            gui,
 
             camera: camera::Camera::new(),
             per_frame_resources,
@@ -128,7 +126,7 @@ impl Application {
             // dispatched any events. This is ideal for games and similar applications.
             *control_flow = ControlFlow::Poll;
 
-            match event {
+            match &event {
                 Event::WindowEvent { event, .. } => {
                     self.camera.on_window_event(&event);
                     match event {
@@ -136,10 +134,10 @@ impl Application {
                             *control_flow = ControlFlow::Exit;
                         }
                         WindowEvent::Resized(size) => {
-                            self.window_resize(size);
+                            self.window_resize(*size);
                         }
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            self.window_resize(*new_inner_size);
+                            self.window_resize(**new_inner_size);
                         }
                         WindowEvent::KeyboardInput {
                             input:
@@ -168,6 +166,8 @@ impl Application {
                 }
                 _ => (),
             }
+
+            self.gui.handle_event(&self.window, &event);
         });
     }
 
@@ -221,11 +221,11 @@ impl Application {
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
 
-            //  if self.timer.total_simulated_time().as_secs_f32() < 10.0 {
-            while self.timer.simulation_step_loop() {
-                self.hybrid_fluid.step(&mut cpass);
+            if self.timer.total_simulated_time().as_secs_f32() < 10.0 {
+                while self.timer.simulation_step_loop() {
+                    self.hybrid_fluid.step(&mut cpass);
+                }
             }
-            //    }
         }
 
         // Fluid drawing.
@@ -257,35 +257,8 @@ impl Application {
             rpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
             self.particle_renderer.draw(&mut rpass, self.hybrid_fluid.num_particles());
         }
-        // Text drawing.
-        {
-            let section = wgpu_glyph::Section {
-                text: &format!(
-                    "{:3.2}ms, FPS: {:3.2}\n\
-                     rendered time  {:.2}s\n\
-                     simulated time {:.2}s\n\
-                     num simulation steps {}",
-                    self.timer.frame_duration().as_secs_f64() * 1000.0,
-                    1000.0 / 1000.0 / self.timer.frame_duration().as_secs_f64(),
-                    self.timer.total_render_time().as_secs_f64(),
-                    self.timer.total_simulated_time().as_secs_f64(),
-                    self.timer.num_simulation_steps_performed_for_current_frame(),
-                ),
-                scale: wgpu_glyph::Scale::uniform(20.0),
-                //color: [0.5, 0.5, 0.5, 1.0],
-                ..wgpu_glyph::Section::default() // color, position, etc
-            };
-            self.glyph_brush.queue(section);
-            self.glyph_brush
-                .draw_queued(
-                    &self.device,
-                    &mut encoder,
-                    &frame.view,
-                    self.screen.resolution.width,
-                    self.screen.resolution.height,
-                )
-                .expect("text drawing");
-        }
+
+        self.gui.draw(&self.device, &self.window, &mut encoder, &frame.view, &self.timer);
 
         self.command_queue.submit(&[encoder.finish()]);
 
