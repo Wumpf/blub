@@ -153,7 +153,7 @@ impl Timer {
             total_passed: self.total_rendered_time.as_secs_f32(),
             frame_delta: self.frame_delta().as_secs_f32(),
             total_simulated_time: self.total_simulated_time.as_secs_f32(),
-            simulation_delta: self.simulation_delta().as_secs_f32().min(1.0 / 60.0),
+            simulation_delta: self.simulation_delta().as_secs_f32(),
         }
     }
 }
