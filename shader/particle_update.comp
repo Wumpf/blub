@@ -11,22 +11,37 @@ layout(set = 2, binding = 1) uniform texture3D VelocityVolume;
 
 COMPUTE_PASS_PARTICLES
 
+vec3 PositionToNormalizedGrid(vec3 position, vec3 gridTexelSizeNormalized) {
+    return position * gridTexelSizeNormalized + 0.5 * gridTexelSizeNormalized;
+}
+
+vec3 SampleVelocity(vec3 position, vec3 gridTexelSizeNormalized) {
+    return texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), PositionToNormalizedGrid(position, gridTexelSizeNormalized)).xyz;
+}
+
 void main() {
     uint particleIndex = gl_GlobalInvocationID.x;
     if (particleIndex >= NumParticles)
         return;
 
     vec3 gridSize = vec3(textureSize(VelocityVolume, 0));
+    vec3 gridTexelSizeNormalized = 1.0 / gridSize;
 
     // Fetch position from grid, trilinearly interpolated.
     vec3 originalPosition = Particles[particleIndex].Position;
-    vec3 originalPositionGridTextureSpace = originalPosition / gridSize + 0.5 / gridSize;
-    vec3 newVelocity = texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), originalPositionGridTextureSpace).xyz;
+    vec3 newVelocity = SampleVelocity(originalPosition, gridTexelSizeNormalized);
 
-    // Advect
-    // TODO: Try something fancy like Runge Kutta. That would require sampling the grid more often though, so probably not worth it...
-    // also didn't see any impls out there _actually_ doing RK (although many like talking of it...)
-    vec3 newPosition = originalPosition + newVelocity * Time.SimulationDelta; // Euler Step.
+    // Advect.
+    // Runge kutta (confined to current cell for which we know velocities are defined (we don't do velocity extrapolation as many other impls)).
+    // Looks a bit nicer in early tests, unclear if it's worth it performance-wise (intuitively it should be fairly cheap)
+    vec3 rkmin = floor(originalPosition);
+    vec3 rkmax = ceil(originalPosition) - vec3(1.0e-6);
+    vec3 k1 = newVelocity;
+    vec3 k2 = SampleVelocity(clamp(originalPosition + Time.SimulationDelta * 0.5 * k1, rkmin, rkmax), gridTexelSizeNormalized);
+    vec3 k3 = SampleVelocity(clamp(originalPosition + Time.SimulationDelta * 0.5 * k2, rkmin, rkmax), gridTexelSizeNormalized);
+    vec3 k4 = SampleVelocity(clamp(originalPosition + Time.SimulationDelta * k3, rkmin, rkmax), gridTexelSizeNormalized);
+    vec3 newPosition = originalPosition + Time.SimulationDelta * (1.0 / 6.0) * (k1 + 2.0 * (k2 + k3) + k4);
+    // vec3 newPosition = originalPosition + newVelocity * Time.SimulationDelta;
 
     // Enforce boundary.
     newPosition = clamp(newPosition, vec3(0.5), gridSize - 0.5); // wrong since it can clamp movement in a single dimension. But good enough
