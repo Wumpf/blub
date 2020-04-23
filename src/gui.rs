@@ -42,7 +42,7 @@ impl GUI {
         window: &winit::window::Window,
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::TextureView,
-        timer: &crate::timer::Timer,
+        simulation: &crate::Simulation,
     ) {
         //self.imgui_context.io_mut().update_delta_time(timer.frame_delta()); // Needed?
         self.imgui_platform
@@ -57,16 +57,35 @@ impl GUI {
                 .build(&ui, || {
                     ui.text(im_str!(
                         "{:3.2}ms, FPS: {:3.2}",
-                        timer.frame_duration().as_secs_f64() * 1000.0,
-                        1000.0 / 1000.0 / timer.frame_duration().as_secs_f64()
+                        simulation.timer.duration_for_last_frame().as_secs_f64() * 1000.0,
+                        1000.0 / 1000.0 / simulation.timer.duration_for_last_frame().as_secs_f64()
                     ));
                     ui.separator();
-                    ui.text(im_str!("rendered time:  {:.2}", timer.total_render_time().as_secs_f64()));
-                    ui.text(im_str!("simulated time: {:.2}", timer.total_simulated_time().as_secs_f64()));
                     ui.text(im_str!(
-                        "num simulation steps: {}",
-                        timer.num_simulation_steps_performed_for_current_frame()
+                        "num simulation steps current frame: {}",
+                        simulation.timer.num_simulation_steps_performed_for_current_frame()
                     ));
+                    ui.text(im_str!("rendered time:  {:.2}", simulation.timer.total_render_time().as_secs_f64()));
+                    ui.text(im_str!("simulated time: {:.2}", simulation.timer.total_simulated_time().as_secs_f64()));
+                    ui.text(im_str!(
+                        "total num simulation steps: {}",
+                        simulation.timer.num_simulation_steps_performed()
+                    ));
+
+                    let mut mode = 0;
+                    let mut f = 1.0;
+
+                    ui.separator();
+                    imgui::ComboBox::new(im_str!("Simulation Mode")).build_simple_string(
+                        &ui,
+                        &mut mode,
+                        &[im_str!("Simulate & Render"), im_str!("Simulate, Render Result"), im_str!("Record")],
+                    );
+                    ui.input_float(im_str!("target simulation time"), &mut f).step(0.1).build();
+                    if ui.small_button(im_str!("Apply/Start/Reset")) {
+                        //simulation.restart(device, command_queue);
+                    }
+                    //ui.separator();
                 });
         }
 

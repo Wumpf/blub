@@ -10,17 +10,13 @@ pub enum TimeConfiguration {
         // maximum number of steps per frame
         max_total_step_per_frame: Duration,
     },
-    // Special recording mode that keeps simulation & rendering time length the same, but still keeps correct statistics.
-    Recording {
-        delta: Duration, // TODO: not enough. want constant n sim steps per frame
-    },
 }
 
 // There is three dependent clocks:
 // * real time
 //      that's the watch on your wrist
 // * render time
-//      same as on your watch if you're not recording (!) but in chunks
+//      same as on your watch if you're not recording or fast forwarding to a specific time
 // * simulation time
 //      tries to keep up with render time but in different chunks and may start to drop steps
 //
@@ -30,14 +26,16 @@ pub struct Timer {
 
     // real time measures
     timestamp_last_frame: Instant,
-    last_frame_duration: Duration,
+    time_since_last_frame_submitted: Duration,
 
     // todo: Keep statistics over the last couple of render frames for display of smooth timings
 
     // render time measures
     total_rendered_time: Duration,
+    current_frame_delta: Duration,
 
     // simulation time
+    num_simulation_steps: u32,
     num_simulation_steps_this_frame: u32,
     total_simulated_time: Duration,
     simulation_current_frame_passed: Duration,
@@ -50,10 +48,12 @@ impl Timer {
             config,
 
             timestamp_last_frame: Instant::now(),
-            last_frame_duration: Duration::from_millis(0),
+            time_since_last_frame_submitted: Duration::from_millis(0),
 
             total_rendered_time: Duration::from_millis(0),
+            current_frame_delta: Duration::from_millis(0),
 
+            num_simulation_steps: 0,
             num_simulation_steps_this_frame: 0,
             total_simulated_time: Duration::from_millis(0),
             simulation_current_frame_passed: Duration::from_millis(0),
@@ -61,9 +61,20 @@ impl Timer {
         }
     }
 
+    // Forces a given frame delta (timestep on the rendering timeline)
+    // Usually the frame delta is just the time between the last two on_frame_submitted calls, but this overwrites this.
+    // Useful to jump to a specific time (recording, or fast forwarding the simulation).
+    pub fn force_frame_delta(&mut self, delta: Duration) {
+        self.current_frame_delta = delta;
+    }
+
     pub fn on_frame_submitted(&mut self) {
-        self.last_frame_duration = self.timestamp_last_frame.elapsed();
-        self.total_rendered_time += self.frame_delta();
+        // Frame is submitted, so we finally can advance the render time.
+        self.total_rendered_time += self.current_frame_delta;
+
+        self.time_since_last_frame_submitted = self.timestamp_last_frame.elapsed();
+        self.current_frame_delta = self.time_since_last_frame_submitted;
+
         self.timestamp_last_frame = std::time::Instant::now();
         self.simulation_current_frame_passed = Duration::from_millis(0);
         self.num_simulation_steps_this_frame = 0;
@@ -77,8 +88,7 @@ impl Timer {
         }
 
         // simulation time shouldn't advance faster than render time
-        let residual_time = self
-            .total_rendered_time
+        let residual_time = (self.total_rendered_time + self.current_frame_delta)
             .checked_sub(self.total_simulated_time + self.accepted_simulation_to_render_lag)
             .unwrap();
         if residual_time < simulation_delta {
@@ -109,30 +119,25 @@ impl Timer {
         }
 
         self.num_simulation_steps_this_frame += 1;
+        self.num_simulation_steps += 1;
         true
     }
 
     fn simulation_delta(&self) -> Duration {
         match self.config {
-            TimeConfiguration::RealtimeRenderingFixedSimulationStepCountPerFrame(count_per_frame) => self.frame_delta() / count_per_frame,
+            TimeConfiguration::RealtimeRenderingFixedSimulationStepCountPerFrame(count_per_frame) => self.current_frame_delta / count_per_frame,
             TimeConfiguration::RealtimeRenderingFixedSimulationStep { simulation_delta, .. } => simulation_delta,
-            TimeConfiguration::Recording { delta } => delta,
         }
         .max(Duration::from_nanos(1))
     }
 
     pub fn frame_delta(&self) -> Duration {
-        match self.config {
-            TimeConfiguration::RealtimeRenderingFixedSimulationStepCountPerFrame(_) => self.last_frame_duration,
-            TimeConfiguration::RealtimeRenderingFixedSimulationStep { .. } => self.last_frame_duration,
-            TimeConfiguration::Recording { delta } => delta,
-        }
-        .max(Duration::from_nanos(1))
+        self.current_frame_delta
     }
 
-    // Duration of the previous frame. (this is not necessarily equal to the time delta!)
-    pub fn frame_duration(&self) -> Duration {
-        self.last_frame_duration
+    // Duration of the previous frame. (this is not necessarily equal to the frame time delta!)
+    pub fn duration_for_last_frame(&self) -> Duration {
+        self.time_since_last_frame_submitted
     }
 
     // Total render time. (equal to real time if not configured otherwise!)
@@ -148,10 +153,14 @@ impl Timer {
         self.num_simulation_steps_this_frame
     }
 
+    pub fn num_simulation_steps_performed(&self) -> u32 {
+        self.num_simulation_steps
+    }
+
     pub fn fill_uniform_buffer(&self) -> FrameTimeUniformBufferContent {
         FrameTimeUniformBufferContent {
             total_passed: self.total_rendered_time.as_secs_f32(),
-            frame_delta: self.frame_delta().as_secs_f32(),
+            frame_delta: self.current_frame_delta.as_secs_f32(),
             total_simulated_time: self.total_simulated_time.as_secs_f32(),
             simulation_delta: self.simulation_delta().as_secs_f32(),
         }
