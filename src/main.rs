@@ -27,7 +27,6 @@ use winit::{
 
 const TIMER_CONFIG: timer::TimeConfiguration = timer::TimeConfiguration::RealtimeRenderingFixedSimulationStep {
     simulation_delta: std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 120.0) as u64), // 120 simulation steps per second
-    max_total_step_per_frame: std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 10.0) as u64), // stop catching up if slower than at 10fps
 };
 
 struct Application {
@@ -47,6 +46,9 @@ struct Application {
     per_frame_resources: PerFrameResources,
 }
 
+//#[derive(num_enum::TryFromPrimitive)]
+#[derive(Debug, Eq, PartialEq, num_enum::TryFromPrimitive)]
+#[repr(usize)]
 pub enum SimulationMode {
     SimulateAndRender,
     SimulateRenderResult,
@@ -76,7 +78,7 @@ impl Simulation {
 
         Simulation {
             mode: SimulationMode::SimulateAndRender,
-            simulation_length: std::time::Duration::from_secs(std::u64::MAX),
+            simulation_length: std::time::Duration::from_secs(60 * 60), // (an hour)
             timer: timer::Timer::new(TIMER_CONFIG),
             hybrid_fluid,
         }
@@ -101,25 +103,35 @@ impl Simulation {
         self.timer = timer::Timer::new(TIMER_CONFIG);
     }
 
-    fn simulate_step(&mut self, encoder: &mut wgpu::CommandEncoder, per_frame_bind_group: &wgpu::BindGroup) {
+    SimulationStepResult simulate_step(&mut self, encoder: &mut wgpu::CommandEncoder, per_frame_bind_group: &wgpu::BindGroup) {
         let mut cpass = encoder.begin_compute_pass();
         cpass.set_bind_group(0, per_frame_bind_group, &[]);
 
-        match self.mode {
-            SimulationMode::SimulateAndRender => {}
+        // maximum number of steps per frame
+        let max_total_step_per_frame = match self.mode {
+            SimulationMode::SimulateAndRender => {
+                // stop catching up if slower than at 10fps
+                std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 10.0) as u64)
+            }
             SimulationMode::SimulateRenderResult => {
                 self.timer.force_frame_delta(self.simulation_length);
+                self.simulation_length
             }
             SimulationMode::Record => {
                 // todo, shouldn't be hardcoded
-                self.timer.force_frame_delta(std::time::Duration::from_secs_f64(1.0 / 60.0));
+                let delta = std::time::Duration::from_secs_f64(1.0 / 60.0);
+                self.timer.force_frame_delta(delta);
+                delta
             }
-        }
+        };
 
-        // TODO: This won't work for longer simulations! Need to push to command queue every now and then so gpu doesn't timeout!
-        while !self.has_simulation_stopped() && self.timer.simulation_step_loop() {
+        let max_total_step_per_
+
+        while !self.has_simulation_stopped() && self.timer.simulation_step_loop(max_total_step_per_frame) {
             self.hybrid_fluid.step(&mut cpass);
         }
+
+        SimulationStepResult::DoneCanProceedToRendering
     }
 
     fn has_simulation_stopped(&self) -> bool {
@@ -279,7 +291,7 @@ impl Application {
                         g: 0.2,
                         b: 0.3,
                         a: 1.0,
-                    },
+                    
                 }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                     attachment: depth_view,
@@ -296,8 +308,14 @@ impl Application {
             self.particle_renderer.draw(&mut rpass, self.simulation.hybrid_fluid.num_particles());
         }
 
-        self.gui
-            .draw(&self.device, &self.window, &mut encoder, &frame.view, &self.simulation.timer);
+        self.gui.draw(
+            &self.device,
+            &self.window,
+            &mut encoder,
+            &self.command_queue,
+            &frame.view,
+            &mut self.simulation,
+        );
 
         self.command_queue.submit(&[encoder.finish()]);
 

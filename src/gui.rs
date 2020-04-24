@@ -1,9 +1,16 @@
 use imgui::im_str;
+use std::convert::TryFrom;
+
+struct State {
+    selected_simulation_mode: usize,
+    selected_simulation_time_seconds: f32,
+}
 
 pub struct GUI {
     imgui_context: imgui::Context,
     imgui_platform: imgui_winit_support::WinitPlatform,
     imgui_renderer: imgui_wgpu::Renderer,
+    state: State,
 }
 
 impl GUI {
@@ -33,6 +40,11 @@ impl GUI {
             imgui_context,
             imgui_platform,
             imgui_renderer,
+
+            state: State {
+                selected_simulation_mode: crate::SimulationMode::SimulateAndRender as usize,
+                selected_simulation_time_seconds: 60.0 * 60.0, // (an hour)
+            },
         }
     }
 
@@ -41,14 +53,17 @@ impl GUI {
         device: &wgpu::Device,
         window: &winit::window::Window,
         encoder: &mut wgpu::CommandEncoder,
+        command_queue: &wgpu::Queue,
         view: &wgpu::TextureView,
-        simulation: &crate::Simulation,
+        simulation: &mut crate::Simulation,
     ) {
+        let context = &mut self.imgui_context;
+        let state = &mut self.state;
         //self.imgui_context.io_mut().update_delta_time(timer.frame_delta()); // Needed?
         self.imgui_platform
-            .prepare_frame(self.imgui_context.io_mut(), window)
+            .prepare_frame(context.io_mut(), window)
             .expect("Failed to prepare imgui frame");
-        let ui = self.imgui_context.frame();
+        let ui = context.frame();
         {
             let window = imgui::Window::new(im_str!("Blub"));
             window
@@ -72,18 +87,19 @@ impl GUI {
                         simulation.timer.num_simulation_steps_performed()
                     ));
 
-                    let mut mode = 0;
-                    let mut f = 1.0;
-
                     ui.separator();
                     imgui::ComboBox::new(im_str!("Simulation Mode")).build_simple_string(
                         &ui,
-                        &mut mode,
+                        &mut state.selected_simulation_mode,
                         &[im_str!("Simulate & Render"), im_str!("Simulate, Render Result"), im_str!("Record")],
                     );
-                    ui.input_float(im_str!("target simulation time"), &mut f).step(0.1).build();
-                    if ui.small_button(im_str!("Apply/Start/Reset")) {
-                        //simulation.restart(device, command_queue);
+                    ui.input_float(im_str!("target simulation time (s)"), &mut state.selected_simulation_time_seconds)
+                        .step(0.1)
+                        .build();
+                    if ui.small_button(im_str!("Apply & Reset")) {
+                        simulation.mode = crate::SimulationMode::try_from(state.selected_simulation_mode).unwrap();
+                        simulation.simulation_length = std::time::Duration::from_secs_f32(state.selected_simulation_time_seconds);
+                        simulation.restart(device, command_queue);
                     }
                     //ui.separator();
                 });

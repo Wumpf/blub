@@ -5,11 +5,7 @@ pub enum TimeConfiguration {
     // Every frame has a fixed number of steps. (simulation step length varies with frame time!)
     RealtimeRenderingFixedSimulationStepCountPerFrame(u32),
     // Given fixed timestep.
-    RealtimeRenderingFixedSimulationStep {
-        simulation_delta: Duration,
-        // maximum number of steps per frame
-        max_total_step_per_frame: Duration,
-    },
+    RealtimeRenderingFixedSimulationStep { simulation_delta: Duration },
 }
 
 // There is three dependent clocks:
@@ -80,7 +76,7 @@ impl Timer {
         self.num_simulation_steps_this_frame = 0;
     }
 
-    pub fn simulation_step_loop(&mut self) -> bool {
+    pub fn simulation_step_loop(&mut self, max_total_step_per_frame: Duration) -> bool {
         let simulation_delta = self.simulation_delta();
         if self.num_simulation_steps_this_frame > 0 {
             self.total_simulated_time += simulation_delta;
@@ -101,10 +97,7 @@ impl Timer {
         }
 
         // Did we hit a maximum of simulation steps and want to introduce lag instead?
-        if let TimeConfiguration::RealtimeRenderingFixedSimulationStep {
-            max_total_step_per_frame, ..
-        } = self.config
-        {
+        if let TimeConfiguration::RealtimeRenderingFixedSimulationStep { .. } = self.config {
             if self.num_simulation_steps_this_frame * simulation_delta > max_total_step_per_frame {
                 // We heuristically don't drop all lost simulation frames. This avoids oscillating between realtime and offline
                 // which is caused by our frame deltas being influenced by work from a couple of cpu frames ago (due gpu/cpu sync)
