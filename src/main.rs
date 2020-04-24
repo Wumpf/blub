@@ -11,6 +11,7 @@ mod hybrid_fluid;
 mod particle_renderer;
 mod per_frame_resources;
 mod screen;
+mod simulation_controller;
 mod timer;
 mod wgpu_utils;
 
@@ -25,10 +26,6 @@ use winit::{
     window::WindowBuilder,
 };
 
-const TIMER_CONFIG: timer::TimeConfiguration = timer::TimeConfiguration::RealtimeRenderingFixedSimulationStep {
-    simulation_delta: std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 120.0) as u64), // 120 simulation steps per second
-};
-
 struct Application {
     window: Window,
     window_surface: wgpu::Surface,
@@ -41,104 +38,11 @@ struct Application {
     hybrid_fluid: hybrid_fluid::HybridFluid,
     particle_renderer: particle_renderer::ParticleRenderer,
 
-    simulation_controller: SimulationController,
+    simulation_controller: simulation_controller::SimulationController,
     gui: gui::GUI,
 
     camera: camera::Camera,
     per_frame_resources: PerFrameResources,
-}
-
-#[derive(PartialEq, Eq)]
-pub enum SimulationControllerStatus {
-    Realtime,
-    Record,
-
-    Paused,
-
-    FastForward,
-}
-
-pub struct SimulationController {
-    pub scheduled_restart: bool,
-    pub status: SimulationControllerStatus,
-    pub simulation_length: std::time::Duration,
-    pub timer: timer::Timer,
-}
-
-impl SimulationController {
-    fn new() -> Self {
-        SimulationController {
-            scheduled_restart: false,
-            status: SimulationControllerStatus::Realtime,
-            simulation_length: std::time::Duration::from_secs(60 * 60), // (an hour)
-            timer: timer::Timer::new(TIMER_CONFIG),
-        }
-    }
-
-    pub fn restart(&mut self, hybrid_fluid: &mut hybrid_fluid::HybridFluid, device: &wgpu::Device, command_queue: &wgpu::Queue) {
-        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Particle Init Encoder"),
-        });
-
-        hybrid_fluid.reset();
-        hybrid_fluid.add_fluid_cube(
-            device,
-            &mut init_encoder,
-            cgmath::Point3::new(0.0, 0.0, 0.0),
-            cgmath::Point3::new(64.0, 40.0, 64.0),
-        );
-
-        command_queue.submit(&[init_encoder.finish()]);
-        device.poll(wgpu::Maintain::Wait);
-
-        self.timer = timer::Timer::new(TIMER_CONFIG);
-        self.scheduled_restart = false;
-    }
-
-    fn simulate_step(
-        &mut self,
-        hybrid_fluid: &hybrid_fluid::HybridFluid,
-        encoder: &mut wgpu::CommandEncoder,
-        per_frame_bind_group: &wgpu::BindGroup,
-    ) {
-        // maximum number of steps per frame
-        let max_total_step_per_frame = match self.status {
-            SimulationControllerStatus::Realtime => {
-                // stop catching up if slower than at 10fps
-                std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 10.0) as u64)
-            }
-            SimulationControllerStatus::Record => {
-                // todo, shouldn't be hardcoded
-                let delta = std::time::Duration::from_secs_f64(1.0 / 60.0);
-                self.timer.force_frame_delta(delta);
-                delta
-            }
-            SimulationControllerStatus::FastForward => {
-                self.timer.force_frame_delta(self.simulation_length);
-                self.simulation_length
-            }
-            SimulationControllerStatus::Paused => {
-                self.timer.skip_simulation_frame();
-                return;
-            }
-        };
-
-        let mut cpass = encoder.begin_compute_pass();
-        cpass.set_bind_group(0, per_frame_bind_group, &[]);
-
-        loop {
-            if self.timer.total_simulated_time() >= self.simulation_length {
-                self.status = SimulationControllerStatus::Paused;
-                return;
-            }
-
-            if !self.timer.simulation_step_loop(max_total_step_per_frame) {
-                return;
-            }
-
-            hybrid_fluid.step(&mut cpass);
-        }
-    }
 }
 
 impl Application {
@@ -187,7 +91,7 @@ impl Application {
             per_frame_resources.bind_group_layout(),
         );
 
-        let simulation_controller = SimulationController::new();
+        let simulation_controller = simulation_controller::SimulationController::new();
 
         let particle_renderer =
             particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &hybrid_fluid);

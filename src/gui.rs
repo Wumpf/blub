@@ -1,16 +1,10 @@
+use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use imgui::im_str;
-use std::convert::TryFrom;
-
-struct State {
-    selected_simulation_mode: usize,
-    selected_simulation_time_seconds: f32,
-}
 
 pub struct GUI {
     imgui_context: imgui::Context,
     imgui_platform: imgui_winit_support::WinitPlatform,
     imgui_renderer: imgui_wgpu::Renderer,
-    //   state: State,
 }
 
 impl GUI {
@@ -40,10 +34,6 @@ impl GUI {
             imgui_context,
             imgui_platform,
             imgui_renderer,
-            // state: State {
-            //     selected_simulation_mode: crate::SimulationController::SimulateAndRender as usize,
-            //     selected_simulation_time_seconds: 60.0 * 60.0, // (an hour)
-            // },
         }
     }
 
@@ -53,7 +43,7 @@ impl GUI {
         window: &winit::window::Window,
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::TextureView,
-        simulation_controller: &mut crate::SimulationController,
+        simulation_controller: &mut SimulationController,
     ) {
         let context = &mut self.imgui_context;
         //let state = &mut self.state;
@@ -103,18 +93,17 @@ impl GUI {
                         simulation_controller.simulation_length = std::time::Duration::from_secs_f32(simulation_time_seconds);
                     }
 
-                    if ui.small_button(im_str!("Reset")) {
+                    if ui.small_button(im_str!("Reset (Space)")) {
                         simulation_controller.scheduled_restart = true;
-                        simulation_controller.status = crate::SimulationControllerStatus::Realtime;
                     }
                     ui.same_line(0.0);
-                    if simulation_controller.status == crate::SimulationControllerStatus::Paused {
+                    if simulation_controller.status == SimulationControllerStatus::Paused {
                         if ui.small_button(im_str!("Continue")) {
-                            simulation_controller.status = crate::SimulationControllerStatus::Realtime;
+                            simulation_controller.status = SimulationControllerStatus::Realtime;
                         }
                     } else {
                         if ui.small_button(im_str!("Pause")) {
-                            simulation_controller.status = crate::SimulationControllerStatus::Paused;
+                            simulation_controller.status = SimulationControllerStatus::Paused;
                         }
                     }
                 });
