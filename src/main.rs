@@ -38,59 +38,50 @@ struct Application {
     command_queue: wgpu::Queue,
 
     shader_dir: shader::ShaderDirectory,
-    simulation: Simulation,
+    hybrid_fluid: hybrid_fluid::HybridFluid,
     particle_renderer: particle_renderer::ParticleRenderer,
+
+    simulation_controller: SimulationController,
     gui: gui::GUI,
 
     camera: camera::Camera,
     per_frame_resources: PerFrameResources,
 }
 
-//#[derive(num_enum::TryFromPrimitive)]
-#[derive(Debug, Eq, PartialEq, num_enum::TryFromPrimitive)]
-#[repr(usize)]
-pub enum SimulationMode {
-    SimulateAndRender,
-    SimulateRenderResult,
+#[derive(PartialEq, Eq)]
+pub enum SimulationControllerStatus {
+    Realtime,
     Record,
+
+    Paused,
+
+    FastForward,
 }
 
-pub struct Simulation {
-    pub mode: SimulationMode,
+pub struct SimulationController {
+    pub scheduled_restart: bool,
+    pub status: SimulationControllerStatus,
     pub simulation_length: std::time::Duration,
-    pub timer: timer::Timer, // todo? It's a bit odd that the simulation timer owns the render timing
-    pub hybrid_fluid: hybrid_fluid::HybridFluid,
+    pub timer: timer::Timer,
 }
 
-impl Simulation {
-    fn new(device: &wgpu::Device, shader_dir: &shader::ShaderDirectory, per_frame_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
-        let hybrid_fluid = hybrid_fluid::HybridFluid::new(
-            &device,
-            wgpu::Extent3d {
-                width: 128,
-                height: 64,
-                depth: 64,
-            },
-            2000000,
-            shader_dir,
-            per_frame_bind_group_layout,
-        );
-
-        Simulation {
-            mode: SimulationMode::SimulateAndRender,
+impl SimulationController {
+    fn new() -> Self {
+        SimulationController {
+            scheduled_restart: false,
+            status: SimulationControllerStatus::Realtime,
             simulation_length: std::time::Duration::from_secs(60 * 60), // (an hour)
             timer: timer::Timer::new(TIMER_CONFIG),
-            hybrid_fluid,
         }
     }
 
-    fn restart(&mut self, device: &wgpu::Device, command_queue: &wgpu::Queue) {
+    pub fn restart(&mut self, hybrid_fluid: &mut hybrid_fluid::HybridFluid, device: &wgpu::Device, command_queue: &wgpu::Queue) {
         let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Particle Init Encoder"),
         });
 
-        self.hybrid_fluid.reset();
-        self.hybrid_fluid.add_fluid_cube(
+        hybrid_fluid.reset();
+        hybrid_fluid.add_fluid_cube(
             device,
             &mut init_encoder,
             cgmath::Point3::new(0.0, 0.0, 0.0),
@@ -101,41 +92,52 @@ impl Simulation {
         device.poll(wgpu::Maintain::Wait);
 
         self.timer = timer::Timer::new(TIMER_CONFIG);
+        self.scheduled_restart = false;
     }
 
-    SimulationStepResult simulate_step(&mut self, encoder: &mut wgpu::CommandEncoder, per_frame_bind_group: &wgpu::BindGroup) {
-        let mut cpass = encoder.begin_compute_pass();
-        cpass.set_bind_group(0, per_frame_bind_group, &[]);
-
+    fn simulate_step(
+        &mut self,
+        hybrid_fluid: &hybrid_fluid::HybridFluid,
+        encoder: &mut wgpu::CommandEncoder,
+        per_frame_bind_group: &wgpu::BindGroup,
+    ) {
         // maximum number of steps per frame
-        let max_total_step_per_frame = match self.mode {
-            SimulationMode::SimulateAndRender => {
+        let max_total_step_per_frame = match self.status {
+            SimulationControllerStatus::Realtime => {
                 // stop catching up if slower than at 10fps
                 std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 10.0) as u64)
             }
-            SimulationMode::SimulateRenderResult => {
-                self.timer.force_frame_delta(self.simulation_length);
-                self.simulation_length
-            }
-            SimulationMode::Record => {
+            SimulationControllerStatus::Record => {
                 // todo, shouldn't be hardcoded
                 let delta = std::time::Duration::from_secs_f64(1.0 / 60.0);
                 self.timer.force_frame_delta(delta);
                 delta
             }
+            SimulationControllerStatus::FastForward => {
+                self.timer.force_frame_delta(self.simulation_length);
+                self.simulation_length
+            }
+            SimulationControllerStatus::Paused => {
+                self.timer.skip_simulation_frame();
+                return;
+            }
         };
 
-        let max_total_step_per_
+        let mut cpass = encoder.begin_compute_pass();
+        cpass.set_bind_group(0, per_frame_bind_group, &[]);
 
-        while !self.has_simulation_stopped() && self.timer.simulation_step_loop(max_total_step_per_frame) {
-            self.hybrid_fluid.step(&mut cpass);
+        loop {
+            if self.timer.total_simulated_time() >= self.simulation_length {
+                self.status = SimulationControllerStatus::Paused;
+                return;
+            }
+
+            if !self.timer.simulation_step_loop(max_total_step_per_frame) {
+                return;
+            }
+
+            hybrid_fluid.step(&mut cpass);
         }
-
-        SimulationStepResult::DoneCanProceedToRendering
-    }
-
-    fn has_simulation_stopped(&self) -> bool {
-        self.timer.total_simulated_time() >= self.simulation_length
     }
 }
 
@@ -173,10 +175,22 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let per_frame_resources = PerFrameResources::new(&device);
 
-        let simulation = Simulation::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
+        let hybrid_fluid = hybrid_fluid::HybridFluid::new(
+            &device,
+            wgpu::Extent3d {
+                width: 128,
+                height: 64,
+                depth: 64,
+            },
+            2000000,
+            &shader_dir,
+            per_frame_resources.bind_group_layout(),
+        );
+
+        let simulation_controller = SimulationController::new();
 
         let particle_renderer =
-            particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &simulation.hybrid_fluid);
+            particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &hybrid_fluid);
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
 
@@ -190,7 +204,8 @@ impl Application {
 
             shader_dir,
             particle_renderer,
-            simulation,
+            hybrid_fluid,
+            simulation_controller,
             gui,
 
             camera: camera::Camera::new(),
@@ -199,6 +214,9 @@ impl Application {
     }
 
     fn run(mut self, event_loop: EventLoop<()>) {
+        self.simulation_controller
+            .restart(&mut self.hybrid_fluid, &self.device, &self.command_queue);
+
         event_loop.run(move |event, _, control_flow| {
             // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
             // dispatched any events. This is ideal for games and similar applications.
@@ -226,7 +244,9 @@ impl Application {
                             ..
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                            VirtualKeyCode::Space => self.simulation.restart(&self.device, &self.command_queue),
+                            VirtualKeyCode::Space => self
+                                .simulation_controller
+                                .restart(&mut self.hybrid_fluid, &self.device, &self.command_queue),
                             _ => {}
                         },
                         _ => {}
@@ -260,9 +280,14 @@ impl Application {
         if self.shader_dir.detected_change() {
             info!("reloading shaders...");
             self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
-            self.simulation.hybrid_fluid.try_reload_shaders(&self.device, &self.shader_dir);
+            self.hybrid_fluid.try_reload_shaders(&self.device, &self.shader_dir);
         }
-        self.camera.update(&self.simulation.timer);
+        self.camera.update(&self.simulation_controller.timer);
+
+        if self.simulation_controller.scheduled_restart {
+            self.simulation_controller
+                .restart(&mut self.hybrid_fluid, &self.device, &self.command_queue);
+        }
     }
 
     fn draw(&mut self) {
@@ -273,10 +298,11 @@ impl Application {
         });
 
         self.per_frame_resources
-            .update_gpu_data(&mut encoder, &self.device, &self.camera, &self.simulation.timer, aspect_ratio);
+            .update_gpu_data(&mut encoder, &self.device, &self.camera, &self.simulation_controller.timer, aspect_ratio);
 
         // (GPU) Simulation.
-        self.simulation.simulate_step(&mut encoder, self.per_frame_resources.bind_group());
+        self.simulation_controller
+            .simulate_step(&self.hybrid_fluid, &mut encoder, self.per_frame_resources.bind_group());
 
         // Fluid drawing.
         {
@@ -291,7 +317,7 @@ impl Application {
                         g: 0.2,
                         b: 0.3,
                         a: 1.0,
-                    
+                    },
                 }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                     attachment: depth_view,
@@ -305,29 +331,22 @@ impl Application {
             });
 
             rpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
-            self.particle_renderer.draw(&mut rpass, self.simulation.hybrid_fluid.num_particles());
+            self.particle_renderer.draw(&mut rpass, self.hybrid_fluid.num_particles());
         }
 
-        self.gui.draw(
-            &self.device,
-            &self.window,
-            &mut encoder,
-            &self.command_queue,
-            &frame.view,
-            &mut self.simulation,
-        );
+        self.gui
+            .draw(&self.device, &self.window, &mut encoder, &frame.view, &mut self.simulation_controller);
 
         self.command_queue.submit(&[encoder.finish()]);
 
         std::mem::drop(frame);
-        self.simulation.timer.on_frame_submitted();
+        self.simulation_controller.timer.on_frame_submitted();
     }
 }
 
 fn main() {
     env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info"));
     let event_loop = EventLoop::new();
-    let mut application = futures::executor::block_on(Application::new(&event_loop));
-    application.simulation.restart(&application.device, &application.command_queue);
+    let application = futures::executor::block_on(Application::new(&event_loop));
     application.run(event_loop);
 }

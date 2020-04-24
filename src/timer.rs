@@ -76,6 +76,10 @@ impl Timer {
         self.num_simulation_steps_this_frame = 0;
     }
 
+    pub fn skip_simulation_frame(&mut self) {
+        self.accepted_simulation_to_render_lag += self.current_frame_delta;
+    }
+
     pub fn simulation_step_loop(&mut self, max_total_step_per_frame: Duration) -> bool {
         let simulation_delta = self.simulation_delta();
         if self.num_simulation_steps_this_frame > 0 {
