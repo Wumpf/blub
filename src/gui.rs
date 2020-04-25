@@ -84,6 +84,7 @@ impl GUI {
                     ui.separator();
 
                     let mut simulation_time_seconds = simulation_controller.simulation_length.as_secs_f32();
+                    ui.push_item_width(110.0);
                     if ui
                         .input_float(im_str!("target simulation time (s)"), &mut simulation_time_seconds)
                         .step(0.1)
@@ -105,6 +106,9 @@ impl GUI {
                         if ui.small_button(im_str!("Pause")) {
                             simulation_controller.status = SimulationControllerStatus::Paused;
                         }
+                    }
+                    if ui.small_button(im_str!("Fast Forward")) {
+                        simulation_controller.status = SimulationControllerStatus::FastForward;
                     }
                 });
         }

@@ -48,7 +48,7 @@ impl Timer {
     }
 
     // Forces a given frame delta (timestep on the rendering timeline)
-    // Usually the frame delta is just the time between the last two on_frame_submitted calls, but this overwrites this.
+    // Usually the frame delta is just the time between the last two on_frame_submitted calls, but this overwrites it.
     // Useful to jump to a specific time (recording, or fast forwarding the simulation).
     pub fn force_frame_delta(&mut self, delta: Duration) {
         self.current_frame_delta = delta;
@@ -74,6 +74,10 @@ impl Timer {
         if self.num_simulation_steps_this_frame > 0 {
             self.total_simulated_time += self.simulation_delta;
             self.simulation_current_frame_passed += self.simulation_delta;
+        }
+
+        if self.total_rendered_time + self.current_frame_delta < self.total_simulated_time + self.accepted_simulation_to_render_lag {
+            println!("failure");
         }
 
         // simulation time shouldn't advance faster than render time
@@ -107,7 +111,7 @@ impl Timer {
         true
     }
 
-    fn simulation_delta(&self) -> Duration {
+    pub fn simulation_delta(&self) -> Duration {
         self.simulation_delta
     }
 
@@ -142,7 +146,7 @@ impl Timer {
             total_passed: self.total_rendered_time.as_secs_f32(),
             frame_delta: self.current_frame_delta.as_secs_f32(),
             total_simulated_time: self.total_simulated_time.as_secs_f32(),
-            simulation_delta: self.simulation_delta().as_secs_f32(),
+            simulation_delta: self.simulation_delta.as_secs_f32(),
         }
     }
 }

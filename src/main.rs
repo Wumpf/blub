@@ -192,6 +192,13 @@ impl Application {
             self.simulation_controller
                 .restart(&mut self.hybrid_fluid, &self.device, &self.command_queue);
         }
+
+        self.simulation_controller.do_fast_forward_steps(
+            &self.device,
+            &self.command_queue,
+            &mut self.hybrid_fluid,
+            self.per_frame_resources.bind_group(),
+        );
     }
 
     fn draw(&mut self) {
@@ -206,7 +213,7 @@ impl Application {
 
         // (GPU) Simulation.
         self.simulation_controller
-            .simulate_step(&self.hybrid_fluid, &mut encoder, self.per_frame_resources.bind_group());
+            .do_frame_steps(&self.hybrid_fluid, &mut encoder, self.per_frame_resources.bind_group());
 
         // Fluid drawing.
         {
