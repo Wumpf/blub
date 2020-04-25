@@ -15,9 +15,9 @@ pub enum SimulationControllerStatus {
 
 pub struct SimulationController {
     scheduled_restart: bool,
+    timer: Timer,
     pub status: SimulationControllerStatus,
     pub simulation_length: std::time::Duration,
-    timer: Timer,
 }
 
 // todo: configurable
@@ -46,6 +46,10 @@ impl SimulationController {
     }
 
     pub fn handle_scheduled_restart(&mut self, scene: &mut Scene, device: &wgpu::Device, command_queue: &wgpu::Queue) {
+        if !self.scheduled_restart {
+            return;
+        }
+
         scene.reset(device, command_queue);
         self.timer = Timer::new(SIMULATION_STEP_LENGTH);
         self.scheduled_restart = false;

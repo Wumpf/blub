@@ -37,8 +37,7 @@ struct Application {
 
     shader_dir: shader::ShaderDirectory,
     scene: scene::Scene,
-    particle_renderer: particle_renderer::ParticleRenderer,
-
+    scene_renderer: scene::SceneRenderer,
     simulation_controller: simulation_controller::SimulationController,
     gui: gui::GUI,
 
@@ -81,23 +80,8 @@ impl Application {
         let per_frame_resources = PerFrameResources::new(&device);
 
         let scene = scene::Scene::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
-
-        let hybrid_fluid = hybrid_fluid::HybridFluid::new(
-            &device,
-            wgpu::Extent3d {
-                width: 128,
-                height: 64,
-                depth: 64,
-            },
-            2000000,
-            &shader_dir,
-            per_frame_resources.bind_group_layout(),
-        );
-
         let simulation_controller = simulation_controller::SimulationController::new();
-
-        let particle_renderer =
-            particle_renderer::ParticleRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &hybrid_fluid);
+        let scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &scene);
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
 
@@ -110,8 +94,8 @@ impl Application {
             command_queue,
 
             shader_dir,
-            particle_renderer,
             scene,
+            scene_renderer,
             simulation_controller,
             gui,
 
@@ -183,7 +167,7 @@ impl Application {
     fn update(&mut self) {
         if self.shader_dir.detected_change() {
             info!("reloading shaders...");
-            self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
+            self.scene_renderer.try_reload_shaders(&self.device, &self.shader_dir);
             self.scene.try_reload_shaders(&self.device, &self.shader_dir);
         }
         self.camera.update(self.simulation_controller.timer());
@@ -209,40 +193,10 @@ impl Application {
         self.per_frame_resources
             .update_gpu_data(&mut encoder, &self.device, &self.camera, self.simulation_controller.timer(), aspect_ratio);
 
-        // (GPU) Simulation.
         self.simulation_controller
             .frame_steps(&self.scene, &mut encoder, self.per_frame_resources.bind_group());
-
-        // Fluid drawing.
-        {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &frame.view,
-                    resolve_target: None,
-                    load_op: wgpu::LoadOp::Clear,
-                    store_op: wgpu::StoreOp::Store,
-                    clear_color: wgpu::Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
-                        a: 1.0,
-                    },
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: depth_view,
-                    depth_load_op: wgpu::LoadOp::Clear,
-                    depth_store_op: wgpu::StoreOp::Store,
-                    stencil_load_op: wgpu::LoadOp::Clear,
-                    stencil_store_op: wgpu::StoreOp::Store,
-                    clear_depth: 1.0,
-                    clear_stencil: 0,
-                }),
-            });
-
-            rpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
-            self.particle_renderer.draw(&mut rpass, self.scene.hybrid_fluid.num_particles());
-        }
-
+        self.scene_renderer
+            .draw(&self.scene, &mut encoder, &frame.view, depth_view, self.per_frame_resources.bind_group());
         self.gui
             .draw(&self.device, &self.window, &mut encoder, &frame.view, &mut self.simulation_controller);
 
