@@ -1,5 +1,9 @@
 use std::time::{Duration, Instant};
 
+// Timer keeps track of render & simulation timing and time statistics.
+// It's set up in a way that makes "normal realtime rendering" easy, but has hooks to allow special handling
+// (simulation jump, simulation pause, recording)
+//
 // There is three dependent clocks:
 // * real time
 //      that's the watch on your wrist
@@ -25,7 +29,6 @@ pub struct Timer {
     num_simulation_steps: u32,
     num_simulation_steps_this_frame: u32,
     total_simulated_time: Duration,
-    simulation_current_frame_passed: Duration,
     accepted_simulation_to_render_lag: Duration, // time lost that we don't plan on catching up anymore
 }
 
@@ -42,7 +45,6 @@ impl Timer {
             num_simulation_steps: 0,
             num_simulation_steps_this_frame: 0,
             total_simulated_time: Duration::from_millis(0),
-            simulation_current_frame_passed: Duration::from_millis(0),
             accepted_simulation_to_render_lag: Duration::from_millis(0),
         }
     }
@@ -62,7 +64,6 @@ impl Timer {
         self.current_frame_delta = self.time_since_last_frame_submitted;
 
         self.timestamp_last_frame = std::time::Instant::now();
-        self.simulation_current_frame_passed = Duration::from_millis(0);
         self.num_simulation_steps_this_frame = 0;
     }
 
@@ -70,14 +71,9 @@ impl Timer {
         self.accepted_simulation_to_render_lag += self.current_frame_delta;
     }
 
-    pub fn simulation_step_loop(&mut self, max_total_step_per_frame: Duration) -> bool {
+    pub fn simulation_frame_loop(&mut self, max_total_step_per_frame: Duration) -> bool {
         if self.num_simulation_steps_this_frame > 0 {
             self.total_simulated_time += self.simulation_delta;
-            self.simulation_current_frame_passed += self.simulation_delta;
-        }
-
-        if self.total_rendered_time + self.current_frame_delta < self.total_simulated_time + self.accepted_simulation_to_render_lag {
-            println!("failure");
         }
 
         // simulation time shouldn't advance faster than render time

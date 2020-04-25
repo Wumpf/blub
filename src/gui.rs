@@ -47,7 +47,7 @@ impl GUI {
     ) {
         let context = &mut self.imgui_context;
         //let state = &mut self.state;
-        //self.imgui_context.io_mut().update_delta_time(timer.frame_delta()); // Needed?
+        //self.imgui_context.io_mut().update_delta_time(tim().frame_delta()); // Needed?
         self.imgui_platform
             .prepare_frame(context.io_mut(), window)
             .expect("Failed to prepare imgui frame");
@@ -60,25 +60,25 @@ impl GUI {
                 .build(&ui, || {
                     ui.text(im_str!(
                         "{:3.2}ms, FPS: {:3.2}",
-                        simulation_controller.timer.duration_for_last_frame().as_secs_f64() * 1000.0,
-                        1000.0 / 1000.0 / simulation_controller.timer.duration_for_last_frame().as_secs_f64()
+                        simulation_controller.timer().duration_for_last_frame().as_secs_f64() * 1000.0,
+                        1000.0 / 1000.0 / simulation_controller.timer().duration_for_last_frame().as_secs_f64()
                     ));
                     ui.separator();
                     ui.text(im_str!(
                         "num simulation steps current frame: {}",
-                        simulation_controller.timer.num_simulation_steps_performed_for_current_frame()
+                        simulation_controller.timer().num_simulation_steps_performed_for_current_frame()
                     ));
                     ui.text(im_str!(
                         "rendered time:  {:.2}",
-                        simulation_controller.timer.total_render_time().as_secs_f64()
+                        simulation_controller.timer().total_render_time().as_secs_f64()
                     ));
                     ui.text(im_str!(
                         "simulated time: {:.2}",
-                        simulation_controller.timer.total_simulated_time().as_secs_f64()
+                        simulation_controller.timer().total_simulated_time().as_secs_f64()
                     ));
                     ui.text(im_str!(
                         "total num simulation steps: {}",
-                        simulation_controller.timer.num_simulation_steps_performed()
+                        simulation_controller.timer().num_simulation_steps_performed()
                     ));
 
                     ui.separator();
@@ -95,7 +95,7 @@ impl GUI {
                     }
 
                     if ui.small_button(im_str!("Reset (Space)")) {
-                        simulation_controller.scheduled_restart = true;
+                        simulation_controller.schedule_restart();
                     }
                     ui.same_line(0.0);
                     if simulation_controller.status == SimulationControllerStatus::Paused {

@@ -7,20 +7,19 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu = "0.5"
-winit = "0.21" # Can't upgrade to 0.2.2 because of imgui-winit-support
-shaderc = "0.6"
-notify = "5.0.0-pre.2"
 cgmath = { git = "https://github.com/rustgd/cgmath", rev="50a345b", features=["rand"] }
 enumflags2 = "^0.6"
+env_logger = "0.7"
+futures = "0.3"
+imgui = "0.3"
+imgui-wgpu = "0.6"
+imgui-winit-support = { version = "0.3", default-features = false, features = ["winit-20"] }
+lazy_static = "1.4"
+log = "0.4"
+more-asserts = "0.2"
+notify = "5.0.0-pre.2"
 rand = { version="0.7.3", features=["small_rng"] }
 regex = "1"
-lazy_static = "1.4"
-more-asserts = "0.2"
-futures = "0.3"
-log = "0.4"
-env_logger = "0.7"
-imgui-wgpu = "0.6"
-imgui = "0.3"
-imgui-winit-support = { version = "0.3", default-features = false, features = ["winit-20"] }
-num_enum = "0.4"
+shaderc = "0.6"
+wgpu = "0.5"
+winit = "0.21" # Can't upgrade to 0.2.2 because of imgui-winit-support

@@ -10,6 +10,7 @@ mod gui;
 mod hybrid_fluid;
 mod particle_renderer;
 mod per_frame_resources;
+mod scene;
 mod screen;
 mod simulation_controller;
 mod timer;
@@ -35,7 +36,7 @@ struct Application {
     command_queue: wgpu::Queue,
 
     shader_dir: shader::ShaderDirectory,
-    hybrid_fluid: hybrid_fluid::HybridFluid,
+    scene: scene::Scene,
     particle_renderer: particle_renderer::ParticleRenderer,
 
     simulation_controller: simulation_controller::SimulationController,
@@ -79,6 +80,8 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let per_frame_resources = PerFrameResources::new(&device);
 
+        let scene = scene::Scene::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
+
         let hybrid_fluid = hybrid_fluid::HybridFluid::new(
             &device,
             wgpu::Extent3d {
@@ -108,7 +111,7 @@ impl Application {
 
             shader_dir,
             particle_renderer,
-            hybrid_fluid,
+            scene,
             simulation_controller,
             gui,
 
@@ -118,8 +121,7 @@ impl Application {
     }
 
     fn run(mut self, event_loop: EventLoop<()>) {
-        self.simulation_controller
-            .restart(&mut self.hybrid_fluid, &self.device, &self.command_queue);
+        self.simulation_controller.schedule_restart();
 
         event_loop.run(move |event, _, control_flow| {
             // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
@@ -148,9 +150,7 @@ impl Application {
                             ..
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                            VirtualKeyCode::Space => self
-                                .simulation_controller
-                                .restart(&mut self.hybrid_fluid, &self.device, &self.command_queue),
+                            VirtualKeyCode::Space => self.simulation_controller.schedule_restart(),
                             _ => {}
                         },
                         _ => {}
@@ -184,20 +184,18 @@ impl Application {
         if self.shader_dir.detected_change() {
             info!("reloading shaders...");
             self.particle_renderer.try_reload_shaders(&self.device, &self.shader_dir);
-            self.hybrid_fluid.try_reload_shaders(&self.device, &self.shader_dir);
+            self.scene.try_reload_shaders(&self.device, &self.shader_dir);
         }
-        self.camera.update(&self.simulation_controller.timer);
+        self.camera.update(self.simulation_controller.timer());
 
-        if self.simulation_controller.scheduled_restart {
-            self.simulation_controller
-                .restart(&mut self.hybrid_fluid, &self.device, &self.command_queue);
-        }
+        self.simulation_controller
+            .handle_scheduled_restart(&mut self.scene, &self.device, &self.command_queue);
 
-        self.simulation_controller.do_fast_forward_steps(
+        self.simulation_controller.fast_forward_steps(
             &self.device,
             &self.command_queue,
-            &mut self.hybrid_fluid,
-            self.per_frame_resources.bind_group(),
+            &mut self.scene,
+            self.per_frame_resources.bind_group(), // values from last draw are good enough.
         );
     }
 
@@ -209,11 +207,11 @@ impl Application {
         });
 
         self.per_frame_resources
-            .update_gpu_data(&mut encoder, &self.device, &self.camera, &self.simulation_controller.timer, aspect_ratio);
+            .update_gpu_data(&mut encoder, &self.device, &self.camera, self.simulation_controller.timer(), aspect_ratio);
 
         // (GPU) Simulation.
         self.simulation_controller
-            .do_frame_steps(&self.hybrid_fluid, &mut encoder, self.per_frame_resources.bind_group());
+            .frame_steps(&self.scene, &mut encoder, self.per_frame_resources.bind_group());
 
         // Fluid drawing.
         {
@@ -242,7 +240,7 @@ impl Application {
             });
 
             rpass.set_bind_group(0, self.per_frame_resources.bind_group(), &[]);
-            self.particle_renderer.draw(&mut rpass, self.hybrid_fluid.num_particles());
+            self.particle_renderer.draw(&mut rpass, self.scene.hybrid_fluid.num_particles());
         }
 
         self.gui
@@ -251,7 +249,7 @@ impl Application {
         self.command_queue.submit(&[encoder.finish()]);
 
         std::mem::drop(frame);
-        self.simulation_controller.timer.on_frame_submitted();
+        self.simulation_controller.on_frame_submitted();
     }
 }
 
