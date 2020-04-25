@@ -31,6 +31,7 @@ struct Application {
     window: Window,
     window_surface: wgpu::Surface,
     screen: Screen,
+    screenshot_scheduled: bool,
 
     device: wgpu::Device,
     command_queue: wgpu::Queue,
@@ -74,9 +75,9 @@ impl Application {
             })
             .await;
 
-        let screen = Screen::new(&device, &window_surface, window.inner_size());
-
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
+
+        let screen = Screen::new(&device, &window_surface, window.inner_size(), &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
 
         let scene = scene::Scene::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
@@ -89,6 +90,7 @@ impl Application {
             window,
             window_surface,
             screen,
+            screenshot_scheduled: false,
 
             device,
             command_queue,
@@ -134,6 +136,7 @@ impl Application {
                             ..
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
+                            VirtualKeyCode::Snapshot => self.screenshot_scheduled = true,
                             VirtualKeyCode::Space => self.simulation_controller.schedule_restart(),
                             _ => {}
                         },
@@ -160,7 +163,7 @@ impl Application {
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         // occasionally window size drops to zero which causes crashes along the way
         if self.screen.resolution != size && size.width != 0 && size.height != 0 {
-            self.screen = Screen::new(&self.device, &self.window_surface, size);
+            self.screen = Screen::new(&self.device, &self.window_surface, size, &self.shader_dir);
         }
     }
 
@@ -185,7 +188,7 @@ impl Application {
 
     fn draw(&mut self) {
         let aspect_ratio = self.screen.aspect_ratio();
-        let (frame, depth_view) = self.screen.get_next_frame();
+        let frame = self.screen.start_frame();
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Frame Main"),
         });
@@ -195,14 +198,30 @@ impl Application {
 
         self.simulation_controller
             .frame_steps(&self.scene, &mut encoder, self.per_frame_resources.bind_group());
-        self.scene_renderer
-            .draw(&self.scene, &mut encoder, &frame.view, depth_view, self.per_frame_resources.bind_group());
-        self.gui
-            .draw(&self.device, &self.window, &mut encoder, &frame.view, &mut self.simulation_controller);
+        self.scene_renderer.draw(
+            &self.scene,
+            &mut encoder,
+            self.screen.backbuffer(),
+            self.screen.depthbuffer(),
+            self.per_frame_resources.bind_group(),
+        );
 
+        if self.screenshot_scheduled {
+            self.screen.take_screenshot(&mut encoder, &Path::new("screenshot.png"));
+            self.screenshot_scheduled = false;
+        }
+
+        self.gui.draw(
+            &self.device,
+            &self.window,
+            &mut encoder,
+            &self.screen.backbuffer(),
+            &mut self.simulation_controller,
+        );
+
+        self.screen.copy_to_swapchain(&frame, &mut encoder);
         self.command_queue.submit(&[encoder.finish()]);
-
-        std::mem::drop(frame);
+        self.screen.end_frame(&self.device, frame);
         self.simulation_controller.on_frame_submitted();
     }
 }
