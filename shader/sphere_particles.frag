@@ -5,6 +5,7 @@
 
 layout(location = 0) in vec3 in_WorldPosition;
 layout(location = 1) in vec3 in_ParticleWorldPosition;
+layout(location = 2) in vec3 in_Tint;
 layout(location = 0) out vec4 out_Color;
 
 void main() {
@@ -33,5 +34,5 @@ void main() {
     lighting += sky * vec3(0.16, 0.20, 0.28);
     lighting += ind * vec3(0.40, 0.28, 0.20);
 
-    out_Color = vec4(lighting, 1.0);
+    out_Color = vec4(lighting * max(vec3(0.05), in_Tint), 1.0);
 }

@@ -2,6 +2,7 @@
 
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
+#include "utilities.glsl"
 
 layout(set = 1, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 
@@ -9,11 +10,17 @@ out gl_PerVertex { vec4 gl_Position; };
 
 layout(location = 0) out vec3 out_WorldPosition;
 layout(location = 1) out vec3 out_ParticleWorldPosition;
+layout(location = 2) out vec3 out_Tint;
 
 const vec2 quadPositions[4] = vec2[4](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));
 
+vec3 heatmapColor(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2)); }
+
 void main() {
     const float radius = 0.25; // todo.
+    vec3 velocity = Particles[gl_InstanceIndex].Velocity;
+    out_Tint = heatmapColor(length(velocity) * 0.1);
+
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
 
     // Spanning billboards is easy!
