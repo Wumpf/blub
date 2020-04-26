@@ -18,7 +18,7 @@ mod wgpu_utils;
 
 use per_frame_resources::*;
 use screen::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use wgpu_utils::shader;
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -31,7 +31,7 @@ struct Application {
     window: Window,
     window_surface: wgpu::Surface,
     screen: Screen,
-    screenshot_scheduled: bool,
+    scheduled_screenshot: PathBuf,
 
     device: wgpu::Device,
     command_queue: wgpu::Queue,
@@ -90,7 +90,7 @@ impl Application {
             window,
             window_surface,
             screen,
-            screenshot_scheduled: false,
+            scheduled_screenshot: PathBuf::default(),
 
             device,
             command_queue,
@@ -136,7 +136,7 @@ impl Application {
                             ..
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                            VirtualKeyCode::Snapshot => self.screenshot_scheduled = true,
+                            VirtualKeyCode::Snapshot => self.scheduled_screenshot = PathBuf::from("screenshot.png"),
                             VirtualKeyCode::Space => self.simulation_controller.schedule_restart(),
                             _ => {}
                         },
@@ -184,6 +184,10 @@ impl Application {
             &mut self.scene,
             self.per_frame_resources.bind_group(), // values from last draw are good enough.
         );
+
+        if let simulation_controller::SimulationControllerStatus::Record { output_directory } = &self.simulation_controller.status {
+            self.scheduled_screenshot = output_directory.join(format!("{}.png", self.simulation_controller.timer().num_frames_rendered()));
+        }
     }
 
     fn draw(&mut self) {
@@ -206,9 +210,9 @@ impl Application {
             self.per_frame_resources.bind_group(),
         );
 
-        if self.screenshot_scheduled {
-            self.screen.take_screenshot(&mut encoder, &Path::new("screenshot.png"));
-            self.screenshot_scheduled = false;
+        if self.scheduled_screenshot != PathBuf::default() {
+            self.screen.take_screenshot(&mut encoder, &self.scheduled_screenshot);
+            self.scheduled_screenshot = PathBuf::default();
         }
 
         self.gui.draw(

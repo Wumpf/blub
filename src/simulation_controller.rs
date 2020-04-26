@@ -6,7 +6,9 @@ use crate::timer::Timer;
 #[derive(PartialEq, Eq)]
 pub enum SimulationControllerStatus {
     Realtime,
-    Record,
+    Record {
+        output_directory: std::path::PathBuf, // todo: It's weird that the simulation controller knows about the output of a recording.
+    },
 
     Paused,
 
@@ -22,6 +24,8 @@ pub struct SimulationController {
 
 // todo: configurable
 const SIMULATION_STEP_LENGTH: std::time::Duration = std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 120.0) as u64); // 120 simulation steps per second
+const MIN_REALTIME_FPS: f64 = 10.0;
+const RECORDING_FPS: f64 = 60.0;
 
 impl SimulationController {
     pub fn new() -> Self {
@@ -53,7 +57,6 @@ impl SimulationController {
         scene.reset(device, command_queue);
         self.timer = Timer::new(SIMULATION_STEP_LENGTH);
         self.scheduled_restart = false;
-        self.status = SimulationControllerStatus::Paused;
     }
 
     // A single fast forward operation is technically just a "very long frame".
@@ -106,8 +109,8 @@ impl SimulationController {
     fn start_simulation_frame(&mut self) -> bool {
         match self.status {
             SimulationControllerStatus::Realtime => {}
-            SimulationControllerStatus::Record => {
-                self.timer.force_frame_delta(std::time::Duration::from_secs_f64(1.0 / 60.0));
+            SimulationControllerStatus::Record { .. } => {
+                self.timer.force_frame_delta(std::time::Duration::from_secs_f64(1.0 / RECORDING_FPS));
             }
             SimulationControllerStatus::FastForward => {
                 self.timer.force_frame_delta(self.simulation_length);
@@ -123,8 +126,7 @@ impl SimulationController {
     fn single_step<'a>(&mut self, scene: &'a Scene, compute_pass: &mut wgpu::ComputePass<'a>) -> bool {
         // frame drops are only relevant in realtime mode.
         let max_total_step_per_frame = if self.status == SimulationControllerStatus::Realtime {
-            // 10fps
-            std::time::Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 10.0) as u64)
+            std::time::Duration::from_secs_f64(1.0 / MIN_REALTIME_FPS)
         } else {
             std::time::Duration::from_secs(999999999999)
         };

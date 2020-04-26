@@ -1,5 +1,6 @@
 use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use imgui::im_str;
+use std::path::PathBuf;
 
 pub struct GUI {
     imgui_context: imgui::Context,
@@ -109,6 +110,23 @@ impl GUI {
                     }
                     if ui.small_button(im_str!("Fast Forward")) {
                         simulation_controller.status = SimulationControllerStatus::FastForward;
+                    }
+                    if let SimulationControllerStatus::Record { .. } = simulation_controller.status {
+                        if ui.small_button(im_str!("End Recording")) {
+                            simulation_controller.status = SimulationControllerStatus::Paused;
+                        }
+                    } else {
+                        if ui.small_button(im_str!("Reset & Record")) {
+                            simulation_controller.schedule_restart();
+                            for i in 0..usize::MAX {
+                                let mut output_directory = PathBuf::from(format!("recording{}", i));
+                                if !output_directory.exists() {
+                                    std::fs::create_dir(&output_directory);
+                                    simulation_controller.status = SimulationControllerStatus::Record { output_directory };
+                                    break;
+                                }
+                            }
+                        }
                     }
                 });
         }

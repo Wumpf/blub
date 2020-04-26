@@ -23,6 +23,7 @@ pub struct Timer {
     // render time measures
     total_rendered_time: Duration,
     current_frame_delta: Duration,
+    num_frames_rendered: u32,
 
     // simulation time
     simulation_delta: Duration,
@@ -40,6 +41,7 @@ impl Timer {
 
             total_rendered_time: Duration::from_millis(0),
             current_frame_delta: Duration::from_millis(0),
+            num_frames_rendered: 0,
 
             simulation_delta,
             num_simulation_steps: 0,
@@ -65,6 +67,7 @@ impl Timer {
 
         self.timestamp_last_frame = std::time::Instant::now();
         self.num_simulation_steps_this_frame = 0;
+        self.num_frames_rendered += 1;
     }
 
     pub fn skip_simulation_frame(&mut self) {
@@ -135,6 +138,10 @@ impl Timer {
 
     pub fn num_simulation_steps_performed(&self) -> u32 {
         self.num_simulation_steps
+    }
+
+    pub fn num_frames_rendered(&self) -> u32 {
+        self.num_frames_rendered
     }
 
     pub fn fill_uniform_buffer(&self) -> FrameTimeUniformBufferContent {
