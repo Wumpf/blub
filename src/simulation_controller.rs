@@ -20,22 +20,28 @@ pub struct SimulationController {
     scheduled_restart: bool,
     timer: Timer,
     computation_time_last_fast_forward: Duration,
+    simulation_steps_per_second: u64,
     pub status: SimulationControllerStatus,
     pub simulation_length: Duration,
 }
 
-// todo: configurable
-const SIMULATION_STEP_LENGTH: Duration = Duration::from_nanos((1000.0 * 1000.0 * 1000.0 / 120.0) as u64); // 120 simulation steps per second
 const MIN_REALTIME_FPS: f64 = 10.0;
 const RECORDING_FPS: f64 = 60.0;
 
+fn delta_from_steps_per_second(steps_per_second: u64) -> Duration {
+    Duration::from_nanos(1000 * 1000 * 1000 / steps_per_second)
+}
+
 impl SimulationController {
     pub fn new() -> Self {
+        const DEFAULT_SIMULATION_STEPS_PER_SECOND: u64 = 120;
+
         SimulationController {
             scheduled_restart: false,
             status: SimulationControllerStatus::Realtime,
             simulation_length: Duration::from_secs(60 * 60), // (an hour)
-            timer: Timer::new(SIMULATION_STEP_LENGTH),
+            simulation_steps_per_second: DEFAULT_SIMULATION_STEPS_PER_SECOND,
+            timer: Timer::new(delta_from_steps_per_second(DEFAULT_SIMULATION_STEPS_PER_SECOND)),
             computation_time_last_fast_forward: Default::default(),
         }
     }
@@ -56,13 +62,23 @@ impl SimulationController {
         self.scheduled_restart = true;
     }
 
+    pub fn simulation_steps_per_second(&self) -> u64 {
+        self.simulation_steps_per_second
+    }
+
+    pub fn set_simulation_steps_per_second(&mut self, simulation_steps_per_second: u64) {
+        self.simulation_steps_per_second = simulation_steps_per_second;
+        self.timer
+            .set_simulation_delta(delta_from_steps_per_second(self.simulation_steps_per_second));
+    }
+
     pub fn handle_scheduled_restart(&mut self, scene: &mut Scene, device: &wgpu::Device, command_queue: &wgpu::Queue) {
         if !self.scheduled_restart {
             return;
         }
 
         scene.reset(device, command_queue);
-        self.timer = Timer::new(SIMULATION_STEP_LENGTH);
+        self.timer = Timer::new(delta_from_steps_per_second(self.simulation_steps_per_second));
         self.scheduled_restart = false;
     }
 

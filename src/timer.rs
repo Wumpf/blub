@@ -119,6 +119,10 @@ impl Timer {
         self.simulation_delta
     }
 
+    pub fn set_simulation_delta(&mut self, delta: Duration) {
+        self.simulation_delta = delta;
+    }
+
     pub fn frame_delta(&self) -> Duration {
         self.current_frame_delta
     }

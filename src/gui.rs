@@ -95,6 +95,16 @@ impl GUI {
                         simulation_controller.simulation_length = std::time::Duration::from_secs_f32(simulation_time_seconds);
                     }
 
+                    let mut simulation_steps_per_second = simulation_controller.simulation_steps_per_second() as i32;
+                    if ui
+                        .input_int(im_str!("simulation steps per second"), &mut simulation_steps_per_second)
+                        .step(10)
+                        .enter_returns_true(true)
+                        .build()
+                    {
+                        simulation_controller.set_simulation_steps_per_second(simulation_steps_per_second.max(60).min(60 * 20) as u64);
+                    }
+
                     {
                         if ui.small_button(im_str!("Reset (Space)")) {
                             simulation_controller.schedule_restart();
