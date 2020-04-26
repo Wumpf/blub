@@ -95,21 +95,27 @@ impl GUI {
                         simulation_controller.simulation_length = std::time::Duration::from_secs_f32(simulation_time_seconds);
                     }
 
-                    if ui.small_button(im_str!("Reset (Space)")) {
-                        simulation_controller.schedule_restart();
-                    }
-                    ui.same_line(0.0);
-                    if simulation_controller.status == SimulationControllerStatus::Paused {
-                        if ui.small_button(im_str!("Continue")) {
-                            simulation_controller.status = SimulationControllerStatus::Realtime;
+                    {
+                        if ui.small_button(im_str!("Reset (Space)")) {
+                            simulation_controller.schedule_restart();
                         }
-                    } else {
-                        if ui.small_button(im_str!("Pause")) {
-                            simulation_controller.status = SimulationControllerStatus::Paused;
+                        ui.same_line(0.0);
+                        if simulation_controller.status == SimulationControllerStatus::Paused {
+                            if ui.small_button(im_str!("Continue")) {
+                                simulation_controller.status = SimulationControllerStatus::Realtime;
+                            }
+                        } else {
+                            if ui.small_button(im_str!("Pause")) {
+                                simulation_controller.status = SimulationControllerStatus::Paused;
+                            }
                         }
                     }
-                    if ui.small_button(im_str!("Fast Forward")) {
-                        simulation_controller.status = SimulationControllerStatus::FastForward;
+                    {
+                        if ui.small_button(im_str!("Fast Forward")) {
+                            simulation_controller.status = SimulationControllerStatus::FastForward;
+                        }
+                        ui.same_line(0.0);
+                        ui.text_disabled(im_str!("last jump took {:?}", simulation_controller.computation_time_last_fast_forward()));
                     }
                     if let SimulationControllerStatus::Record { .. } = simulation_controller.status {
                         if ui.small_button(im_str!("End Recording")) {
@@ -119,9 +125,9 @@ impl GUI {
                         if ui.small_button(im_str!("Reset & Record")) {
                             simulation_controller.schedule_restart();
                             for i in 0..usize::MAX {
-                                let mut output_directory = PathBuf::from(format!("recording{}", i));
+                                let output_directory = PathBuf::from(format!("recording{}", i));
                                 if !output_directory.exists() {
-                                    std::fs::create_dir(&output_directory);
+                                    std::fs::create_dir(&output_directory).unwrap();
                                     simulation_controller.status = SimulationControllerStatus::Record { output_directory };
                                     break;
                                 }

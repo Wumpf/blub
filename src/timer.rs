@@ -33,6 +33,14 @@ pub struct Timer {
     accepted_simulation_to_render_lag: Duration, // time lost that we don't plan on catching up anymore
 }
 
+#[derive(PartialEq, Eq)]
+pub enum SimulationStepResult {
+    PerformStepAndCallAgain,
+
+    CaughtUpWithRenderTime,
+    DroppingSimulationSteps,
+}
+
 impl Timer {
     pub fn new(simulation_delta: Duration) -> Timer {
         Timer {
@@ -74,11 +82,7 @@ impl Timer {
         self.accepted_simulation_to_render_lag += self.current_frame_delta;
     }
 
-    pub fn simulation_frame_loop(&mut self, max_total_step_per_frame: Duration) -> bool {
-        if self.num_simulation_steps_this_frame > 0 {
-            self.total_simulated_time += self.simulation_delta;
-        }
-
+    pub fn simulation_frame_loop(&mut self, max_total_step_per_frame: Duration) -> SimulationStepResult {
         // simulation time shouldn't advance faster than render time
         let residual_time = (self.total_rendered_time + self.current_frame_delta)
             .checked_sub(self.total_simulated_time + self.accepted_simulation_to_render_lag)
@@ -89,7 +93,7 @@ impl Timer {
             //     self.num_simulation_steps_this_frame,
             //     1.0 / self.frame_delta().as_secs_f32()
             // );
-            return false;
+            return SimulationStepResult::CaughtUpWithRenderTime;
         }
 
         // Did we hit a maximum of simulation steps and want to introduce lag instead?
@@ -102,12 +106,13 @@ impl Timer {
             //     self.num_simulation_steps_this_frame,
             //     1.0 / self.frame_delta().as_secs_f32()
             // );
-            return false;
+            return SimulationStepResult::DroppingSimulationSteps;
         }
 
         self.num_simulation_steps_this_frame += 1;
         self.num_simulation_steps += 1;
-        true
+        self.total_simulated_time += self.simulation_delta;
+        SimulationStepResult::PerformStepAndCallAgain
     }
 
     pub fn simulation_delta(&self) -> Duration {
