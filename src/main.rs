@@ -106,6 +106,16 @@ impl Application {
         }
     }
 
+    fn schedule_screenshot(&mut self) {
+        for i in 0..usize::MAX {
+            let screenshot = PathBuf::from(format!("screenshot{}.png", i));
+            if !screenshot.exists() {
+                self.scheduled_screenshot = screenshot;
+                return;
+            }
+        }
+    }
+
     fn run(mut self, event_loop: EventLoop<()>) {
         self.simulation_controller.schedule_restart();
 
@@ -136,7 +146,7 @@ impl Application {
                             ..
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                            VirtualKeyCode::Snapshot => self.scheduled_screenshot = PathBuf::from("screenshot.png"),
+                            VirtualKeyCode::Snapshot => self.schedule_screenshot(),
                             VirtualKeyCode::Space => self.simulation_controller.schedule_restart(),
                             _ => {}
                         },
