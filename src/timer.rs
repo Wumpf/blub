@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 // Timer keeps track of render & simulation timing and time statistics.
 // It's set up in a way that makes "normal realtime rendering" easy, but has hooks to allow special handling
@@ -16,9 +19,8 @@ use std::time::{Duration, Instant};
 pub struct Timer {
     // real time measures
     timestamp_last_frame: Instant,
-    time_since_last_frame_submitted: Duration,
-
-    // todo: Keep statistics over the last couple of render frames for display of smooth timings
+    duration_last_frame: Duration,
+    frame_duration_history: VecDeque<Duration>,
 
     // render time measures
     total_rendered_time: Duration,
@@ -41,11 +43,14 @@ pub enum SimulationStepResult {
     DroppingSimulationSteps,
 }
 
+const FRAME_DURATION_HISTORY_LENGTH: usize = 50;
+
 impl Timer {
     pub fn new(simulation_delta: Duration) -> Timer {
         Timer {
             timestamp_last_frame: Instant::now(),
-            time_since_last_frame_submitted: Duration::from_millis(0),
+            duration_last_frame: Duration::from_millis(0),
+            frame_duration_history: VecDeque::with_capacity(FRAME_DURATION_HISTORY_LENGTH),
 
             total_rendered_time: Duration::from_millis(0),
             current_frame_delta: Duration::from_millis(0),
@@ -70,8 +75,12 @@ impl Timer {
         // Frame is submitted, so we finally can advance the render time.
         self.total_rendered_time += self.current_frame_delta;
 
-        self.time_since_last_frame_submitted = self.timestamp_last_frame.elapsed();
-        self.current_frame_delta = self.time_since_last_frame_submitted;
+        self.duration_last_frame = self.timestamp_last_frame.elapsed();
+        if self.frame_duration_history.len() == FRAME_DURATION_HISTORY_LENGTH {
+            self.frame_duration_history.pop_front();
+        }
+        self.frame_duration_history.push_back(self.duration_last_frame);
+        self.current_frame_delta = self.duration_last_frame;
 
         self.timestamp_last_frame = std::time::Instant::now();
         self.num_simulation_steps_this_frame = 0;
@@ -100,7 +109,7 @@ impl Timer {
         if self.num_simulation_steps_this_frame * self.simulation_delta > max_total_step_per_frame {
             // We heuristically don't drop all lost simulation frames. This avoids oscillating between realtime and offline
             // which is caused by our frame deltas being influenced by work from a couple of cpu frames ago (due gpu/cpu sync)
-            self.accepted_simulation_to_render_lag += residual_time.mul_f32(0.75);
+            self.accepted_simulation_to_render_lag += residual_time.mul_f32(0.5);
             // println!(
             //     "lagtime {}, fps {}",
             //     self.num_simulation_steps_this_frame,
@@ -128,8 +137,12 @@ impl Timer {
     }
 
     // Duration of the previous frame. (this is not necessarily equal to the frame time delta!)
-    pub fn duration_for_last_frame(&self) -> Duration {
-        self.time_since_last_frame_submitted
+    pub fn duration_last_frame(&self) -> Duration {
+        self.duration_last_frame
+    }
+
+    pub fn duration_last_frame_history(&self) -> &VecDeque<Duration> {
+        &self.frame_duration_history
     }
 
     // Total render time. (equal to real time if not configured otherwise!)

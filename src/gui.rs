@@ -61,9 +61,21 @@ impl GUI {
                 .build(&ui, || {
                     ui.text(im_str!(
                         "{:3.2}ms, FPS: {:3.2}",
-                        simulation_controller.timer().duration_for_last_frame().as_secs_f64() * 1000.0,
-                        1000.0 / 1000.0 / simulation_controller.timer().duration_for_last_frame().as_secs_f64()
+                        simulation_controller.timer().duration_last_frame().as_secs_f64() * 1000.0,
+                        1000.0 / 1000.0 / simulation_controller.timer().duration_last_frame().as_secs_f64()
                     ));
+                    ui.plot_histogram(
+                        im_str!(""),
+                        &simulation_controller
+                            .timer()
+                            .duration_last_frame_history()
+                            .iter()
+                            .map(|duration| duration.as_secs_f32())
+                            .collect::<Vec<f32>>(),
+                    )
+                    .scale_min(0.0)
+                    .graph_size([300.0, 40.0])
+                    .build();
                     ui.separator();
                     ui.text(im_str!(
                         "num simulation steps current frame: {}",
