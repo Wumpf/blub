@@ -34,11 +34,11 @@ pub struct HybridFluid {
 
     pipeline_clear_llgrid: ReloadableComputePipeline,
     pipeline_build_linkedlist_volume: ReloadableComputePipeline,
-    pipeline_build_velocity_volume: ReloadableComputePipeline,
+    pipeline_transfer_to_volume: ReloadableComputePipeline,
     pipeline_compute_divergence: ReloadableComputePipeline,
     pipeline_pressure_solve: ReloadableComputePipeline,
     pipeline_remove_divergence: ReloadableComputePipeline,
-    pipeline_particle_update: ReloadableComputePipeline,
+    pipeline_update_particles: ReloadableComputePipeline,
 
     num_particles: u32,
     max_num_particles: u32,
@@ -198,18 +198,15 @@ impl HybridFluid {
             shader_dir,
             Path::new("build_linkedlist_volume.comp"),
         );
-        let pipeline_build_velocity_volume = ReloadableComputePipeline::new(
-            device,
-            &layout_write_particles_volume,
-            shader_dir,
-            Path::new("build_velocity_volume.comp"),
-        );
+        let pipeline_transfer_to_volume =
+            ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("transfer_to_volume.comp"));
         let pipeline_compute_divergence =
             ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("compute_divergence.comp"));
         let pipeline_pressure_solve = ReloadableComputePipeline::new(device, &layout_pressure_solve, shader_dir, Path::new("pressure_solve.comp"));
         let pipeline_remove_divergence =
             ReloadableComputePipeline::new(device, &layout_write_particles_volume, shader_dir, Path::new("remove_divergence.comp"));
-        let pipeline_particle_update = ReloadableComputePipeline::new(device, &layout_write_particles, shader_dir, Path::new("particle_update.comp"));
+        let pipeline_update_particles =
+            ReloadableComputePipeline::new(device, &layout_write_particles, shader_dir, Path::new("update_particles.comp"));
 
         HybridFluid {
             //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
@@ -228,11 +225,11 @@ impl HybridFluid {
 
             pipeline_clear_llgrid,
             pipeline_build_linkedlist_volume,
-            pipeline_build_velocity_volume,
+            pipeline_transfer_to_volume,
             pipeline_compute_divergence,
             pipeline_pressure_solve,
             pipeline_remove_divergence,
-            pipeline_particle_update,
+            pipeline_update_particles,
 
             num_particles: 0,
             max_num_particles,
@@ -250,11 +247,11 @@ impl HybridFluid {
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
         let _ = self.pipeline_clear_llgrid.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_build_linkedlist_volume.try_reload_shader(device, shader_dir);
-        let _ = self.pipeline_build_velocity_volume.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_transfer_to_volume.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_compute_divergence.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_pressure_solve.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_remove_divergence.try_reload_shader(device, shader_dir);
-        let _ = self.pipeline_particle_update.try_reload_shader(device, shader_dir);
+        let _ = self.pipeline_update_particles.try_reload_shader(device, shader_dir);
     }
 
     // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
@@ -383,7 +380,7 @@ impl HybridFluid {
             cpass.dispatch(particle_work_groups, 1, 1);
 
             // Gather velocities in velocity grid and apply global forces.
-            cpass.set_pipeline(self.pipeline_build_velocity_volume.pipeline());
+            cpass.set_pipeline(self.pipeline_transfer_to_volume.pipeline());
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         {
@@ -412,7 +409,7 @@ impl HybridFluid {
             cpass.set_bind_group(2, &self.bind_group_write_particles, &[]);
 
             // Transfer velocities to particles.
-            cpass.set_pipeline(self.pipeline_particle_update.pipeline());
+            cpass.set_pipeline(self.pipeline_update_particles.pipeline());
             cpass.dispatch(particle_work_groups, 1, 1);
         }
     }
