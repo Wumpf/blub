@@ -11,3 +11,8 @@ float lengthsq(vec3 a, vec3 b) {
     vec3 v = a - b;
     return dot(v, v);
 }
+
+float sq(float a) { return a * a; }
+vec2 sq(vec2 a) { return a * a; }
+vec3 sq(vec3 a) { return a * a; }
+vec4 sq(vec4 a) { return a * a; }

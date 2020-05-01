@@ -55,6 +55,10 @@ struct Particle {
     position: cgmath::Point3<f32>,
     linked_list_next: u32,
     velocity: PaddedVector3,
+
+    c0: PaddedVector3,
+    c1: PaddedVector3,
+    c2: PaddedVector3,
 }
 
 impl HybridFluid {
@@ -300,6 +304,9 @@ impl HybridFluid {
                 position,
                 linked_list_next: 0xFFFFFFFF,
                 velocity: cgmath::vec3(0.0, 0.0, 0.0).into(),
+                c0: cgmath::vec3(0.0, 0.0, 0.0).into(),
+                c1: cgmath::vec3(0.0, 0.0, 0.0).into(),
+                c2: cgmath::vec3(0.0, 0.0, 0.0).into(),
             };
         }
 
@@ -393,7 +400,7 @@ impl HybridFluid {
             // We reuse the pressure values from last time as initial guess. Since we run the simulation quite frequently, we don't need a lot of steps.
             // TODO: how many? Need to measure remaining divergence to make any meaningful statement about this.
             cpass.set_pipeline(self.pipeline_pressure_solve.pipeline());
-            for i in 0..4 {
+            for i in 0..32 {
                 cpass.set_bind_group(2, &self.bind_group_pressure_write[(i + 1) % 2], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             }

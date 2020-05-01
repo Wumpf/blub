@@ -10,4 +10,5 @@ struct Particle {
     uint LinkedListNext;
     vec3 Velocity;
     uint DebugFlag;
+    mat3 ApicMatrix; // Matrix B. TODO: Pack properly
 };

@@ -13,9 +13,11 @@ void gatherVelocitiesFromLinkedList(inout vec4 velocityAndWeight, vec3 velocityG
 
     // while (particleIndex != INVALID_LINKED_LIST_PTR) {
     for (int i = 0; i < 32 && particleIndex != INVALID_LINKED_LIST_PTR; ++i) {
-        vec3 d = saturate(vec3(1.0) - abs(velocityGridPosition - Particles[particleIndex].Position));
+        vec3 toGridCenter = velocityGridPosition - Particles[particleIndex].Position;
+        vec3 d = saturate(vec3(1.0) - abs(toGridCenter));
         float weight = d.x * d.y * d.z;
-        velocityAndWeight += vec4(Particles[particleIndex].Velocity * weight, weight);
+        velocityAndWeight.xyz += weight * (Particles[particleIndex].Velocity + Particles[particleIndex].ApicMatrix * toGridCenter);
+        velocityAndWeight.w += weight;
         particleIndex = Particles[particleIndex].LinkedListNext;
     }
 }

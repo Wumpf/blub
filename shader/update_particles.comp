@@ -21,6 +21,11 @@ vec3 SampleVelocity(vec3 position, vec3 gridTexelSizeNormalized) {
     return texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), PositionToNormalizedGrid(position, gridTexelSizeNormalized)).xyz;
 }
 
+vec3 SampleVelocityFloor(vec3 position, vec3 gridTexelSizeNormalized) {
+    // point sampler samples nearest point, but we want to round down, so subtract 0.5 * gridTexelSizeNormalized again, resulting in this:
+    return texture(sampler3D(VelocityVolume, SamplerPointClamp), position * gridTexelSizeNormalized).xyz;
+}
+
 void main() {
     uint particleIndex = gl_GlobalInvocationID.x;
     if (particleIndex >= NumParticles)
@@ -32,6 +37,28 @@ void main() {
     // Fetch position from grid, trilinearly interpolated.
     vec3 originalPosition = Particles[particleIndex].Position;
     vec3 newVelocity = SampleVelocity(originalPosition, gridTexelSizeNormalized);
+
+    // Update APIC's affine matrix.
+    // Use texture sampler to get clamp-to-border behavior cheaply
+    vec3 v000 = SampleVelocityFloor(originalPosition + vec3(0, 0, 0), gridTexelSizeNormalized);
+    vec3 v100 = SampleVelocityFloor(originalPosition + vec3(1, 0, 0), gridTexelSizeNormalized);
+    vec3 v010 = SampleVelocityFloor(originalPosition + vec3(0, 1, 0), gridTexelSizeNormalized);
+    vec3 v110 = SampleVelocityFloor(originalPosition + vec3(1, 1, 0), gridTexelSizeNormalized);
+    vec3 v001 = SampleVelocityFloor(originalPosition + vec3(0, 0, 1), gridTexelSizeNormalized);
+    vec3 v101 = SampleVelocityFloor(originalPosition + vec3(1, 0, 1), gridTexelSizeNormalized);
+    vec3 v011 = SampleVelocityFloor(originalPosition + vec3(0, 1, 1), gridTexelSizeNormalized);
+    vec3 v111 = SampleVelocityFloor(originalPosition + vec3(1, 1, 1), gridTexelSizeNormalized);
+    vec3 interpolants = fract(originalPosition);
+    // velocity via manual trilinear interpolation.
+    newVelocity = mix(mix(mix(v000, v100, interpolants.x), mix(v010, v110, interpolants.x), interpolants.y),
+                      mix(mix(v001, v101, interpolants.x), mix(v011, v111, interpolants.x), interpolants.y), interpolants.z);
+    vec3 cx = mix(mix(v100, v110, interpolants.y), mix(v101, v111, interpolants.y), interpolants.z) -
+              mix(mix(v000, v010, interpolants.y), mix(v001, v011, interpolants.y), interpolants.z);
+    vec3 cy = mix(mix(v010, v110, interpolants.x), mix(v011, v111, interpolants.x), interpolants.z) -
+              mix(mix(v000, v100, interpolants.x), mix(v001, v101, interpolants.x), interpolants.z);
+    vec3 cz = mix(mix(v001, v101, interpolants.x), mix(v011, v111, interpolants.x), interpolants.y) -
+              mix(mix(v000, v100, interpolants.x), mix(v010, v110, interpolants.x), interpolants.y);
+    Particles[particleIndex].ApicMatrix = mat3(cx, cy, cz);
 
     // Advect.
     // Runge kutta (confined to current cell for which we know velocities are defined (we don't do velocity extrapolation as many other impls)).
