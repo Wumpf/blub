@@ -29,6 +29,9 @@ pub struct HybridFluid {
     bind_group_compute_divergence: wgpu::BindGroup,
     bind_group_pressure_write: [wgpu::BindGroup; 2],
 
+    // The interface to any renderer of the fluid. Readonly access to relevant resources
+    bind_group_renderer: wgpu::BindGroup,
+
     pipeline_clear_llgrid: ReloadableComputePipeline,
     pipeline_build_linkedlist_volume: ReloadableComputePipeline,
     pipeline_build_velocity_volume: ReloadableComputePipeline,
@@ -40,6 +43,8 @@ pub struct HybridFluid {
     num_particles: u32,
     max_num_particles: u32,
 }
+
+static mut group_layout_renderer: Option<BindGroupLayoutWithDesc> = None;
 
 // todo: probably want to split this up into several buffers
 #[repr(C)]
@@ -153,6 +158,10 @@ impl HybridFluid {
                 .create(device, "BindGroup: Pressure write 1"),
         ];
 
+        let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
+            .buffer(&particles, 0..particle_buffer_size)
+            .create(device, "BindGroup: ParticleRenderer");
+
         // pipeline layouts.
         // Note that layouts directly correspond to DX12 root signatures.
         // We want to avoid having many of them and share as much as we can, but since WebGPU needs to set barriers for everything that is not readonly it's a tricky tradeoff.
@@ -215,6 +224,8 @@ impl HybridFluid {
             bind_group_compute_divergence,
             bind_group_pressure_write,
 
+            bind_group_renderer,
+
             pipeline_clear_llgrid,
             pipeline_build_linkedlist_volume,
             pipeline_build_velocity_volume,
@@ -244,11 +255,6 @@ impl HybridFluid {
         let _ = self.pipeline_pressure_solve.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_remove_divergence.try_reload_shader(device, shader_dir);
         let _ = self.pipeline_particle_update.try_reload_shader(device, shader_dir);
-    }
-
-    // Clears all state (i.e. removes fluid particles)
-    pub fn reset(&mut self) {
-        self.num_particles = 0;
     }
 
     // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
@@ -329,15 +335,18 @@ impl HybridFluid {
         self.num_particles
     }
 
-    pub fn particle_binding_resource(&self) -> wgpu::BindingResource {
-        wgpu::BindingResource::Buffer {
-            buffer: &self.particles,
-            range: 0..self.particle_buffer_size(),
+    pub fn get_or_create_group_layout_renderer(device: &wgpu::Device) -> &BindGroupLayoutWithDesc {
+        unsafe {
+            group_layout_renderer.get_or_insert_with(|| {
+                BindGroupLayoutBuilder::new()
+                    .next_binding_vertex(binding_glsl::buffer(true))
+                    .create(device, "BindGroupLayout: ParticleRenderer")
+            })
         }
     }
 
-    pub fn particle_buffer_size(&self) -> u64 {
-        self.max_num_particles as u64 * std::mem::size_of::<Particle>() as u64
+    pub fn bind_group_renderer(&self) -> &wgpu::BindGroup {
+        &self.bind_group_renderer
     }
 
     // todo: timing

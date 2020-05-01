@@ -8,37 +8,40 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, per_frame_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
-        Scene {
-            hybrid_fluid: HybridFluid::new(
-                device,
-                wgpu::Extent3d {
-                    width: 128,
-                    height: 64,
-                    depth: 64,
-                },
-                2000000,
-                shader_dir,
-                per_frame_bind_group_layout,
-            ),
-        }
-    }
+    pub fn new(
+        device: &wgpu::Device,
+        command_queue: &wgpu::Queue,
+        shader_dir: &ShaderDirectory,
+        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
+        let mut hybrid_fluid = HybridFluid::new(
+            device,
+            wgpu::Extent3d {
+                width: 128,
+                height: 64,
+                depth: 64,
+            },
+            2000000,
+            shader_dir,
+            per_frame_bind_group_layout,
+        );
 
-    pub fn reset(&mut self, device: &wgpu::Device, command_queue: &wgpu::Queue) {
         let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Particle Init Encoder"),
+            label: Some("Scene Init Encoder"),
         });
 
-        self.hybrid_fluid.reset();
-        self.hybrid_fluid.add_fluid_cube(
+        hybrid_fluid.add_fluid_cube(
             device,
             &mut init_encoder,
             cgmath::Point3::new(0.0, 0.0, 0.0),
             cgmath::Point3::new(64.0, 40.0, 64.0),
         );
 
+        // Should this be bundled with others?
         command_queue.submit(&[init_encoder.finish()]);
         device.poll(wgpu::Maintain::Wait);
+
+        Scene { hybrid_fluid }
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
@@ -57,9 +60,15 @@ pub struct SceneRenderer {
 }
 
 impl SceneRenderer {
-    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, per_frame_bind_group_layout: &wgpu::BindGroupLayout, scene: &Scene) -> Self {
+    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, per_frame_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
+        // Creates a new group layout for rendering for decoupling Scene from SceneRenderer
         SceneRenderer {
-            particle_renderer: ParticleRenderer::new(&device, &shader_dir, per_frame_bind_group_layout, &scene.hybrid_fluid),
+            particle_renderer: ParticleRenderer::new(
+                &device,
+                &shader_dir,
+                per_frame_bind_group_layout,
+                &HybridFluid::get_or_create_group_layout_renderer(device).layout,
+            ),
         }
     }
 
@@ -96,7 +105,7 @@ impl SceneRenderer {
         });
 
         rpass.set_bind_group(0, per_frame_bind_group, &[]);
-        self.particle_renderer.draw(&mut rpass, scene.hybrid_fluid.num_particles());
+        self.particle_renderer.draw(&mut rpass, &scene.hybrid_fluid);
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {

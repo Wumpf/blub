@@ -72,14 +72,14 @@ impl SimulationController {
             .set_simulation_delta(delta_from_steps_per_second(self.simulation_steps_per_second));
     }
 
-    pub fn handle_scheduled_restart(&mut self, scene: &mut Scene, device: &wgpu::Device, command_queue: &wgpu::Queue) {
+    pub fn handle_scheduled_restart(&mut self) -> bool {
         if !self.scheduled_restart {
-            return;
+            return false;
         }
 
-        scene.reset(device, command_queue);
         self.timer = Timer::new(delta_from_steps_per_second(self.simulation_steps_per_second));
         self.scheduled_restart = false;
+        true
     }
 
     // A single fast forward operation is technically just a "very long frame".

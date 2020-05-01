@@ -2,15 +2,12 @@
 // The idea is to have different render backend for the fluid, which one being the particle renderer which renders the fluid as particles (sprites)
 
 use crate::hybrid_fluid::*;
-use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::shader::*;
-use crate::wgpu_utils::*;
 use std::path::Path;
 
 pub struct ParticleRenderer {
     render_pipeline: wgpu::RenderPipeline,
     pipeline_layout: wgpu::PipelineLayout,
-    bind_group: wgpu::BindGroup,
 }
 
 impl ParticleRenderer {
@@ -18,24 +15,16 @@ impl ParticleRenderer {
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
-        hybrid_fluid: &HybridFluid,
+        fluid_renderer_group_layout: &wgpu::BindGroupLayout,
     ) -> ParticleRenderer {
-        let bind_group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_vertex(binding_glsl::buffer(true))
-            .create(device, "BindGroupLayout: ParticleRenderer, Read Particles");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
+            bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
         });
         let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout, shader_dir).unwrap();
-
-        let bind_group = BindGroupBuilder::new(&bind_group_layout)
-            .resource(hybrid_fluid.particle_binding_resource())
-            .create(device, "BindGroup: ParticleRenderer, Read Particles");
 
         ParticleRenderer {
             render_pipeline,
             pipeline_layout,
-            bind_group,
         }
     }
 
@@ -97,9 +86,9 @@ impl ParticleRenderer {
         }
     }
 
-    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, num_particles: u32) {
+    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, fluid: &'a HybridFluid) {
         rpass.set_pipeline(&self.render_pipeline);
-        rpass.set_bind_group(1, &self.bind_group, &[]);
-        rpass.draw(0..4, 0..num_particles);
+        rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
+        rpass.draw(0..4, 0..fluid.num_particles());
     }
 }
