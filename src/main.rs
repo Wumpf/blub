@@ -80,9 +80,9 @@ impl Application {
         let screen = Screen::new(&device, &window_surface, window.inner_size(), &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
 
-        let scene = scene::Scene::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
+        let scene = scene::Scene::new(&device, &command_queue, &shader_dir, per_frame_resources.bind_group_layout());
         let simulation_controller = simulation_controller::SimulationController::new();
-        let scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout(), &scene);
+        let scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
 
@@ -117,8 +117,6 @@ impl Application {
     }
 
     fn run(mut self, event_loop: EventLoop<()>) {
-        self.simulation_controller.schedule_restart();
-
         event_loop.run(move |event, _, control_flow| {
             // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
             // dispatched any events. This is ideal for games and similar applications.
@@ -185,8 +183,17 @@ impl Application {
         }
         self.camera.update(self.simulation_controller.timer());
 
-        self.simulation_controller
-            .handle_scheduled_restart(&mut self.scene, &self.device, &self.command_queue);
+        if self.simulation_controller.handle_scheduled_restart() {
+            // Idiot proof way to reset the fluid: Recreate everything.
+            // Previously, we reset the particles but then previous pressure computation results crept in making the reset more undeterministic than necessary
+            // Note that it is NOT deterministic due to some parallel processes reordering floating point operations at random.
+            self.scene = scene::Scene::new(
+                &self.device,
+                &self.command_queue,
+                &self.shader_dir,
+                self.per_frame_resources.bind_group_layout(),
+            );
+        }
 
         self.simulation_controller.fast_forward_steps(
             &self.device,
