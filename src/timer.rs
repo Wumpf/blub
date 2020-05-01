@@ -109,7 +109,7 @@ impl Timer {
         if self.num_simulation_steps_this_frame * self.simulation_delta > max_total_step_per_frame {
             // We heuristically don't drop all lost simulation frames. This avoids oscillating between realtime and offline
             // which is caused by our frame deltas being influenced by work from a couple of cpu frames ago (due gpu/cpu sync)
-            self.accepted_simulation_to_render_lag += residual_time.mul_f32(0.5);
+            self.accepted_simulation_to_render_lag += residual_time.mul_f32(0.8);
             // println!(
             //     "lagtime {}, fps {}",
             //     self.num_simulation_steps_this_frame,

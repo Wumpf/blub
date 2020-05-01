@@ -114,7 +114,7 @@ impl GUI {
                         .enter_returns_true(true)
                         .build()
                     {
-                        simulation_controller.set_simulation_steps_per_second(simulation_steps_per_second.max(60).min(60 * 20) as u64);
+                        simulation_controller.set_simulation_steps_per_second(simulation_steps_per_second.max(20).min(60 * 20) as u64);
                     }
 
                     {

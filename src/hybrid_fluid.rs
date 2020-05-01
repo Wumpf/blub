@@ -264,9 +264,15 @@ impl HybridFluid {
         let max_grid = self.clamp_to_grid(max_grid);
         let extent_cell = max_grid - min_grid;
 
-        let num_new_particles = self
-            .max_num_particles
-            .min((extent_cell.x * extent_cell.y * extent_cell.z * Self::PARTICLES_PER_GRID_CELL) as u32);
+        let mut num_new_particles = (extent_cell.x * extent_cell.y * extent_cell.z * Self::PARTICLES_PER_GRID_CELL) as u32;
+        if self.max_num_particles < num_new_particles + self.num_particles {
+            error!(
+                "Can't add {} particles, max is {}, current is {}",
+                num_new_particles, self.max_num_particles, self.num_particles
+            );
+            num_new_particles = self.max_num_particles - self.num_particles;
+        }
+        info!("Adding {} new particles", num_new_particles);
 
         let particle_size = std::mem::size_of::<Particle>() as u64;
         let particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {

@@ -25,7 +25,7 @@ pub struct SimulationController {
     pub simulation_length: Duration,
 }
 
-const MIN_REALTIME_FPS: f64 = 10.0;
+const MIN_REALTIME_FPS: f64 = 15.0;
 const RECORDING_FPS: f64 = 60.0;
 
 fn delta_from_steps_per_second(steps_per_second: u64) -> Duration {
