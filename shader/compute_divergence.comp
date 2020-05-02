@@ -16,7 +16,7 @@ COMPUTE_PASS_VOLUME
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     vec3 velocity = texelFetch(VelocityVolume, gridCoord, 0).xyz;
-    uvec3 maxGridCoord = gl_NumWorkGroups * gl_WorkGroupSize - uvec3(1);
+    uvec3 maxGridCoord = textureSize(VelocityVolume, 0) - uvec3(1);
 
     // Don't compute divergence if there's no fluid
     vec4 mid = texelFetch(VelocityVolume, gridCoord, 0);

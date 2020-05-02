@@ -9,9 +9,10 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
-    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    ivec3 gridCoordI = ivec3(gl_GlobalInvocationID);
+    vec3 gridCoord = vec3(gl_GlobalInvocationID) + vec3(0.5); // Quantities are stored at the center.
 
-    vec4 currentVelocity = imageLoad(VelocityVolume, gridCoord);
+    vec4 currentVelocity = imageLoad(VelocityVolume, gridCoordI);
     if (currentVelocity.w == 0.0)
         return;
 
@@ -20,14 +21,14 @@ void main() {
     // The divergence at that point is 0, and there is (ignoring corners) only one neighboring fluid pressure value, therefore p_boundary-p_fluid=0
     // (divergence)
     vec3 inverseGridSize = vec3(1.0) / textureSize(PressureVolume, 0);
-    float x0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - ivec3(1, 0, 0)) * inverseGridSize, 0).x;
-    float x1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + ivec3(1, 0, 0)) * inverseGridSize, 0).x;
-    float y0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - ivec3(0, 1, 0)) * inverseGridSize, 0).x;
-    float y1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + ivec3(0, 1, 0)) * inverseGridSize, 0).x;
-    float z0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - ivec3(0, 0, 1)) * inverseGridSize, 0).x;
-    float z1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + ivec3(0, 0, 1)) * inverseGridSize, 0).x;
+    float x0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - vec3(1, 0, 0)) * inverseGridSize, 0).x;
+    float x1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + vec3(1, 0, 0)) * inverseGridSize, 0).x;
+    float y0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - vec3(0, 1, 0)) * inverseGridSize, 0).x;
+    float y1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + vec3(0, 1, 0)) * inverseGridSize, 0).x;
+    float z0 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord - vec3(0, 0, 1)) * inverseGridSize, 0).x;
+    float z1 = textureLod(sampler3D(PressureVolume, SamplerPointClamp), (gridCoord + vec3(0, 0, 1)) * inverseGridSize, 0).x;
     vec3 pressureGradient = (vec3(x1, y1, z1) - vec3(x0, y0, z0)) * 0.5;
 
     vec3 velocity = currentVelocity.xyz - pressureGradient;
-    imageStore(VelocityVolume, gridCoord, velocity.xyzz);
+    imageStore(VelocityVolume, gridCoordI, vec4(velocity, currentVelocity.w)); // Don't need w coordinate anymore, but it's useful for debugging
 }

@@ -21,7 +21,7 @@ void gatherVelocitiesFromLinkedList(inout vec4 velocityAndWeight, vec3 velocityG
 }
 
 void main() {
-    vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
+    vec3 velocityGridPosition = vec3(gl_GlobalInvocationID) + vec3(0.5); // velocity is stored at the center.
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     vec4 velocityAndWeight = vec4(0.0);
     gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(0, 1, 0));
@@ -33,7 +33,7 @@ void main() {
     gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(1, 0, 0));
     gatherVelocitiesFromLinkedList(velocityAndWeight, velocityGridPosition, gridCoord - ivec3(1, 0, 1));
 
-    if (velocityAndWeight.w > 0) {
+    if (velocityAndWeight.w > 0.0) {
         velocityAndWeight.xyz /= velocityAndWeight.w;
 
         // Apply global forces.

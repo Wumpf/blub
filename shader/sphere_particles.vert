@@ -21,6 +21,9 @@ void main() {
     vec3 velocity = Particles[gl_InstanceIndex].Velocity;
     out_Tint = heatmapColor(length(velocity) * 0.1);
 
+    if (Particles[gl_InstanceIndex].DebugFlag > 0)
+        out_Tint = vec3(10.0, 0.0, 10.0);
+
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
 
     // Spanning billboards is easy!

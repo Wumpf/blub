@@ -9,5 +9,5 @@ struct Particle {
     vec3 Position;
     uint LinkedListNext;
     vec3 Velocity;
-    float Padding1;
+    uint DebugFlag;
 };
