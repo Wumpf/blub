@@ -18,6 +18,7 @@ mod wgpu_utils;
 
 use per_frame_resources::*;
 use screen::*;
+use simulation_controller::SimulationControllerStatus;
 use std::path::{Path, PathBuf};
 use wgpu_utils::shader;
 use winit::{
@@ -138,6 +139,7 @@ impl Application {
                         WindowEvent::KeyboardInput {
                             input:
                                 KeyboardInput {
+                                    state: winit::event::ElementState::Pressed,
                                     virtual_keycode: Some(virtual_keycode),
                                     ..
                                 },
@@ -145,7 +147,13 @@ impl Application {
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
                             VirtualKeyCode::Snapshot => self.schedule_screenshot(),
-                            VirtualKeyCode::Space => self.simulation_controller.schedule_restart(),
+                            VirtualKeyCode::Space => {
+                                self.simulation_controller.status = if self.simulation_controller.status == SimulationControllerStatus::Paused {
+                                    SimulationControllerStatus::Realtime
+                                } else {
+                                    SimulationControllerStatus::Paused
+                                }
+                            }
                             _ => {}
                         },
                         _ => {}

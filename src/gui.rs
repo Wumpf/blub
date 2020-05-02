@@ -1,11 +1,16 @@
 use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use imgui::im_str;
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
+struct GUIState {
+    fast_forward_length_seconds: f32,
+}
 pub struct GUI {
     imgui_context: imgui::Context,
     imgui_platform: imgui_winit_support::WinitPlatform,
     imgui_renderer: imgui_wgpu::Renderer,
+
+    state: GUIState,
 }
 
 impl GUI {
@@ -35,6 +40,10 @@ impl GUI {
             imgui_context,
             imgui_platform,
             imgui_renderer,
+
+            state: GUIState {
+                fast_forward_length_seconds: 5.0,
+            },
         }
     }
 
@@ -47,6 +56,8 @@ impl GUI {
         simulation_controller: &mut SimulationController,
     ) {
         let context = &mut self.imgui_context;
+        let state = &mut self.state;
+
         //let state = &mut self.state;
         //self.imgui_context.io_mut().update_delta_time(tim().frame_delta()); // Needed?
         self.imgui_platform
@@ -54,6 +65,8 @@ impl GUI {
             .expect("Failed to prepare imgui frame");
         let ui = context.frame();
         {
+            const DEFAULT_BUTTON_HEIGHT: f32 = 19.0;
+
             let window = imgui::Window::new(im_str!("Blub"));
             window
                 .position([0.0, 0.0], imgui::Condition::FirstUseEver)
@@ -96,7 +109,7 @@ impl GUI {
 
                     ui.separator();
 
-                    let mut simulation_time_seconds = simulation_controller.simulation_length.as_secs_f32();
+                    let mut simulation_time_seconds = simulation_controller.simulation_stop_time.as_secs_f32();
                     ui.push_item_width(110.0);
                     if ui
                         .input_float(im_str!("target simulation time (s)"), &mut simulation_time_seconds)
@@ -104,7 +117,7 @@ impl GUI {
                         .enter_returns_true(true)
                         .build()
                     {
-                        simulation_controller.simulation_length = std::time::Duration::from_secs_f32(simulation_time_seconds);
+                        simulation_controller.simulation_stop_time = std::time::Duration::from_secs_f32(simulation_time_seconds);
                     }
 
                     let mut simulation_steps_per_second = simulation_controller.simulation_steps_per_second() as i32;
@@ -118,33 +131,44 @@ impl GUI {
                     }
 
                     {
-                        if ui.small_button(im_str!("Reset (Space)")) {
+                        if ui.button(im_str!("Reset"), [50.0, DEFAULT_BUTTON_HEIGHT]) {
                             simulation_controller.schedule_restart();
                         }
                         ui.same_line(0.0);
                         if simulation_controller.status == SimulationControllerStatus::Paused {
-                            if ui.small_button(im_str!("Continue")) {
+                            if ui.button(im_str!("Continue  (Space)"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
                                 simulation_controller.status = SimulationControllerStatus::Realtime;
                             }
                         } else {
-                            if ui.small_button(im_str!("Pause")) {
+                            if ui.button(im_str!("Pause  (Space)"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
                                 simulation_controller.status = SimulationControllerStatus::Paused;
                             }
                         }
                     }
                     {
-                        if ui.small_button(im_str!("Fast Forward")) {
-                            simulation_controller.status = SimulationControllerStatus::FastForward;
+                        let min_jump = 1.0 / simulation_controller.simulation_steps_per_second() as f32;
+                        state.fast_forward_length_seconds = state.fast_forward_length_seconds.max(min_jump);
+                        ui.set_next_item_width(50.0);
+                        ui.drag_float(im_str!(""), &mut state.fast_forward_length_seconds)
+                            .min(min_jump)
+                            .max(120.0)
+                            .display_format(im_str!("%.2f"))
+                            .build();
+                        ui.same_line(0.0);
+                        if ui.button(im_str!("Fast Forward"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
+                            simulation_controller.status = SimulationControllerStatus::FastForward {
+                                simulation_jump_length: Duration::from_secs_f32(state.fast_forward_length_seconds),
+                            };
                         }
                         ui.same_line(0.0);
                         ui.text_disabled(im_str!("last jump took {:?}", simulation_controller.computation_time_last_fast_forward()));
                     }
                     if let SimulationControllerStatus::Record { .. } = simulation_controller.status {
-                        if ui.small_button(im_str!("End Recording")) {
+                        if ui.button(im_str!("End Recording"), [208.0, DEFAULT_BUTTON_HEIGHT]) {
                             simulation_controller.status = SimulationControllerStatus::Paused;
                         }
                     } else {
-                        if ui.small_button(im_str!("Reset & Record")) {
+                        if ui.button(im_str!("Reset & Record Video"), [208.0, DEFAULT_BUTTON_HEIGHT]) {
                             simulation_controller.schedule_restart();
                             for i in 0..usize::MAX {
                                 let output_directory = PathBuf::from(format!("recording{}", i));
