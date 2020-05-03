@@ -152,6 +152,7 @@ impl GUI {
                         ui.drag_float(im_str!(""), &mut state.fast_forward_length_seconds)
                             .min(min_jump)
                             .max(120.0)
+                            .speed(0.005)
                             .display_format(im_str!("%.2f"))
                             .build();
                         ui.same_line(0.0);
