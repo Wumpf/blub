@@ -1,4 +1,5 @@
 // Subtracts pressure gradient from velocity volume to make it divergence free.
+// (applies pressure forces)
 
 #version 450
 
@@ -13,7 +14,7 @@ void main() {
     vec3 gridCoord = vec3(gl_GlobalInvocationID) + vec3(0.5); // Quantities are stored at the center.
 
     vec4 currentVelocity = imageLoad(VelocityVolume, gridCoordI);
-    if (currentVelocity.w == 0.0)
+    if (currentVelocity.w != CELL_FLUID)
         return;
 
     // Compute pressure gradient with central differences

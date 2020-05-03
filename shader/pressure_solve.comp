@@ -15,6 +15,19 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+
+    // Boundary conditions:
+    // Air: Dirichlet (-> pressure is set to zero)
+    // Solid: Neumann (-> velocity of fluid is boundary velocity -> pressure gradient is negative boundary velocity)
+
+    // Is this a fluid cell?
+    if (texelFetch(VelocityVolume, gridCoord, 0).w != CELL_FLUID) {
+        // Since we don't have a specific clear pass, we need to clear pressure out here.
+        // TODO: Shown that this costs us perf as we do many pressure iterations, we're doing this write a lot
+        imageStore(PressureVolumeWrite, gridCoord, vec4(0.0));
+        return;
+    }
+
     uvec3 maxGridCoord = textureSize(VelocityVolume, 0) - uvec3(1);
 
     // todo: more boundary conditions than just walls!
@@ -36,12 +49,12 @@ void main() {
 
     // jacobi iteration
     float divergence = texelFetch(DivergenceVolume, gridCoord, 0).x;
-    bool isFluidX0 = texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).w != 0.0;
-    bool isFluidX1 = texelFetch(VelocityVolume, gridCoord + ivec3(1, 0, 0), 0).w != 0.0;
-    bool isFluidY0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).w != 0.0;
-    bool isFluidY1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 1, 0), 0).w != 0.0;
-    bool isFluidZ0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).w != 0.0;
-    bool isFluidZ1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 0, 1), 0).w != 0.0;
+    bool isFluidX0 = texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).w == CELL_FLUID;
+    bool isFluidX1 = texelFetch(VelocityVolume, gridCoord + ivec3(1, 0, 0), 0).w == CELL_FLUID;
+    bool isFluidY0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).w == CELL_FLUID;
+    bool isFluidY1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 1, 0), 0).w == CELL_FLUID;
+    bool isFluidZ0 = texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).w == CELL_FLUID;
+    bool isFluidZ1 = texelFetch(VelocityVolume, gridCoord + ivec3(0, 0, 1), 0).w == CELL_FLUID;
 
     float pressureX0 = isFluidX0 ? texelFetch(PressureVolumeRead, gridCoord - ivec3(1, 0, 0), 0).x : 0.0;
     float pressureX1 = isFluidX1 ? texelFetch(PressureVolumeRead, gridCoord + ivec3(1, 0, 0), 0).x : 0.0;
