@@ -14,11 +14,11 @@ COMPUTE_PASS_PARTICLES
 // Conveniently, texture coordinates are offset: 0.0 has a halfoffset (0.5 * gridTexelSizeNormalized) to the center of the first texel.
 
 vec3 SampleVelocity(vec3 position, vec3 gridTexelSizeNormalized) {
-    return texture(sampler3D(VelocityVolume, SamplerTrilinearClamp), position * gridTexelSizeNormalized).xyz;
+    return textureLod(sampler3D(VelocityVolume, SamplerTrilinearClamp), position * gridTexelSizeNormalized, 0.0).xyz;
 }
 
 vec3 SampleVelocityNearest(vec3 position, vec3 gridTexelSizeNormalized) {
-    return texture(sampler3D(VelocityVolume, SamplerPointClamp), position * gridTexelSizeNormalized).xyz;
+    return textureLod(sampler3D(VelocityVolume, SamplerPointClamp), position * gridTexelSizeNormalized, 0.0).xyz;
 }
 
 void main() {
@@ -26,7 +26,8 @@ void main() {
     if (particleIndex >= NumParticles)
         return;
 
-    vec3 gridSize = vec3(textureSize(VelocityVolume, 0));
+    ivec3 gridSize = ivec3(textureSize(VelocityVolume, 0));
+    ivec3 maxGridCoord = gridSize - ivec3(1);
     vec3 gridTexelSizeNormalized = 1.0 / gridSize;
 
     // Fetch position from grid, trilinearly interpolated.
@@ -35,15 +36,27 @@ void main() {
 
     // Update APIC's affine matrix.
     // Use texture sampler to get clamp-to-border behavior cheaply
-    vec3 v000 = SampleVelocityNearest(originalPosition + (vec3(0, 0, 0) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 v100 = SampleVelocityNearest(originalPosition + (vec3(1, 0, 0) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 v010 = SampleVelocityNearest(originalPosition + (vec3(0, 1, 0) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 v110 = SampleVelocityNearest(originalPosition + (vec3(1, 1, 0) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 v001 = SampleVelocityNearest(originalPosition + (vec3(0, 0, 1) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 v101 = SampleVelocityNearest(originalPosition + (vec3(1, 0, 1) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 v011 = SampleVelocityNearest(originalPosition + (vec3(0, 1, 1) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 v111 = SampleVelocityNearest(originalPosition + (vec3(1, 1, 1) - vec3(0.5)), gridTexelSizeNormalized);
-    vec3 interpolants = fract(originalPosition);
+    // TODO: What's better, texelFetch with clamp or using the sampler?
+    vec3 v000 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(0, 0, 0), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(0, 0, 0) - vec3(0.5)), gridTexelSizeNormalized);
+    vec3 v100 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(1, 0, 0), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(1, 0, 0) - vec3(0.5)), gridTexelSizeNormalized);
+    vec3 v010 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(0, 1, 0), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(0, 1, 0) - vec3(0.5)), gridTexelSizeNormalized);
+    vec3 v110 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(1, 1, 0), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(1, 1, 0) - vec3(0.5)), gridTexelSizeNormalized);
+    vec3 v001 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(0, 0, 1), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(0, 0, 1) - vec3(0.5)), gridTexelSizeNormalized);
+    vec3 v101 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(1, 0, 1), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(1, 0, 1) - vec3(0.5)), gridTexelSizeNormalized);
+    vec3 v011 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(0, 1, 1), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(0, 1, 1) - vec3(0.5)), gridTexelSizeNormalized);
+    vec3 v111 = texelFetch(VelocityVolume, clamp(ivec3(originalPosition - vec3(0.5)) + ivec3(1, 1, 1), ivec3(0), maxGridCoord), 0)
+                    .xyz; // SampleVelocityNearest(originalPosition + (vec3(1, 1, 1) - vec3(0.5)), gridTexelSizeNormalized);
+
+    // vec3 interpolantsSampler = (originalPosition * gridTexelSizeNormalized)
+
+    vec3 interpolants = fract(originalPosition - vec3(0.5));
     // velocity via manual trilinear interpolation.
     // TODO: try gpu texture sampler interpolation instead.
     vec3 newVelocity = mix(mix(mix(v000, v100, interpolants.x), mix(v010, v110, interpolants.x), interpolants.y),
