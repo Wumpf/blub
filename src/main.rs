@@ -139,19 +139,21 @@ impl Application {
                         WindowEvent::KeyboardInput {
                             input:
                                 KeyboardInput {
-                                    state: winit::event::ElementState::Pressed,
+                                    state,
                                     virtual_keycode: Some(virtual_keycode),
                                     ..
                                 },
                             ..
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                            VirtualKeyCode::Snapshot => self.schedule_screenshot(),
+                            VirtualKeyCode::Snapshot => self.schedule_screenshot(), // Bug? doesn't seem to receive a winit::event::ElementState::Pressed event.
                             VirtualKeyCode::Space => {
-                                self.simulation_controller.status = if self.simulation_controller.status == SimulationControllerStatus::Paused {
-                                    SimulationControllerStatus::Realtime
-                                } else {
-                                    SimulationControllerStatus::Paused
+                                if let winit::event::ElementState::Pressed = state {
+                                    self.simulation_controller.status = if self.simulation_controller.status == SimulationControllerStatus::Paused {
+                                        SimulationControllerStatus::Realtime
+                                    } else {
+                                        SimulationControllerStatus::Paused
+                                    }
                                 }
                             }
                             _ => {}
