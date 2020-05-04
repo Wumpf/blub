@@ -2,7 +2,7 @@
 #include "particles.glsl"
 #include "per_frame_resources.glsl"
 
-layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
+layout(set = 2, binding = 0, row_major) buffer restrict ParticleBuffer { Particle Particles[]; };
 // Velocity volume with quantities at the centers.
 // Texel at imageCoord(0,0,0) represents velocity at world/grid coord (0.5, 0.5, 0.5)
 layout(set = 2, binding = 1, rgba32f) uniform restrict image3D VelocityVolume;

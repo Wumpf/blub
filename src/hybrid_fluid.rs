@@ -54,11 +54,10 @@ struct Particle {
     // (no scaling/translation needed until we're rendering or interacting with other objects!)
     position: cgmath::Point3<f32>,
     linked_list_next: u32,
-    velocity: PaddedVector3,
 
-    c0: PaddedVector3,
-    c1: PaddedVector3,
-    c2: PaddedVector3,
+    velocity_matrix_0: cgmath::Vector4<f32>,
+    velocity_matrix_1: cgmath::Vector4<f32>,
+    velocity_matrix_2: cgmath::Vector4<f32>,
 }
 
 impl HybridFluid {
@@ -303,10 +302,7 @@ impl HybridFluid {
             *particle = Particle {
                 position,
                 linked_list_next: 0xFFFFFFFF,
-                velocity: cgmath::vec3(0.0, 0.0, 0.0).into(),
-                c0: cgmath::vec3(0.0, 0.0, 0.0).into(),
-                c1: cgmath::vec3(0.0, 0.0, 0.0).into(),
-                c2: cgmath::vec3(0.0, 0.0, 0.0).into(),
+                velocity_matrix: cgmath::Zero::zero(),
             };
         }
 

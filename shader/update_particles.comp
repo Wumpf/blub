@@ -5,7 +5,7 @@
 #include "per_frame_resources.glsl"
 #include "utilities.glsl"
 
-layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
+layout(set = 2, binding = 0, row_major) buffer restrict ParticleBuffer { Particle Particles[]; };
 layout(set = 2, binding = 1) uniform texture3D VelocityVolume;
 
 COMPUTE_PASS_PARTICLES
@@ -63,8 +63,6 @@ void main() {
               mix(mix(v_000, v_010, interpolants.y), mix(v_001, v_011, interpolants.y), interpolants.z);
     vec3 cy = mix(v_x10, v_x11, interpolants.z) - mix(v_x00, v_x01, interpolants.z);
     vec3 cz = v_xy1 - v_xy0;
-    Particles[particleIndex].Velocity = newVelocity;
-    Particles[particleIndex].ApicMatrix = mat3(cx, cy, cz);
 
     // Advect with Runge Kutta 4
     // confined to current cell for which we know velocities are defined and we already sampled all corners - which makes this relatively cheap.
@@ -81,5 +79,8 @@ void main() {
     // vec3 clampRatio = clampedMovement / totalMovement;
     // float clampFactor = min(min(clampRatio.x, clampRatio.y), clampRatio.z);
     vec3 newPosition = clamp(originalPosition + totalMovement, vec3(0.0), gridSize);
+
     Particles[particleIndex].Position = newPosition;
+    Particles[particleIndex].VelocityMatrix = mat4x3(cx, cy, cz, newVelocity);
+    // Particles[particleIndex].VelocityMatrix[3] = newVelocity; // PIC only
 }

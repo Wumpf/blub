@@ -8,7 +8,5 @@ struct Particle {
     // Grid coordinates are non-fractional.
     vec3 Position;
     uint LinkedListNext;
-    vec3 Velocity;
-    uint DebugFlag;
-    mat3 ApicMatrix; // TODO: Pack properly
+    mat4x3 VelocityMatrix; // 3x3 Velocity jacobi matrix (APIC) + velocity vector (column 4)
 };

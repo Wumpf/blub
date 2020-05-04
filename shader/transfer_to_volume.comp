@@ -16,7 +16,7 @@ void gatherVelocitiesFromLinkedList(inout vec4 velocityAndWeight, vec3 velocityG
         vec3 toGridCenter = velocityGridPosition - Particles[particleIndex].Position;
         vec3 d = saturate(vec3(1.0) - abs(toGridCenter));
         float weight = d.x * d.y * d.z;
-        velocityAndWeight.xyz += weight * (Particles[particleIndex].Velocity + Particles[particleIndex].ApicMatrix * toGridCenter);
+        velocityAndWeight.xyz += weight * (Particles[particleIndex].VelocityMatrix * vec4(toGridCenter, 1.0));
         velocityAndWeight.w += weight;
         particleIndex = Particles[particleIndex].LinkedListNext;
     }
