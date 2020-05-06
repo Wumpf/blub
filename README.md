@@ -9,6 +9,8 @@ For SPH (pure lagrangian) fluid simulation, check out my simple 2D DFSPH fluid s
 
 To learn more about fluid simulation in general, check out [my Gist on CFD](https://gist.github.com/Wumpf/b3e953984de8b0efdf2c65e827a1ccc3) where I gathered a lot of resources on the topic.
 
+Implements currently APIC, [SIGGRAPH 2015, Jiang et al., The Affine Particle-In-Cell Method](https://www.math.ucla.edu/%7Ejteran/papers/JSSTS15.pdf).
+
 ### Particle to Grid Transfer
 
 Transferring the particle's velocity to the grid is tricky/costly to do in parallel!
