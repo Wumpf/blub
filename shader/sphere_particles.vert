@@ -4,7 +4,7 @@
 #include "per_frame_resources.glsl"
 #include "utilities.glsl"
 
-layout(set = 1, binding = 0, row_major) buffer restrict ParticleBuffer { Particle Particles[]; };
+layout(set = 1, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 
 out gl_PerVertex { vec4 gl_Position; };
 
@@ -18,7 +18,8 @@ vec3 heatmapColor(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2));
 
 void main() {
     const float radius = 0.25; // todo.
-    vec3 velocity = Particles[gl_InstanceIndex].VelocityMatrix[3];
+    vec3 velocity = vec3(Particles[gl_InstanceIndex].VelocityMatrix[0].w, Particles[gl_InstanceIndex].VelocityMatrix[1].w,
+                         Particles[gl_InstanceIndex].VelocityMatrix[2].w);
     out_Tint = heatmapColor(length(velocity) * 0.05); // TODO: Please make me tweakable
 
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;

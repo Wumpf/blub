@@ -5,7 +5,7 @@
 #include "per_frame_resources.glsl"
 #include "utilities.glsl"
 
-layout(set = 2, binding = 0, row_major) buffer restrict ParticleBuffer { Particle Particles[]; };
+layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 layout(set = 2, binding = 1) uniform texture3D VelocityVolume;
 
 COMPUTE_PASS_PARTICLES
@@ -76,6 +76,12 @@ void main() {
     vec3 newPosition = clamp(originalPosition + totalMovement, vec3(0.5), gridSize - vec3(0.5));
 
     Particles[particleIndex].Position = newPosition;
-    Particles[particleIndex].VelocityMatrix = mat4x3(cx, cy, cz, newVelocity);
-    // Particles[particleIndex].VelocityMatrix[3] = newVelocity; // PIC only
+    Particles[particleIndex].VelocityMatrix[0] = vec4(cx, newVelocity.x);
+    Particles[particleIndex].VelocityMatrix[1] = vec4(cy, newVelocity.y);
+    Particles[particleIndex].VelocityMatrix[2] = vec4(cz, newVelocity.z);
+
+    // PIC only
+    // Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
+    // Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);
+    // Particles[particleIndex].VelocityMatrix[2] = vec4(vec3(0), newVelocity.z);
 }

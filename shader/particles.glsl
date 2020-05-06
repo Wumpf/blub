@@ -8,5 +8,8 @@ struct Particle {
     // Grid coordinates are non-fractional.
     vec3 Position;
     uint LinkedListNext;
-    mat4x3 VelocityMatrix; // 3x3 Velocity jacobi matrix (APIC) + velocity vector (column 4)
+
+    // 3x3 Velocity jacobi matrix (APIC) + velocity vector (column 4)
+    // We want a mat4x3 with row major storage. This works with special layout attributes but assignment is still weird, so let's play this safe!
+    vec4 VelocityMatrix[3];
 };
