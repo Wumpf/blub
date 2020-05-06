@@ -24,6 +24,7 @@ void main() {
     if (texelFetch(VelocityVolume, gridCoord, 0).w != CELL_FLUID) {
         // Since we don't have a specific clear pass, we need to clear pressure out here.
         // TODO: Shown that this costs us perf as we do many pressure iterations, we're doing this write a lot
+        // Check remove_divergence.comp on how we deal with pressure in CELL_SOLID
         imageStore(PressureVolumeWrite, gridCoord, vec4(0.0));
         return;
     }

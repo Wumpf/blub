@@ -34,7 +34,7 @@ impl Scene {
             device,
             &mut init_encoder,
             cgmath::Point3::new(0.0, 0.0, 0.0),
-            cgmath::Point3::new(64.0, 40.0, 64.0),
+            cgmath::Point3::new(63.0, 40.0, 63.0),
         );
 
         // Should this be bundled with others?

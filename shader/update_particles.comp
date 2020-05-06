@@ -10,10 +10,6 @@ layout(set = 2, binding = 1) uniform texture3D VelocityVolume;
 
 COMPUTE_PASS_PARTICLES
 
-vec3 SampleVelocity(vec3 position, vec3 gridTexelSizeNormalized) {
-    return textureLod(sampler3D(VelocityVolume, SamplerTrilinearClamp), position * gridTexelSizeNormalized, 0.0).xyz;
-}
-
 vec3 InterpolateTrilinear(vec3 v_000, vec3 v_100, vec3 v_010, vec3 v_110, vec3 v_001, vec3 v_101, vec3 v_011, vec3 v_111, vec3 interpolants) {
     return mix(mix(mix(v_000, v_100, interpolants.x), mix(v_010, v_110, interpolants.x), interpolants.y),
                mix(mix(v_001, v_101, interpolants.x), mix(v_011, v_111, interpolants.x), interpolants.y), interpolants.z);
@@ -30,27 +26,26 @@ void main() {
     // Sample all 8 neighboring velocity grid cells
     //
     // Notes from experimentation texture sampling:
-    // * texelFetch is either slower or as fast but requires us to do some more work for clamp to border
-    //   (we're getting it for free with SamplerPointClamp)
-    // * using linear sampler repeatedly
-    //   (6x linear sample instead of 8x direct sample + manual interpolate) is indeed slower (as one would hope for sanity's sake :))
+    // * texelFetch is either slower or as fast. Previously allowed particles outside the volume in which case it was better since we got boundaries
+    // for free wiht SamplerPointClamp
+    // * using linear sampler repeatedly (6x linear sample instead of 8x direct sample + manual interpolate) is indeed slower
+    // (as one would hope for sanity's sake :))
     vec3 originalPosition = Particles[particleIndex].Position;
-    vec3 volumePosition = originalPosition - vec3(0.5); // Velocity volume information is conceptually stored at the _center_ of each cell.
-    vec3 volumeCoordMin = trunc(volumePosition) * gridTexelSizeNormalized; // TODO: floor should be the correct thing but we're seeing a lot of more
-                                                                           // volume loss with it (no stuck particles though!)
-    vec3 volumeCoordMax = volumeCoordMin + gridTexelSizeNormalized;
-    vec3 v_000 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), volumeCoordMin, 0.0).xyz;
-    vec3 v_100 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), vec3(volumeCoordMax.x, volumeCoordMin.yz), 0.0).xyz;
-    vec3 v_010 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), vec3(volumeCoordMin.x, volumeCoordMax.y, volumeCoordMin.z), 0.0).xyz;
-    vec3 v_110 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), vec3(volumeCoordMax.xy, volumeCoordMin.z), 0.0).xyz;
-    vec3 v_001 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), vec3(volumeCoordMin.xy, volumeCoordMax.z), 0.0).xyz;
-    vec3 v_101 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), vec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z), 0.0).xyz;
-    vec3 v_011 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), vec3(volumeCoordMin.x, volumeCoordMax.yz), 0.0).xyz;
-    vec3 v_111 = textureLod(sampler3D(VelocityVolume, SamplerPointClamp), volumeCoordMax, 0.0).xyz;
+    vec3 offsetPosition = originalPosition - vec3(0.5);
+    ivec3 volumeCoordMin = ivec3(offsetPosition);
+    ivec3 volumeCoordMax = volumeCoordMin + ivec3(1, 1, 1);
+    vec3 v_000 = texelFetch(VelocityVolume, volumeCoordMin, 0).xyz;
+    vec3 v_100 = texelFetch(VelocityVolume, ivec3(volumeCoordMax.x, volumeCoordMin.yz), 0).xyz;
+    vec3 v_010 = texelFetch(VelocityVolume, ivec3(volumeCoordMin.x, volumeCoordMax.y, volumeCoordMin.z), 0).xyz;
+    vec3 v_110 = texelFetch(VelocityVolume, ivec3(volumeCoordMax.xy, volumeCoordMin.z), 0).xyz;
+    vec3 v_001 = texelFetch(VelocityVolume, ivec3(volumeCoordMin.xy, volumeCoordMax.z), 0).xyz;
+    vec3 v_101 = texelFetch(VelocityVolume, ivec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z), 0).xyz;
+    vec3 v_011 = texelFetch(VelocityVolume, ivec3(volumeCoordMin.x, volumeCoordMax.yz), 0).xyz;
+    vec3 v_111 = texelFetch(VelocityVolume, volumeCoordMax, 0).xyz;
 
     // Update velocity and the APIC affine matrix.
     // Trilinear interpolation for velocity.
-    vec3 interpolants = fract(volumePosition + vec3(1.0));
+    vec3 interpolants = fract(offsetPosition);
     vec3 v_x00 = mix(v_000, v_100, interpolants.x);
     vec3 v_x01 = mix(v_001, v_101, interpolants.x);
     vec3 v_x10 = mix(v_010, v_110, interpolants.x);
@@ -78,7 +73,7 @@ void main() {
     // vec3 clampedMovement = clamp(originalPosition + totalMovement, boundaryMin, boundaryMax) - originalPosition;
     // vec3 clampRatio = clampedMovement / totalMovement;
     // float clampFactor = min(min(clampRatio.x, clampRatio.y), clampRatio.z);
-    vec3 newPosition = clamp(originalPosition + totalMovement, vec3(0.0), gridSize);
+    vec3 newPosition = clamp(originalPosition + totalMovement, vec3(0.5), gridSize - vec3(0.5));
 
     Particles[particleIndex].Position = newPosition;
     Particles[particleIndex].VelocityMatrix = mat4x3(cx, cy, cz, newVelocity);

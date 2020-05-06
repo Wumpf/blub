@@ -44,7 +44,7 @@ pub struct HybridFluid {
     max_num_particles: u32,
 }
 
-static mut group_layout_renderer: Option<BindGroupLayoutWithDesc> = None;
+static mut GROUP_LAYOUT_RENDERER: Option<BindGroupLayoutWithDesc> = None;
 
 // todo: probably want to split this up into several buffers
 #[repr(C)]
@@ -294,15 +294,17 @@ impl HybridFluid {
         for (i, particle) in new_particles.iter_mut().enumerate() {
             //let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
             let cell = cgmath::Point3::new(
-                (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
-                (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
-                (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
+                (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32 + 0.5,
+                (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32 + 0.5,
+                (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32 + 0.5,
             );
             let position = cell + rng.gen::<cgmath::Vector3<f32>>();
             *particle = Particle {
                 position,
                 linked_list_next: 0xFFFFFFFF,
-                velocity_matrix: cgmath::Zero::zero(),
+                velocity_matrix_0: cgmath::Zero::zero(),
+                velocity_matrix_1: cgmath::Zero::zero(),
+                velocity_matrix_2: cgmath::Zero::zero(),
             };
         }
 
@@ -337,7 +339,7 @@ impl HybridFluid {
 
     pub fn get_or_create_group_layout_renderer(device: &wgpu::Device) -> &BindGroupLayoutWithDesc {
         unsafe {
-            group_layout_renderer.get_or_insert_with(|| {
+            GROUP_LAYOUT_RENDERER.get_or_insert_with(|| {
                 BindGroupLayoutBuilder::new()
                     .next_binding_vertex(binding_glsl::buffer(true))
                     .create(device, "BindGroupLayout: ParticleRenderer")
