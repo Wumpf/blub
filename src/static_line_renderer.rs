@@ -1,3 +1,4 @@
+use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use std::path::Path;
 
@@ -71,29 +72,10 @@ impl StaticLineRenderer {
                 module: &fs_module,
                 entry_point: SHADER_ENTRY_POINT_NAME,
             }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: wgpu::CullMode::None,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
-            }),
+            rasterization_state: Some(rasterization_state::culling_none()),
             primitive_topology: wgpu::PrimitiveTopology::LineList,
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: super::Screen::FORMAT_BACKBUFFER,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
-                format: super::Screen::FORMAT_DEPTH,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::LessEqual,
-                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_read_mask: 0,
-                stencil_write_mask: 0,
-            }),
+            color_states: &[color_state::write_all(super::Screen::FORMAT_BACKBUFFER)],
+            depth_stencil_state: Some(depth_state::default_read_write(super::Screen::FORMAT_DEPTH)),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
@@ -113,7 +95,6 @@ impl StaticLineRenderer {
                     ],
                 }],
             },
-
             sample_count: 1,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,

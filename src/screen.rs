@@ -1,6 +1,7 @@
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
+use pipelines::*;
 use std::path::{Path, PathBuf};
 
 pub struct Screen {
@@ -100,20 +101,9 @@ impl Screen {
                 module: &fs_module,
                 entry_point: SHADER_ENTRY_POINT_NAME,
             }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: wgpu::CullMode::None,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
-            }),
+            rasterization_state: Some(rasterization_state::culling_none()),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: super::Screen::FORMAT_SWAPCHAIN,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
+            color_states: &[color_state::write_all(Self::FORMAT_SWAPCHAIN)],
             depth_stencil_state: None,
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,

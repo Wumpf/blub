@@ -45,3 +45,40 @@ impl ReloadableComputePipeline {
         &self.pipeline
     }
 }
+
+pub mod rasterization_state {
+    pub fn culling_none() -> wgpu::RasterizationStateDescriptor {
+        wgpu::RasterizationStateDescriptor {
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: wgpu::CullMode::None,
+            depth_bias: 0,
+            depth_bias_slope_scale: 0.0,
+            depth_bias_clamp: 0.0,
+        }
+    }
+}
+
+pub mod color_state {
+    pub fn write_all(format: wgpu::TextureFormat) -> wgpu::ColorStateDescriptor {
+        wgpu::ColorStateDescriptor {
+            format: format,
+            color_blend: wgpu::BlendDescriptor::REPLACE,
+            alpha_blend: wgpu::BlendDescriptor::REPLACE,
+            write_mask: wgpu::ColorWrite::ALL,
+        }
+    }
+}
+
+pub mod depth_state {
+    pub fn default_read_write(format: wgpu::TextureFormat) -> wgpu::DepthStencilStateDescriptor {
+        wgpu::DepthStencilStateDescriptor {
+            format,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::LessEqual,
+            stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
+            stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
+            stencil_read_mask: 0,
+            stencil_write_mask: 0,
+        }
+    }
+}
