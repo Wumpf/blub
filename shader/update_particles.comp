@@ -75,11 +75,11 @@ void main() {
     // float clampFactor = min(min(clampRatio.x, clampRatio.y), clampRatio.z);
     vec3 newPosition = clamp(originalPosition + totalMovement, vec3(0.5), gridSize - vec3(0.5));
 
+    // Write out particle.
     Particles[particleIndex].Position = newPosition;
     Particles[particleIndex].VelocityMatrix[0] = vec4(cx, newVelocity.x);
     Particles[particleIndex].VelocityMatrix[1] = vec4(cy, newVelocity.y);
     Particles[particleIndex].VelocityMatrix[2] = vec4(cz, newVelocity.z);
-
     // PIC only
     // Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
     // Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);

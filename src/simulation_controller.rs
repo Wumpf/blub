@@ -89,7 +89,7 @@ impl SimulationController {
     // Note that we assume that this never happens for realtime & recording, but it well could once a single simulation + render step takes longer than TDR time.
     pub fn fast_forward_steps(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene, per_frame_bind_group: &wgpu::BindGroup) {
         // TODO: Dynamic estimate to keep batches around 0.5 seconds.
-        const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 512;
+        const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 256;
 
         if let SimulationControllerStatus::FastForward { simulation_jump_length } = self.status {
             // re-use stopping standard stopping mechanism to halt the simulation

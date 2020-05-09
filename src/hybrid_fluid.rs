@@ -5,7 +5,6 @@ use crate::wgpu_utils::uniformbuffer::*;
 use crate::wgpu_utils::*;
 use rand::prelude::*;
 use std::{path::Path, rc::Rc};
-use uniformbuffer::PaddedVector3;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

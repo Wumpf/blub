@@ -10,6 +10,6 @@
 layout(set = 1, binding = 0) uniform SimulationProperties { uint NumParticles; };
 
 // Boundary is zero, so texel fetch outside of the domain always gives us boundary cells.
-#define CELL_BOUNDARY 0.0
+#define CELL_SOLID 0.0
 #define CELL_FLUID 1.0
 #define CELL_AIR 2.0

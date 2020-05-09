@@ -69,7 +69,7 @@ impl ShaderDirectory {
             options.set_optimization_level(shaderc::OptimizationLevel::Performance);
             // options.set_optimization_level(shaderc::OptimizationLevel::Zero); // Useful for debugging/inspecting, e.g. via RenderDoc
 
-            options.set_include_callback(|name, ty, source_file, depth| {
+            options.set_include_callback(|name, _ty, source_file, _depth| {
                 let path = self.directory.join(name);
                 match std::fs::read_to_string(&path) {
                     Ok(glsl_code) => Ok(shaderc::ResolvedInclude {
