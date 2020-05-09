@@ -1,6 +1,4 @@
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate more_asserts;
 #[macro_use]
 extern crate log;
@@ -13,6 +11,7 @@ mod per_frame_resources;
 mod scene;
 mod screen;
 mod simulation_controller;
+mod static_line_renderer;
 mod timer;
 mod wgpu_utils;
 
@@ -81,11 +80,19 @@ impl Application {
         let screen = Screen::new(&device, &window_surface, window.inner_size(), &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
 
-        let scene = scene::Scene::new(&device, &command_queue, &shader_dir, per_frame_resources.bind_group_layout());
+        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Startup Encoder"),
+        });
+
+        let scene = scene::Scene::new(&device, &mut init_encoder, &shader_dir, per_frame_resources.bind_group_layout());
         let simulation_controller = simulation_controller::SimulationController::new();
-        let scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
+        let mut scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
+        scene_renderer.on_new_scene(&device, &mut init_encoder, &scene);
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
+
+        command_queue.submit(&[init_encoder.finish()]);
+        device.poll(wgpu::Maintain::Wait);
 
         Application {
             window,
@@ -197,12 +204,19 @@ impl Application {
             // Idiot proof way to reset the fluid: Recreate everything.
             // Previously, we reset the particles but then previous pressure computation results crept in making the reset more undeterministic than necessary
             // Note that it is NOT deterministic due to some parallel processes reordering floating point operations at random.
+            // TODO?: Keeps old scene alive until new one is fully set.
+            let mut init_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Reset Scene Encoder"),
+            });
             self.scene = scene::Scene::new(
                 &self.device,
-                &self.command_queue,
+                &mut init_encoder,
                 &self.shader_dir,
                 self.per_frame_resources.bind_group_layout(),
             );
+            self.scene_renderer.on_new_scene(&self.device, &mut init_encoder, &self.scene);
+            self.command_queue.submit(&[init_encoder.finish()]);
+            self.device.poll(wgpu::Maintain::Wait);
         }
 
         self.simulation_controller.fast_forward_steps(

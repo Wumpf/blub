@@ -1,6 +1,3 @@
-// TODO: Not a particle renderer yet.
-// The idea is to have different render backend for the fluid, which one being the particle renderer which renders the fluid as particles (sprites)
-
 use crate::hybrid_fluid::*;
 use crate::wgpu_utils::shader::*;
 use std::path::Path;

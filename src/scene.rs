@@ -1,47 +1,45 @@
 use crate::hybrid_fluid::HybridFluid;
 use crate::particle_renderer::ParticleRenderer;
+use crate::static_line_renderer::{LineVertex, StaticLineRenderer};
 use crate::wgpu_utils::shader::ShaderDirectory;
 
-// The simulated scene.
+// Scene data & simulation.
 pub struct Scene {
     hybrid_fluid: HybridFluid,
+    fluid_domain_min: cgmath::Point3<f32>,
+    fluid_domain_max: cgmath::Point3<f32>,
 }
 
 impl Scene {
     pub fn new(
         device: &wgpu::Device,
-        command_queue: &wgpu::Queue,
+        init_encoder: &mut wgpu::CommandEncoder,
         shader_dir: &ShaderDirectory,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
-        let mut hybrid_fluid = HybridFluid::new(
-            device,
-            wgpu::Extent3d {
-                width: 128,
-                height: 64,
-                depth: 64,
-            },
-            2000000,
-            shader_dir,
-            per_frame_bind_group_layout,
-        );
+        let fluid_domain_min = cgmath::Point3::new(0.0, 0.0, 0.0);
+        let fluid_domain_max = cgmath::Point3::new(128.0, 64.0, 64.0);
 
-        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Scene Init Encoder"),
-        });
+        let grid_dimension = wgpu::Extent3d {
+            width: (fluid_domain_max.x - fluid_domain_min.x) as u32,
+            height: (fluid_domain_max.y - fluid_domain_min.y) as u32,
+            depth: (fluid_domain_max.z - fluid_domain_min.z) as u32,
+        };
+
+        let mut hybrid_fluid = HybridFluid::new(device, grid_dimension, 2000000, shader_dir, per_frame_bind_group_layout);
 
         hybrid_fluid.add_fluid_cube(
             device,
-            &mut init_encoder,
+            init_encoder,
             cgmath::Point3::new(0.0, 0.0, 0.0),
             cgmath::Point3::new(63.0, 40.0, 63.0),
         );
 
-        // Should this be bundled with others?
-        command_queue.submit(&[init_encoder.finish()]);
-        device.poll(wgpu::Maintain::Wait);
-
-        Scene { hybrid_fluid }
+        Scene {
+            hybrid_fluid,
+            fluid_domain_min,
+            fluid_domain_max,
+        }
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
@@ -53,23 +51,68 @@ impl Scene {
     }
 }
 
-// What renders the scene
-// (so everything except ui!)
+// What renders the scene (so everything except ui!)
+// Maintains both configuration and necessary data structures, but doesn't shut down when a scene is swapped out.
 pub struct SceneRenderer {
     pub particle_renderer: ParticleRenderer,
+    pub line_renderer: StaticLineRenderer,
+    pub enable_box_lines: bool,
 }
 
 impl SceneRenderer {
     pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, per_frame_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
-        // Creates a new group layout for rendering for decoupling Scene from SceneRenderer
         SceneRenderer {
             particle_renderer: ParticleRenderer::new(
-                &device,
-                &shader_dir,
+                device,
+                shader_dir,
                 per_frame_bind_group_layout,
                 &HybridFluid::get_or_create_group_layout_renderer(device).layout,
             ),
+            line_renderer: StaticLineRenderer::new(device, shader_dir, per_frame_bind_group_layout, 128),
+            enable_box_lines: true,
         }
+    }
+
+    // Needs to be called whenever immutable scene properties change.
+    pub fn on_new_scene(&mut self, device: &wgpu::Device, init_encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
+        let line_color = cgmath::Vector3::new(0.0, 0.0, 0.0);
+        let min = scene.fluid_domain_min;
+        let max = scene.fluid_domain_max;
+
+        self.line_renderer.clear_lines();
+        self.line_renderer.add_lines(
+            &[
+                // left
+                LineVertex::new(cgmath::point3(min.x, min.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, min.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, min.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, max.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, max.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, max.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, max.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, min.y, max.z), line_color),
+                // right
+                LineVertex::new(cgmath::point3(min.x, min.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, min.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, min.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, max.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, max.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, max.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, max.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, min.y, min.z), line_color),
+                // between
+                LineVertex::new(cgmath::point3(min.x, min.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, min.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, min.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, min.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, max.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(max.x, max.y, max.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, max.y, min.z), line_color),
+                LineVertex::new(cgmath::point3(min.x, max.y, max.z), line_color),
+            ],
+            device,
+            init_encoder,
+        );
     }
 
     pub fn draw(
@@ -106,9 +149,14 @@ impl SceneRenderer {
 
         rpass.set_bind_group(0, per_frame_bind_group, &[]);
         self.particle_renderer.draw(&mut rpass, &scene.hybrid_fluid);
+
+        if self.enable_box_lines {
+            self.line_renderer.draw(&mut rpass);
+        }
     }
 
     pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
         self.particle_renderer.try_reload_shaders(device, shader_dir);
+        self.line_renderer.try_reload_shaders(device, shader_dir);
     }
 }
