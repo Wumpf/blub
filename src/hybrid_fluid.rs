@@ -31,13 +31,13 @@ pub struct HybridFluid {
     // The interface to any renderer of the fluid. Readonly access to relevant resources
     bind_group_renderer: wgpu::BindGroup,
 
-    pipeline_clear_llgrid: PipelineHandle,
-    pipeline_build_linkedlist_volume: PipelineHandle,
-    pipeline_transfer_to_volume: PipelineHandle,
-    pipeline_compute_divergence: PipelineHandle,
-    pipeline_pressure_solve: PipelineHandle,
-    pipeline_remove_divergence: PipelineHandle,
-    pipeline_update_particles: PipelineHandle,
+    pipeline_clear_llgrid: ComputePipelineHandle,
+    pipeline_build_linkedlist_volume: ComputePipelineHandle,
+    pipeline_transfer_to_volume: ComputePipelineHandle,
+    pipeline_compute_divergence: ComputePipelineHandle,
+    pipeline_pressure_solve: ComputePipelineHandle,
+    pipeline_remove_divergence: ComputePipelineHandle,
+    pipeline_update_particles: ComputePipelineHandle,
 
     num_particles: u32,
     max_num_particles: u32,
@@ -193,24 +193,41 @@ impl HybridFluid {
             ],
         }));
 
-        let pipeline_clear_llgrid =
-            pipeline_manager.create_compute_pipeline(device, shader_dir, &layout_write_particles_volume, Path::new("clear_llgrid.comp"));
+        let pipeline_clear_llgrid = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("clear_llgrid.comp")),
+        );
         let pipeline_build_linkedlist_volume = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            &layout_write_particles_volume,
-            Path::new("build_linkedlist_volume.comp"),
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("build_linkedlist_volume.comp")),
         );
-        let pipeline_transfer_to_volume =
-            pipeline_manager.create_compute_pipeline(device, shader_dir, &layout_write_particles_volume, Path::new("transfer_to_volume.comp"));
-        let pipeline_compute_divergence =
-            pipeline_manager.create_compute_pipeline(device, shader_dir, &layout_pressure_solve, Path::new("compute_divergence.comp"));
-        let pipeline_pressure_solve =
-            pipeline_manager.create_compute_pipeline(device, shader_dir, &layout_pressure_solve, Path::new("pressure_solve.comp"));
-        let pipeline_remove_divergence =
-            pipeline_manager.create_compute_pipeline(device, shader_dir, &layout_write_particles_volume, Path::new("remove_divergence.comp"));
-        let pipeline_update_particles =
-            pipeline_manager.create_compute_pipeline(device, shader_dir, &layout_write_particles, Path::new("update_particles.comp"));
+        let pipeline_transfer_to_volume = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("transfer_to_volume.comp")),
+        );
+        let pipeline_compute_divergence = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_pressure_solve.clone(), Path::new("compute_divergence.comp")),
+        );
+        let pipeline_pressure_solve = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_pressure_solve.clone(), Path::new("pressure_solve.comp")),
+        );
+        let pipeline_remove_divergence = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("remove_divergence.comp")),
+        );
+        let pipeline_update_particles = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_write_particles.clone(), Path::new("update_particles.comp")),
+        );
 
         HybridFluid {
             //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation

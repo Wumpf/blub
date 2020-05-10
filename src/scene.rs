@@ -57,15 +57,21 @@ pub struct SceneRenderer {
 }
 
 impl SceneRenderer {
-    pub fn new(device: &wgpu::Device, shader_dir: &ShaderDirectory, per_frame_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        shader_dir: &ShaderDirectory,
+        pipeline_manager: &mut PipelineManager,
+        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
         SceneRenderer {
             particle_renderer: ParticleRenderer::new(
                 device,
                 shader_dir,
+                pipeline_manager,
                 per_frame_bind_group_layout,
                 &HybridFluid::get_or_create_group_layout_renderer(device).layout,
             ),
-            line_renderer: StaticLineRenderer::new(device, shader_dir, per_frame_bind_group_layout, 128),
+            line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
             enable_box_lines: true,
         }
     }
@@ -116,6 +122,7 @@ impl SceneRenderer {
         &self,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
+        pipeline_manager: &PipelineManager,
         backbuffer: &wgpu::TextureView,
         depth: &wgpu::TextureView,
         per_frame_bind_group: &wgpu::BindGroup,
@@ -145,15 +152,10 @@ impl SceneRenderer {
         });
 
         rpass.set_bind_group(0, per_frame_bind_group, &[]);
-        self.particle_renderer.draw(&mut rpass, &scene.hybrid_fluid);
+        self.particle_renderer.draw(&mut rpass, pipeline_manager, &scene.hybrid_fluid);
 
         if self.enable_box_lines {
-            self.line_renderer.draw(&mut rpass);
+            self.line_renderer.draw(&mut rpass, pipeline_manager);
         }
-    }
-
-    pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        self.particle_renderer.try_reload_shaders(device, shader_dir);
-        self.line_renderer.try_reload_shaders(device, shader_dir);
     }
 }

@@ -39,8 +39,8 @@ impl ShaderDirectory {
         self.detected_change.swap(false, Ordering::Relaxed)
     }
 
-    pub fn load_shader_module(&self, device: &wgpu::Device, relative_filename: &Path) -> Result<wgpu::ShaderModule, ()> {
-        let path = self.directory.join(relative_filename);
+    pub fn load_shader_module(&self, device: &wgpu::Device, relative_path: &Path) -> Result<wgpu::ShaderModule, ()> {
+        let path = self.directory.join(relative_path);
 
         let kind = match path.extension().and_then(OsStr::to_str) {
             Some("frag") => shaderc::ShaderKind::Fragment,

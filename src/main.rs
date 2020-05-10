@@ -94,7 +94,7 @@ impl Application {
             per_frame_resources.bind_group_layout(),
         );
         let simulation_controller = simulation_controller::SimulationController::new();
-        let mut scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
+        let mut scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
         scene_renderer.on_new_scene(&device, &mut init_encoder, &scene);
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
@@ -204,7 +204,6 @@ impl Application {
     fn update(&mut self) {
         if self.shader_dir.detected_change() {
             info!("reloading shaders...");
-            self.scene_renderer.try_reload_shaders(&self.device, &self.shader_dir);
             self.pipeline_manager.reload_all(&self.device, &self.shader_dir);
         }
         self.camera.update(self.simulation_controller.timer());
@@ -257,6 +256,7 @@ impl Application {
         self.scene_renderer.draw(
             &self.scene,
             &mut encoder,
+            &self.pipeline_manager,
             self.screen.backbuffer(),
             self.screen.depthbuffer(),
             self.per_frame_resources.bind_group(),

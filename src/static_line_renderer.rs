@@ -1,6 +1,6 @@
 use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
-use std::path::Path;
+use std::{path::Path, rc::Rc};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -18,8 +18,7 @@ impl LineVertex {
 const LINE_VERTEX_SIZE: usize = std::mem::size_of::<LineVertex>();
 
 pub struct StaticLineRenderer {
-    render_pipeline: wgpu::RenderPipeline,
-    pipeline_layout: wgpu::PipelineLayout,
+    render_pipeline: RenderPipelineHandle,
     vertex_buffer: wgpu::Buffer,
 
     max_num_lines: usize,
@@ -30,13 +29,38 @@ impl StaticLineRenderer {
     pub fn new(
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
+        pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
         max_num_lines: usize,
     ) -> Self {
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&per_frame_bind_group_layout],
-        });
-        let render_pipeline = Self::create_pipeline_state(device, &pipeline_layout, shader_dir).unwrap();
+        let mut render_pipeline_desc = RenderPipelineCreationDesc::new(
+            Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                bind_group_layouts: &[&per_frame_bind_group_layout],
+            })),
+            Path::new("lines.vert"),
+            Some(Path::new("lines.frag")),
+        );
+        render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
+        render_pipeline_desc.vertex_state = wgpu::VertexStateDescriptor {
+            index_format: wgpu::IndexFormat::Uint16,
+            vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                stride: LINE_VERTEX_SIZE as wgpu::BufferAddress,
+                step_mode: wgpu::InputStepMode::Vertex,
+                attributes: &[
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float3,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float3,
+                        offset: 4 * 3,
+                        shader_location: 1,
+                    },
+                ],
+            }],
+        };
+        let render_pipeline = pipeline_manager.create_render_pipeline(device, shader_dir, render_pipeline_desc);
 
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("StaticLineRenderer VertexBuffer"),
@@ -46,59 +70,11 @@ impl StaticLineRenderer {
 
         StaticLineRenderer {
             render_pipeline,
-            pipeline_layout,
             vertex_buffer,
 
             max_num_lines,
             num_lines: 0,
         }
-    }
-
-    fn create_pipeline_state(
-        device: &wgpu::Device,
-        pipeline_layout: &wgpu::PipelineLayout,
-        shader_dir: &ShaderDirectory,
-    ) -> Result<wgpu::RenderPipeline, ()> {
-        let vs_module = shader_dir.load_shader_module(device, Path::new("lines.vert"))?;
-        let fs_module = shader_dir.load_shader_module(device, Path::new("lines.frag"))?;
-
-        Ok(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &vs_module,
-                entry_point: SHADER_ENTRY_POINT_NAME,
-            },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &fs_module,
-                entry_point: SHADER_ENTRY_POINT_NAME,
-            }),
-            rasterization_state: Some(rasterization_state::culling_none()),
-            primitive_topology: wgpu::PrimitiveTopology::LineList,
-            color_states: &[color_state::write_all(super::Screen::FORMAT_BACKBUFFER)],
-            depth_stencil_state: Some(depth_state::default_read_write(super::Screen::FORMAT_DEPTH)),
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                    stride: LINE_VERTEX_SIZE as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &[
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float3,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float3,
-                            offset: 4 * 3,
-                            shader_location: 1,
-                        },
-                    ],
-                }],
-            },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
-        }))
     }
 
     pub fn clear_lines(&mut self) {
@@ -142,14 +118,8 @@ impl StaticLineRenderer {
         self.num_lines += lines.len();
     }
 
-    pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        if let Ok(render_pipeline) = Self::create_pipeline_state(device, &self.pipeline_layout, shader_dir) {
-            self.render_pipeline = render_pipeline;
-        }
-    }
-
-    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>) {
-        rpass.set_pipeline(&self.render_pipeline);
+    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager) {
+        rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
         let num_vertices = self.num_lines * 2;
         rpass.set_vertex_buffer(0, &self.vertex_buffer, 0, (num_vertices * LINE_VERTEX_SIZE) as u64);
         rpass.draw(0..(num_vertices as u32), 0..1);
