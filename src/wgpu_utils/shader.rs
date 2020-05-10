@@ -69,17 +69,23 @@ impl ShaderDirectory {
             options.set_optimization_level(shaderc::OptimizationLevel::Performance);
             // options.set_optimization_level(shaderc::OptimizationLevel::Zero); // Useful for debugging/inspecting, e.g. via RenderDoc
 
-            options.set_include_callback(|name, _ty, source_file, _depth| {
-                let path = self.directory.join(name);
+            options.set_include_callback(|name, include_type, source_file, _depth| {
+                let path = if include_type == shaderc::IncludeType::Relative {
+                    Path::new(Path::new(source_file).parent().unwrap()).join(name)
+                } else {
+                    self.directory.join(name)
+                };
                 match std::fs::read_to_string(&path) {
                     Ok(glsl_code) => Ok(shaderc::ResolvedInclude {
                         resolved_name: String::from(name),
                         content: glsl_code,
                     }),
-                    Err(err) => Err(format!("Failed to resolve include to {} in {}: {}", name, source_file, err)),
+                    Err(err) => Err(format!(
+                        "Failed to resolve include to {} in {} (was looking for {:?}): {}",
+                        name, source_file, path, err
+                    )),
                 }
             });
-
             match compiler.compile_into_spirv(&glsl_code, kind, path.to_str().unwrap(), SHADER_ENTRY_POINT_NAME, Some(&options)) {
                 Ok(compile_result) => {
                     if compile_result.get_num_warnings() > 0 {

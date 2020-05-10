@@ -1,9 +1,6 @@
 #version 450
 
-// Workaround for bug in shaderc when using textureSize/texelFetch on textures (instead of samplers)
-// error: 'texelFetch' : required extension not requested: GL_EXT_samplerless_texture_functions
-// Shouldn't happen since we compile for Vulkan.
-#extension GL_EXT_samplerless_texture_functions : require
+#include "utilities.glsl"
 
 layout(set = 0, binding = 0) uniform texture2D Texture;
 

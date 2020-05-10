@@ -196,37 +196,40 @@ impl HybridFluid {
         let pipeline_clear_llgrid = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("clear_llgrid.comp")),
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("simulation/clear_llgrid.comp")),
         );
         let pipeline_build_linkedlist_volume = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("build_linkedlist_volume.comp")),
+            ComputePipelineCreationDesc::new(
+                layout_write_particles_volume.clone(),
+                Path::new("simulation/build_linkedlist_volume.comp"),
+            ),
         );
         let pipeline_transfer_to_volume = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("transfer_to_volume.comp")),
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("simulation/transfer_to_volume.comp")),
         );
         let pipeline_compute_divergence = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_pressure_solve.clone(), Path::new("compute_divergence.comp")),
+            ComputePipelineCreationDesc::new(layout_pressure_solve.clone(), Path::new("simulation/compute_divergence.comp")),
         );
         let pipeline_pressure_solve = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_pressure_solve.clone(), Path::new("pressure_solve.comp")),
+            ComputePipelineCreationDesc::new(layout_pressure_solve.clone(), Path::new("simulation/pressure_solve.comp")),
         );
         let pipeline_remove_divergence = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("remove_divergence.comp")),
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("simulation/remove_divergence.comp")),
         );
         let pipeline_update_particles = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_particles.clone(), Path::new("update_particles.comp")),
+            ComputePipelineCreationDesc::new(layout_write_particles.clone(), Path::new("simulation/update_particles.comp")),
         );
 
         HybridFluid {

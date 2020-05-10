@@ -3,8 +3,8 @@
 
 #version 450
 
+#include "../utilities.glsl"
 #include "bindings_write_particles_volume.glsl"
-#include "utilities.glsl"
 
 COMPUTE_PASS_VOLUME
 

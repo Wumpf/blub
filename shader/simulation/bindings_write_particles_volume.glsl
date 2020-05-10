@@ -1,6 +1,6 @@
-#include "hybrid_fluid.glsl"
-#include "particles.glsl"
 #include "per_frame_resources.glsl"
+#include "simulation/hybrid_fluid.glsl"
+#include "simulation/particles.glsl"
 
 layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 // Velocity volume with quantities at the centers.

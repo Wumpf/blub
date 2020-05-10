@@ -1,9 +1,9 @@
 #version 450
 
+#include "../per_frame_resources.glsl"
+#include "../utilities.glsl"
 #include "hybrid_fluid.glsl"
 #include "particles.glsl"
-#include "per_frame_resources.glsl"
-#include "utilities.glsl"
 
 layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 layout(set = 2, binding = 1) uniform texture3D VelocityVolume;

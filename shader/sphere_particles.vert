@@ -1,7 +1,7 @@
 #version 450
 
-#include "particles.glsl"
 #include "per_frame_resources.glsl"
+#include "simulation/particles.glsl"
 #include "utilities.glsl"
 
 layout(set = 1, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
