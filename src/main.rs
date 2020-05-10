@@ -273,6 +273,7 @@ impl Application {
             &mut encoder,
             &self.screen.backbuffer(),
             &mut self.simulation_controller,
+            &mut self.scene_renderer,
         );
 
         self.screen.copy_to_swapchain(&frame, &mut encoder);
