@@ -1,7 +1,7 @@
 use crate::hybrid_fluid::HybridFluid;
 use crate::particle_renderer::ParticleRenderer;
 use crate::static_line_renderer::{LineVertex, StaticLineRenderer};
-use crate::wgpu_utils::shader::ShaderDirectory;
+use crate::wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory};
 
 // Scene data & simulation.
 pub struct Scene {
@@ -15,6 +15,7 @@ impl Scene {
         device: &wgpu::Device,
         init_encoder: &mut wgpu::CommandEncoder,
         shader_dir: &ShaderDirectory,
+        pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let fluid_domain_min = cgmath::Point3::new(0.0, 0.0, 0.0);
@@ -26,7 +27,7 @@ impl Scene {
             depth: (fluid_domain_max.z - fluid_domain_min.z) as u32,
         };
 
-        let mut hybrid_fluid = HybridFluid::new(device, grid_dimension, 2000000, shader_dir, per_frame_bind_group_layout);
+        let mut hybrid_fluid = HybridFluid::new(device, grid_dimension, 2000000, shader_dir, pipeline_manager, per_frame_bind_group_layout);
 
         hybrid_fluid.add_fluid_cube(
             device,
@@ -42,12 +43,8 @@ impl Scene {
         }
     }
 
-    pub fn try_reload_shaders(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
-        self.hybrid_fluid.try_reload_shaders(device, shader_dir);
-    }
-
-    pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>) {
-        self.hybrid_fluid.step(cpass);
+    pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager) {
+        self.hybrid_fluid.step(cpass, pipeline_manager);
     }
 }
 

@@ -19,7 +19,7 @@ use per_frame_resources::*;
 use screen::*;
 use simulation_controller::SimulationControllerStatus;
 use std::path::{Path, PathBuf};
-use wgpu_utils::shader;
+use wgpu_utils::{pipelines, shader};
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -37,6 +37,7 @@ struct Application {
     command_queue: wgpu::Queue,
 
     shader_dir: shader::ShaderDirectory,
+    pipeline_manager: pipelines::PipelineManager,
     scene: scene::Scene,
     scene_renderer: scene::SceneRenderer,
     simulation_controller: simulation_controller::SimulationController,
@@ -76,6 +77,7 @@ impl Application {
             .await;
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
+        let mut pipeline_manager = pipelines::PipelineManager::new();
 
         let screen = Screen::new(&device, &window_surface, window.inner_size(), &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
@@ -84,7 +86,13 @@ impl Application {
             label: Some("Startup Encoder"),
         });
 
-        let scene = scene::Scene::new(&device, &mut init_encoder, &shader_dir, per_frame_resources.bind_group_layout());
+        let scene = scene::Scene::new(
+            &device,
+            &mut init_encoder,
+            &shader_dir,
+            &mut pipeline_manager,
+            per_frame_resources.bind_group_layout(),
+        );
         let simulation_controller = simulation_controller::SimulationController::new();
         let mut scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, per_frame_resources.bind_group_layout());
         scene_renderer.on_new_scene(&device, &mut init_encoder, &scene);
@@ -104,6 +112,7 @@ impl Application {
             command_queue,
 
             shader_dir,
+            pipeline_manager,
             scene,
             scene_renderer,
             simulation_controller,
@@ -196,7 +205,7 @@ impl Application {
         if self.shader_dir.detected_change() {
             info!("reloading shaders...");
             self.scene_renderer.try_reload_shaders(&self.device, &self.shader_dir);
-            self.scene.try_reload_shaders(&self.device, &self.shader_dir);
+            self.pipeline_manager.reload_all(&self.device, &self.shader_dir);
         }
         self.camera.update(self.simulation_controller.timer());
 
@@ -212,6 +221,7 @@ impl Application {
                 &self.device,
                 &mut init_encoder,
                 &self.shader_dir,
+                &mut self.pipeline_manager,
                 self.per_frame_resources.bind_group_layout(),
             );
             self.scene_renderer.on_new_scene(&self.device, &mut init_encoder, &self.scene);
@@ -223,6 +233,7 @@ impl Application {
             &self.device,
             &self.command_queue,
             &mut self.scene,
+            &self.pipeline_manager,
             self.per_frame_resources.bind_group(), // values from last draw are good enough.
         );
 
@@ -242,7 +253,7 @@ impl Application {
             .update_gpu_data(&mut encoder, &self.device, &self.camera, self.simulation_controller.timer(), aspect_ratio);
 
         self.simulation_controller
-            .frame_steps(&self.scene, &mut encoder, self.per_frame_resources.bind_group());
+            .frame_steps(&self.scene, &mut encoder, &self.pipeline_manager, self.per_frame_resources.bind_group());
         self.scene_renderer.draw(
             &self.scene,
             &mut encoder,

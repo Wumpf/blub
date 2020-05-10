@@ -1,5 +1,8 @@
 use crate::scene::Scene;
-use crate::timer::{SimulationStepResult, Timer};
+use crate::{
+    timer::{SimulationStepResult, Timer},
+    wgpu_utils::pipelines::PipelineManager,
+};
 use std::time::{Duration, Instant};
 
 // The simulation controller orchestrates simulation steps.
@@ -87,7 +90,14 @@ impl SimulationController {
     // A single fast forward operation is technically just a "very long frame".
     // However, since we need to give the GPU some breathing space it's handled in a different way (-> TDR).
     // Note that we assume that this never happens for realtime & recording, but it well could once a single simulation + render step takes longer than TDR time.
-    pub fn fast_forward_steps(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene, per_frame_bind_group: &wgpu::BindGroup) {
+    pub fn fast_forward_steps(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        scene: &Scene,
+        pipeline_manager: &PipelineManager,
+        per_frame_bind_group: &wgpu::BindGroup,
+    ) {
         // TODO: Dynamic estimate to keep batches around 0.5 seconds.
         const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 256;
 
@@ -111,7 +121,7 @@ impl SimulationController {
                         compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
 
                         for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
-                            if !self.single_step(scene, &mut compute_pass) {
+                            if !self.single_step(scene, &mut compute_pass, pipeline_manager) {
                                 batch_size = i;
                                 break;
                             }
@@ -135,14 +145,20 @@ impl SimulationController {
         }
     }
 
-    pub fn frame_steps(&mut self, scene: &Scene, encoder: &mut wgpu::CommandEncoder, per_frame_bind_group: &wgpu::BindGroup) {
+    pub fn frame_steps(
+        &mut self,
+        scene: &Scene,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline_manager: &PipelineManager,
+        per_frame_bind_group: &wgpu::BindGroup,
+    ) {
         if !self.start_simulation_frame() {
             return;
         }
 
         let mut compute_pass = encoder.begin_compute_pass();
         compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
-        while self.single_step(scene, &mut compute_pass) {}
+        while self.single_step(scene, &mut compute_pass, pipeline_manager) {}
     }
 
     fn start_simulation_frame(&mut self) -> bool {
@@ -162,7 +178,7 @@ impl SimulationController {
         return true;
     }
 
-    fn single_step<'a>(&mut self, scene: &'a Scene, compute_pass: &mut wgpu::ComputePass<'a>) -> bool {
+    fn single_step<'a>(&mut self, scene: &'a Scene, compute_pass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager) -> bool {
         // frame drops are only relevant in realtime mode.
         let max_total_step_per_frame = if self.status == SimulationControllerStatus::Realtime {
             Duration::from_secs_f64(1.0 / MIN_REALTIME_FPS)
@@ -176,7 +192,7 @@ impl SimulationController {
         }
 
         if self.timer.simulation_frame_loop(max_total_step_per_frame) == SimulationStepResult::PerformStepAndCallAgain {
-            scene.step(compute_pass);
+            scene.step(compute_pass, pipeline_manager);
             return true;
         }
         return false;

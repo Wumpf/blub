@@ -1,33 +1,78 @@
 use super::shader::ShaderDirectory;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
-pub struct ReloadableComputePipeline {
-    relative_shader_path: PathBuf,
-    layout: Rc<wgpu::PipelineLayout>,
-    pipeline: wgpu::ComputePipeline,
+pub type PipelineHandle = Rc<usize>;
+
+pub struct ComputePipelineDesc {
+    pub layout: Rc<wgpu::PipelineLayout>,
+    pub relative_shader_path: PathBuf,
 }
 
-impl ReloadableComputePipeline {
-    pub fn new(device: &wgpu::Device, layout: &Rc<wgpu::PipelineLayout>, shader_dir: &ShaderDirectory, relative_shader_path: &Path) -> Self {
-        let pipeline = Self::try_create(device, layout, shader_dir, relative_shader_path).unwrap();
+pub struct ReloadableComputePipeline {
+    desc: ComputePipelineDesc,
+    pipeline: wgpu::ComputePipeline,
+    handle: Weak<usize>,
+}
 
-        ReloadableComputePipeline {
-            relative_shader_path: PathBuf::from(relative_shader_path),
-            layout: layout.clone(),
-            pipeline,
+pub struct PipelineManager {
+    compute_pipelines: Vec<ReloadableComputePipeline>,
+}
+
+impl PipelineManager {
+    pub fn new() -> Self {
+        PipelineManager {
+            compute_pipelines: Vec::new(),
         }
     }
 
-    fn try_create(
+    // TODO: Do also render pipelines!
+
+    pub fn create_compute_pipeline(
+        &mut self,
         device: &wgpu::Device,
-        layout: &wgpu::PipelineLayout,
         shader_dir: &ShaderDirectory,
+        layout: &Rc<wgpu::PipelineLayout>,
         relative_shader_path: &Path,
-    ) -> Result<wgpu::ComputePipeline, ()> {
-        let module = shader_dir.load_shader_module(device, relative_shader_path)?;
+    ) -> PipelineHandle {
+        let desc = ComputePipelineDesc {
+            layout: layout.clone(),
+            relative_shader_path: PathBuf::from(relative_shader_path),
+        };
+        let pipeline = Self::try_create_compute(device, shader_dir, &desc).unwrap();
+
+        let mut first_free_slot = 0;
+        while first_free_slot < self.compute_pipelines.len() && self.compute_pipelines[first_free_slot].handle.strong_count() > 0 {
+            first_free_slot += 1;
+        }
+
+        let handle = Rc::new(first_free_slot);
+        let new_reloadable_pipeline = ReloadableComputePipeline {
+            desc,
+            pipeline,
+            handle: Rc::downgrade(&handle),
+        };
+        if first_free_slot == self.compute_pipelines.len() {
+            self.compute_pipelines.push(new_reloadable_pipeline);
+        } else {
+            self.compute_pipelines[first_free_slot] = new_reloadable_pipeline;
+        }
+        handle
+    }
+
+    // todo: reload only what's necessary
+    pub fn reload_all(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
+        for reloadable_pipeline in self.compute_pipelines.iter_mut() {
+            if let Ok(new_wgpu_pipeline) = Self::try_create_compute(device, shader_dir, &reloadable_pipeline.desc) {
+                reloadable_pipeline.pipeline = new_wgpu_pipeline;
+            }
+        }
+    }
+
+    fn try_create_compute(device: &wgpu::Device, shader_dir: &ShaderDirectory, desc: &ComputePipelineDesc) -> Result<wgpu::ComputePipeline, ()> {
+        let module = shader_dir.load_shader_module(device, &desc.relative_shader_path)?;
         Ok(device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            layout,
+            layout: &desc.layout,
             compute_stage: wgpu::ProgrammableStageDescriptor {
                 module: &module,
                 entry_point: super::shader::SHADER_ENTRY_POINT_NAME,
@@ -35,14 +80,11 @@ impl ReloadableComputePipeline {
         }))
     }
 
-    pub fn try_reload_shader(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<(), ()> {
-        let pipeline = Self::try_create(device, &self.layout, shader_dir, &self.relative_shader_path)?;
-        self.pipeline = pipeline;
-        Ok(())
-    }
-
-    pub fn pipeline(&self) -> &wgpu::ComputePipeline {
-        &self.pipeline
+    pub fn get_compute(&self, index: &PipelineHandle) -> &wgpu::ComputePipeline {
+        let i: usize = **index;
+        assert!(self.compute_pipelines[i].handle.strong_count() > 0);
+        assert!(*self.compute_pipelines[i].handle.upgrade().unwrap() == i);
+        &self.compute_pipelines[i].pipeline
     }
 }
 
