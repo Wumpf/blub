@@ -1,6 +1,7 @@
 use crate::hybrid_fluid::HybridFluid;
 use crate::particle_renderer::ParticleRenderer;
 use crate::static_line_renderer::{LineVertex, StaticLineRenderer};
+use crate::volume_renderer::VolumeRenderer;
 use crate::wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory};
 
 // Scene data & simulation.
@@ -48,11 +49,27 @@ impl Scene {
     }
 }
 
+#[derive(Clone, Copy, Debug, EnumIter)]
+pub enum FluidRenderingMode {
+    None,
+    Particles,
+}
+
+#[derive(Clone, Copy, Debug, EnumIter)]
+pub enum VolumeVisualizationMode {
+    None,
+    Velocity,
+}
+
 // What renders the scene (so everything except ui!)
 // Maintains both configuration and necessary data structures, but doesn't shut down when a scene is swapped out.
 pub struct SceneRenderer {
-    pub particle_renderer: ParticleRenderer,
-    pub line_renderer: StaticLineRenderer,
+    particle_renderer: ParticleRenderer,
+    volume_renderer: VolumeRenderer,
+    bounds_line_renderer: StaticLineRenderer,
+
+    pub fluid_rendering_mode: FluidRenderingMode,
+    pub volume_visualization: VolumeVisualizationMode,
     pub enable_box_lines: bool,
 }
 
@@ -63,15 +80,26 @@ impl SceneRenderer {
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
+        let fluid_renderer_group_layout = &HybridFluid::get_or_create_group_layout_renderer(device).layout;
         SceneRenderer {
             particle_renderer: ParticleRenderer::new(
                 device,
                 shader_dir,
                 pipeline_manager,
                 per_frame_bind_group_layout,
-                &HybridFluid::get_or_create_group_layout_renderer(device).layout,
+                fluid_renderer_group_layout,
             ),
-            line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
+            volume_renderer: VolumeRenderer::new(
+                device,
+                shader_dir,
+                pipeline_manager,
+                per_frame_bind_group_layout,
+                fluid_renderer_group_layout,
+            ),
+            bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
+
+            fluid_rendering_mode: FluidRenderingMode::Particles,
+            volume_visualization: VolumeVisualizationMode::None,
             enable_box_lines: true,
         }
     }
@@ -82,8 +110,8 @@ impl SceneRenderer {
         let min = scene.fluid_domain_min;
         let max = scene.fluid_domain_max;
 
-        self.line_renderer.clear_lines();
-        self.line_renderer.add_lines(
+        self.bounds_line_renderer.clear_lines();
+        self.bounds_line_renderer.add_lines(
             &[
                 // left
                 LineVertex::new(cgmath::point3(min.x, min.y, max.z), line_color),
@@ -152,10 +180,23 @@ impl SceneRenderer {
         });
 
         rpass.set_bind_group(0, per_frame_bind_group, &[]);
-        self.particle_renderer.draw(&mut rpass, pipeline_manager, &scene.hybrid_fluid);
+
+        match self.fluid_rendering_mode {
+            FluidRenderingMode::None => {}
+            FluidRenderingMode::Particles => {
+                self.particle_renderer.draw(&mut rpass, pipeline_manager, &scene.hybrid_fluid);
+            }
+        }
+        match self.volume_visualization {
+            VolumeVisualizationMode::None => {}
+            VolumeVisualizationMode::Velocity => {
+                self.volume_renderer
+                    .draw_volume_velocities(&mut rpass, pipeline_manager, &scene.hybrid_fluid);
+            }
+        }
 
         if self.enable_box_lines {
-            self.line_renderer.draw(&mut rpass, pipeline_manager);
+            self.bounds_line_renderer.draw(&mut rpass, pipeline_manager);
         }
     }
 }

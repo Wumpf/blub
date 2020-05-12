@@ -163,7 +163,10 @@ impl HybridFluid {
 
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(&particles, 0..particle_buffer_size)
-            .create(device, "BindGroup: ParticleRenderer");
+            .texture(&volume_velocity_view)
+            .texture(&volume_divergence_view)
+            .texture(&volume_pressure0_view)
+            .create(device, "BindGroup: Fluid Renderers");
 
         // pipeline layouts.
         // Note that layouts directly correspond to DX12 root signatures.
@@ -352,7 +355,10 @@ impl HybridFluid {
         unsafe {
             GROUP_LAYOUT_RENDERER.get_or_insert_with(|| {
                 BindGroupLayoutBuilder::new()
-                    .next_binding_vertex(binding_glsl::buffer(true))
+                    .next_binding_vertex(binding_glsl::buffer(true)) // particles
+                    .next_binding_vertex(binding_glsl::texture3D()) // velocity
+                    .next_binding_vertex(binding_glsl::texture3D()) // divergence
+                    .next_binding_vertex(binding_glsl::texture3D()) // pressure
                     .create(device, "BindGroupLayout: ParticleRenderer")
             })
         }
@@ -360,6 +366,10 @@ impl HybridFluid {
 
     pub fn bind_group_renderer(&self) -> &wgpu::BindGroup {
         &self.bind_group_renderer
+    }
+
+    pub fn grid_dimension(&self) -> wgpu::Extent3d {
+        self.grid_dimension
     }
 
     // todo: timing

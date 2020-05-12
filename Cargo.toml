@@ -24,3 +24,5 @@ shaderc = "0.6"
 wgpu = "0.5"
 winit = "0.21" # Can't upgrade to 0.2.2 because of imgui-winit-support
 png = "0.16"
+strum_macros = "0.18"
+strum = "0.18"

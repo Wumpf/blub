@@ -38,7 +38,7 @@ impl StaticLineRenderer {
                 bind_group_layouts: &[&per_frame_bind_group_layout],
             })),
             Path::new("lines.vert"),
-            Some(Path::new("lines.frag")),
+            Some(Path::new("vertex_color.frag")),
         );
         render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
         render_pipeline_desc.vertex_state = wgpu::VertexStateDescriptor {

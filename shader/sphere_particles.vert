@@ -14,8 +14,6 @@ layout(location = 2) out vec3 out_Tint;
 
 const vec2 quadPositions[4] = vec2[4](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));
 
-vec3 heatmapColor(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2)); }
-
 void main() {
     const float radius = 0.25; // todo.
     vec3 velocity = vec3(Particles[gl_InstanceIndex].VelocityMatrix[0].w, Particles[gl_InstanceIndex].VelocityMatrix[1].w,

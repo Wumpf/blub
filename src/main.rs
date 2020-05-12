@@ -2,6 +2,8 @@
 extern crate more_asserts;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate strum_macros;
 
 mod camera;
 mod gui;
@@ -13,6 +15,7 @@ mod screen;
 mod simulation_controller;
 mod static_line_renderer;
 mod timer;
+mod volume_renderer;
 mod wgpu_utils;
 
 use per_frame_resources::*;

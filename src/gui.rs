@@ -1,9 +1,8 @@
-use crate::{
-    scene::SceneRenderer,
-    simulation_controller::{SimulationController, SimulationControllerStatus},
-};
+use crate::scene::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
+use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use imgui::im_str;
-use std::{path::PathBuf, time::Duration};
+use std::{borrow::Cow, path::PathBuf, time::Duration};
+use strum::IntoEnumIterator;
 
 struct GUIState {
     fast_forward_length_seconds: f32,
@@ -178,6 +177,27 @@ impl GUI {
                 // rendering settings
                 ui.separator();
                 //////////////////////////////////////////////////
+
+                {
+                    let mut current_fluid_rendering = scene_renderer.fluid_rendering_mode as usize;
+                    imgui::ComboBox::new(im_str!("Fluid Rendering")).build_simple(
+                        ui,
+                        &mut current_fluid_rendering,
+                        &FluidRenderingMode::iter().collect::<Vec<FluidRenderingMode>>(),
+                        &|value| Cow::from(im_str!("{:?}", *value)),
+                    );
+                    scene_renderer.fluid_rendering_mode = FluidRenderingMode::iter().skip(current_fluid_rendering).next().unwrap();
+                }
+                {
+                    let mut current_volume_visualization = scene_renderer.volume_visualization as usize;
+                    imgui::ComboBox::new(im_str!("Volume Visualization")).build_simple(
+                        ui,
+                        &mut current_volume_visualization,
+                        &VolumeVisualizationMode::iter().collect::<Vec<VolumeVisualizationMode>>(),
+                        &|value| Cow::from(im_str!("{:?}", *value)),
+                    );
+                    scene_renderer.volume_visualization = VolumeVisualizationMode::iter().skip(current_volume_visualization).next().unwrap();
+                }
                 ui.checkbox(im_str!("Show Fluid Domain Bounds"), &mut scene_renderer.enable_box_lines);
             });
     }

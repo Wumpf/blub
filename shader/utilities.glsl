@@ -21,3 +21,5 @@ float sq(float a) { return a * a; }
 vec2 sq(vec2 a) { return a * a; }
 vec3 sq(vec3 a) { return a * a; }
 vec4 sq(vec4 a) { return a * a; }
+
+vec3 heatmapColor(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2)); }
