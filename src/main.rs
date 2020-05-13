@@ -250,8 +250,13 @@ impl Application {
             label: Some("Encoder: Frame Main"),
         });
 
-        self.per_frame_resources
-            .update_gpu_data(&mut encoder, &self.device, &self.camera, self.simulation_controller.timer(), aspect_ratio);
+        self.per_frame_resources.update_gpu_data(
+            &mut encoder,
+            &self.device,
+            self.camera.fill_global_uniform_buffer(aspect_ratio),
+            self.simulation_controller.timer().fill_global_uniform_buffer(),
+            self.scene_renderer.fill_global_uniform_buffer(),
+        );
 
         self.simulation_controller
             .frame_steps(&self.scene, &mut encoder, &self.pipeline_manager, self.per_frame_resources.bind_group());

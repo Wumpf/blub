@@ -19,6 +19,13 @@ pub enum VolumeVisualizationMode {
     Velocity,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct GlobalRenderSettingsUniformBufferContent {
+    velocity_visualization_scale: f32,
+    padding: cgmath::Point3<f32>,
+}
+
 // What renders the scene (so everything except ui!)
 // Maintains both configuration and necessary data structures, but doesn't shut down when a scene is swapped out.
 pub struct SceneRenderer {
@@ -29,6 +36,7 @@ pub struct SceneRenderer {
     pub fluid_rendering_mode: FluidRenderingMode,
     pub volume_visualization: VolumeVisualizationMode,
     pub enable_box_lines: bool,
+    pub velocity_visualization_scale: f32,
 }
 
 impl SceneRenderer {
@@ -59,6 +67,7 @@ impl SceneRenderer {
             fluid_rendering_mode: FluidRenderingMode::Particles,
             volume_visualization: VolumeVisualizationMode::None,
             enable_box_lines: true,
+            velocity_visualization_scale: 0.05,
         }
     }
 
@@ -103,6 +112,13 @@ impl SceneRenderer {
             device,
             init_encoder,
         );
+    }
+
+    pub fn fill_global_uniform_buffer(&self) -> GlobalRenderSettingsUniformBufferContent {
+        GlobalRenderSettingsUniformBufferContent {
+            velocity_visualization_scale: self.velocity_visualization_scale,
+            padding: cgmath::point3(0.0, 0.0, 0.0),
+        }
     }
 
     pub fn draw(

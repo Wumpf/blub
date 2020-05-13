@@ -15,10 +15,10 @@ layout(location = 2) out vec3 out_Tint;
 const vec2 quadPositions[4] = vec2[4](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));
 
 void main() {
-    const float radius = 0.25; // todo.
+    const float radius = 0.25; // todo, make scale dependent
     vec3 velocity = vec3(Particles[gl_InstanceIndex].VelocityMatrix[0].w, Particles[gl_InstanceIndex].VelocityMatrix[1].w,
                          Particles[gl_InstanceIndex].VelocityMatrix[2].w);
-    out_Tint = heatmapColor(length(velocity) * 0.05); // TODO: Please make me tweakable
+    out_Tint = heatmapColor(length(velocity) * Rendering.VelocityVisualizationScale);
 
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
 

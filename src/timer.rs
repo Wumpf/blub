@@ -166,7 +166,7 @@ impl Timer {
         self.num_frames_rendered
     }
 
-    pub fn fill_uniform_buffer(&self) -> FrameTimeUniformBufferContent {
+    pub fn fill_global_uniform_buffer(&self) -> FrameTimeUniformBufferContent {
         FrameTimeUniformBufferContent {
             total_passed: self.total_rendered_time.as_secs_f32(),
             frame_delta: self.current_frame_delta.as_secs_f32(),

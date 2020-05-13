@@ -198,6 +198,12 @@ impl GUI {
                     );
                     scene_renderer.volume_visualization = VolumeVisualizationMode::iter().skip(current_volume_visualization).next().unwrap();
                 }
+                ui.drag_float(im_str!("Velocity Visualization Scale"), &mut scene_renderer.velocity_visualization_scale)
+                    .min(0.001)
+                    .max(5.0)
+                    .speed(0.0001)
+                    .display_format(im_str!("%.3f"))
+                    .build();
                 ui.checkbox(im_str!("Show Fluid Domain Bounds"), &mut scene_renderer.enable_box_lines);
             });
     }

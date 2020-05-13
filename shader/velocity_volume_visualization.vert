@@ -20,12 +20,11 @@ void main() {
 
     vec3 velocity = texelFetch(VelocityVolume, volumeCoordinate, 0).xyz;
     float velocityMagnitude = length(velocity);
-    const float velocityScaling = 0.05;
-    float scale = min(velocityMagnitude * velocityScaling, 1.0) / velocityMagnitude;
+    float scale = min(velocityMagnitude * Rendering.VelocityVisualizationScale, 1.0) / velocityMagnitude;
     if (gl_VertexIndex == 0) {
         linePosition += velocity * scale;
     }
 
-    out_Color = heatmapColor(velocityMagnitude * velocityScaling);
+    out_Color = heatmapColor(velocityMagnitude * Rendering.VelocityVisualizationScale);
     gl_Position = Camera.ViewProjection * vec4(linePosition, 1.0);
 }

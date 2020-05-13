@@ -127,7 +127,7 @@ impl Camera {
         OPENGL_TO_WGPU_MATRIX * projection * view
     }
 
-    pub fn fill_uniform_buffer(&self, aspect_ratio: f32) -> CameraUniformBufferContent {
+    pub fn fill_global_uniform_buffer(&self, aspect_ratio: f32) -> CameraUniformBufferContent {
         let right = self.direction.cross(self.rotational_up).normalize();
         let up = right.cross(self.direction).normalize();
 
@@ -144,9 +144,9 @@ impl Camera {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CameraUniformBufferContent {
-    pub view_projection: cgmath::Matrix4<f32>,
-    pub position: PaddedPoint3,
-    pub right: PaddedVector3,
-    pub up: PaddedVector3,
-    pub direction: PaddedVector3,
+    view_projection: cgmath::Matrix4<f32>,
+    position: PaddedPoint3,
+    right: PaddedVector3,
+    up: PaddedVector3,
+    direction: PaddedVector3,
 }

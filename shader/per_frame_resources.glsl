@@ -16,11 +16,17 @@ struct TimerData {
     float SimulationDelta;
 };
 
+struct GlobalRenderingSettings {
+    float VelocityVisualizationScale;
+    vec3 _padding0;
+};
+
 // Constants that change at max per frame.
 // (might group a few even more constant data into here as well - a few bytes updated more or less won't make a difference in render time!)
 layout(set = 0, binding = 0) uniform PerFrameConstants {
     CameraData Camera;
     TimerData Time;
+    GlobalRenderingSettings Rendering;
 };
 
 layout(set = 0, binding = 1) uniform sampler SamplerTrilinearClamp;
