@@ -1,29 +1,11 @@
-#version 450
-
 #include "per_frame_resources.glsl"
-#include "simulation/particles.glsl"
 #include "utilities.glsl"
-
-layout(set = 1, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
-
-out gl_PerVertex { vec4 gl_Position; };
-
-layout(location = 0) out vec3 out_WorldPosition;
-layout(location = 1) out vec3 out_ParticleWorldPosition;
-layout(location = 2) out vec3 out_Tint;
 
 const vec2 quadPositions[4] = vec2[4](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));
 
-void main() {
-    const float radius = 0.25; // todo, make scale dependent
-    vec3 velocity = vec3(Particles[gl_InstanceIndex].VelocityMatrix[0].w, Particles[gl_InstanceIndex].VelocityMatrix[1].w,
-                         Particles[gl_InstanceIndex].VelocityMatrix[2].w);
-    out_Tint = heatmapColor(length(velocity) * Rendering.VelocityVisualizationScale);
-
-    out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
-
+vec3 spanParticle(vec3 particleCenter, float radius) {
     // Spanning billboards is easy!
-    vec3 toCamera = Camera.Position - out_ParticleWorldPosition;
+    vec3 toCamera = Camera.Position - particleCenter;
     float distanceToCameraSq = dot(toCamera, toCamera);
     float distanceToCameraInv = inversesqrt(distanceToCameraSq);
     vec3 particleNormal = toCamera * distanceToCameraInv;
@@ -37,14 +19,12 @@ void main() {
     // "unnecessary" overlaps. So instead, we change the size _and_ move the sphere closer (using math!)
     float cameraOffset = radius * radius * distanceToCameraInv;
     float modifiedRadius = radius * distanceToCameraInv * sqrt(distanceToCameraSq - radius * radius);
-    out_WorldPosition = out_ParticleWorldPosition + quadPosition * modifiedRadius + cameraOffset * particleNormal;
+    return particleCenter + quadPosition * modifiedRadius + cameraOffset * particleNormal;
 
     // normal billboard (spheres are cut off)
-    // out_WorldPosition = out_ParticleWorldPosition + quadPosition * radius;
+    // return particleCenter + quadPosition * radius;
 
     // only enlarged billboard (works but requires z care even for non-overlapping spheres)
     // modifiedRadius = length(toCamera) * radius / sqrt(distanceToCameraSq - radius * radius);
-    // out_WorldPosition = out_ParticleWorldPosition + quadPosition * modifiedRadius;
-
-    gl_Position = Camera.ViewProjection * vec4(out_WorldPosition, 1.0);
+    // return particleCenter + quadPosition * modifiedRadius;
 }

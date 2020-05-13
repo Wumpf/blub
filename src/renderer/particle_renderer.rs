@@ -22,7 +22,7 @@ impl ParticleRenderer {
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
                 })),
-                Path::new("sphere_particles.vert"),
+                Path::new("fluid_particles.vert"),
                 Some(Path::new("sphere_particles.frag")),
             ),
         );

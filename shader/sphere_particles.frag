@@ -6,10 +6,10 @@
 layout(location = 0) in vec3 in_WorldPosition;
 layout(location = 1) in vec3 in_ParticleWorldPosition;
 layout(location = 2) in vec3 in_Tint;
+layout(location = 3) in float in_Radius;
 layout(location = 0) out vec4 out_Color;
 
 void main() {
-    const float radius = 0.25; // todo.
     const vec3 lightdir = normalize(vec3(1.0, 2.0, 1.0));
 
     // Sphere intersect raycast. Given how obscure our vertex positions are, this is the easiest!
@@ -17,14 +17,14 @@ void main() {
     vec3 rayDir = normalize(in_WorldPosition - Camera.Position);
     vec3 particleCenterToCamera = Camera.Position - in_ParticleWorldPosition; // (often denoted as oc == OriginCenter)
     float b = dot(particleCenterToCamera, rayDir);
-    float c = dot(particleCenterToCamera, particleCenterToCamera) - radius * radius;
+    float c = dot(particleCenterToCamera, particleCenterToCamera) - in_Radius * in_Radius;
     float discr = b * b - c;
     if (discr < 0.0)
         discard; // todo: antialias?
     float cameraDistance = -b - sqrt(discr);
 
     vec3 sphereWorldPos = Camera.Position + cameraDistance * rayDir;
-    vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / radius;
+    vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / in_Radius;
 
     // via https://www.iquilezles.org/www/articles/outdoorslighting/outdoorslighting.htm
     float sun = saturate(dot(lightdir, normal));

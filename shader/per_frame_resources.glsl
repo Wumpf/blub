@@ -1,3 +1,6 @@
+#ifndef INCLUDE_PERFRAMERESOURCES
+#define INCLUDE_PERFRAMERESOURCES
+
 struct CameraData {
     mat4 ViewProjection;
     vec3 Position;
@@ -31,3 +34,5 @@ layout(set = 0, binding = 0) uniform PerFrameConstants {
 
 layout(set = 0, binding = 1) uniform sampler SamplerTrilinearClamp;
 layout(set = 0, binding = 2) uniform sampler SamplerPointClamp;
+
+#endif // INCLUDE_PERFRAMERESOURCES

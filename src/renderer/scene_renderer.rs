@@ -17,6 +17,7 @@ pub enum FluidRenderingMode {
 pub enum VolumeVisualizationMode {
     None,
     Velocity,
+    DivergenceUncorrected,
 }
 
 #[repr(C)]
@@ -166,6 +167,9 @@ impl SceneRenderer {
             VolumeVisualizationMode::None => {}
             VolumeVisualizationMode::Velocity => {
                 self.volume_renderer.draw_volume_velocities(&mut rpass, pipeline_manager, &scene.fluid());
+            }
+            VolumeVisualizationMode::DivergenceUncorrected => {
+                self.volume_renderer.draw_volume_divergence(&mut rpass, pipeline_manager, &scene.fluid());
             }
         }
 

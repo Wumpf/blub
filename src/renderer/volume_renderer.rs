@@ -5,6 +5,7 @@ use std::{path::Path, rc::Rc};
 
 pub struct VolumeRenderer {
     velocity_render_pipeline: RenderPipelineHandle,
+    divergence_render_pipeline_desc: RenderPipelineHandle,
 }
 
 impl VolumeRenderer {
@@ -20,14 +21,21 @@ impl VolumeRenderer {
         }));
 
         let mut velocity_render_pipeline_desc = RenderPipelineCreationDesc::new(
-            layout,
-            Path::new("velocity_volume_visualization.vert"),
+            layout.clone(),
+            Path::new("volume_visualization_velocity.vert"),
             Some(Path::new("vertex_color.frag")),
         );
         velocity_render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
 
+        let divergence_render_pipeline_desc = RenderPipelineCreationDesc::new(
+            layout.clone(),
+            Path::new("volume_visualization_divergence.vert"),
+            Some(Path::new("sphere_particles.frag")),
+        );
+
         VolumeRenderer {
             velocity_render_pipeline: pipeline_manager.create_render_pipeline(device, shader_dir, velocity_render_pipeline_desc),
+            divergence_render_pipeline_desc: pipeline_manager.create_render_pipeline(device, shader_dir, divergence_render_pipeline_desc),
         }
     }
 
@@ -36,5 +44,12 @@ impl VolumeRenderer {
         rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
         let num_grid_cells = fluid.grid_dimension().width * fluid.grid_dimension().height * fluid.grid_dimension().depth;
         rpass.draw(0..2, 0..num_grid_cells);
+    }
+
+    pub fn draw_volume_divergence<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager, fluid: &'a HybridFluid) {
+        rpass.set_pipeline(pipeline_manager.get_render(&self.divergence_render_pipeline_desc));
+        rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
+        let num_grid_cells = fluid.grid_dimension().width * fluid.grid_dimension().height * fluid.grid_dimension().depth;
+        rpass.draw(0..6, 0..num_grid_cells);
     }
 }

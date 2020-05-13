@@ -1,3 +1,6 @@
+#ifndef INCLUDE_UTILITIES
+#define INCLUDE_UTILITIES
+
 // Adds [[flatten]] and friends (which are understood by SPIR-V)
 // https://github.com/KhronosGroup/GLSL/blob/master/extensions/ext/GL_EXT_control_flow_attributes.txt
 #extension GL_EXT_control_flow_attributes : require
@@ -23,3 +26,5 @@ vec3 sq(vec3 a) { return a * a; }
 vec4 sq(vec4 a) { return a * a; }
 
 vec3 heatmapColor(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2)); }
+
+#endif // INCLUDE_UTILITIES
