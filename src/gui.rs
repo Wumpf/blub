@@ -1,4 +1,4 @@
-use crate::scene::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
+use crate::renderer::scene_renderer::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
 use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use imgui::im_str;
 use std::{borrow::Cow, path::PathBuf, time::Duration};

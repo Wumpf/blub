@@ -8,17 +8,16 @@ extern crate strum_macros;
 mod camera;
 mod gui;
 mod hybrid_fluid;
-mod particle_renderer;
 mod per_frame_resources;
+mod renderer;
 mod scene;
 mod screen;
 mod simulation_controller;
-mod static_line_renderer;
 mod timer;
-mod volume_renderer;
 mod wgpu_utils;
 
 use per_frame_resources::*;
+use renderer::scene_renderer::SceneRenderer;
 use screen::*;
 use simulation_controller::SimulationControllerStatus;
 use std::path::{Path, PathBuf};
@@ -42,7 +41,7 @@ struct Application {
     shader_dir: shader::ShaderDirectory,
     pipeline_manager: pipelines::PipelineManager,
     scene: scene::Scene,
-    scene_renderer: scene::SceneRenderer,
+    scene_renderer: SceneRenderer,
     simulation_controller: simulation_controller::SimulationController,
     gui: gui::GUI,
 
@@ -97,7 +96,7 @@ impl Application {
             per_frame_resources.bind_group_layout(),
         );
         let simulation_controller = simulation_controller::SimulationController::new();
-        let mut scene_renderer = scene::SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
+        let mut scene_renderer = SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
         scene_renderer.on_new_scene(&device, &mut init_encoder, &scene);
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
