@@ -6,6 +6,7 @@ use std::{path::Path, rc::Rc};
 pub struct VolumeRenderer {
     velocity_render_pipeline: RenderPipelineHandle,
     divergence_render_pipeline_desc: RenderPipelineHandle,
+    pressure_render_pipeline_desc: RenderPipelineHandle,
 }
 
 impl VolumeRenderer {
@@ -33,23 +34,38 @@ impl VolumeRenderer {
             Some(Path::new("sphere_particles.frag")),
         );
 
+        let pressure_render_pipeline_desc = RenderPipelineCreationDesc::new(
+            layout.clone(),
+            Path::new("volume_visualization_pressure.vert"),
+            Some(Path::new("sphere_particles.frag")),
+        );
+
         VolumeRenderer {
             velocity_render_pipeline: pipeline_manager.create_render_pipeline(device, shader_dir, velocity_render_pipeline_desc),
             divergence_render_pipeline_desc: pipeline_manager.create_render_pipeline(device, shader_dir, divergence_render_pipeline_desc),
+            pressure_render_pipeline_desc: pipeline_manager.create_render_pipeline(device, shader_dir, pressure_render_pipeline_desc),
         }
+    }
+
+    fn num_grid_cells(dimension: wgpu::Extent3d) -> u32 {
+        dimension.width * dimension.height * dimension.depth
     }
 
     pub fn draw_volume_velocities<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager, fluid: &'a HybridFluid) {
         rpass.set_pipeline(pipeline_manager.get_render(&self.velocity_render_pipeline));
         rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
-        let num_grid_cells = fluid.grid_dimension().width * fluid.grid_dimension().height * fluid.grid_dimension().depth;
-        rpass.draw(0..2, 0..num_grid_cells);
+        rpass.draw(0..2, 0..Self::num_grid_cells(fluid.grid_dimension()));
     }
 
     pub fn draw_volume_divergence<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager, fluid: &'a HybridFluid) {
         rpass.set_pipeline(pipeline_manager.get_render(&self.divergence_render_pipeline_desc));
         rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
-        let num_grid_cells = fluid.grid_dimension().width * fluid.grid_dimension().height * fluid.grid_dimension().depth;
-        rpass.draw(0..6, 0..num_grid_cells);
+        rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));
+    }
+
+    pub fn draw_volume_pressure<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager, fluid: &'a HybridFluid) {
+        rpass.set_pipeline(pipeline_manager.get_render(&self.pressure_render_pipeline_desc));
+        rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
+        rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));
     }
 }

@@ -18,6 +18,7 @@ pub enum VolumeVisualizationMode {
     None,
     Velocity,
     DivergenceUncorrected,
+    PseudoPressure,
 }
 
 #[repr(C)]
@@ -170,6 +171,9 @@ impl SceneRenderer {
             }
             VolumeVisualizationMode::DivergenceUncorrected => {
                 self.volume_renderer.draw_volume_divergence(&mut rpass, pipeline_manager, &scene.fluid());
+            }
+            VolumeVisualizationMode::PseudoPressure => {
+                self.volume_renderer.draw_volume_pressure(&mut rpass, pipeline_manager, &scene.fluid());
             }
         }
 
