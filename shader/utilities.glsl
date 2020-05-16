@@ -25,6 +25,9 @@ vec2 sq(vec2 a) { return a * a; }
 vec3 sq(vec3 a) { return a * a; }
 vec4 sq(vec4 a) { return a * a; }
 
-vec3 heatmapColor(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2)); }
+// t = [0; 1]
+vec3 colormapHeat(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2)); }
+// t = [-1; 1]
+vec3 colormapCoolToWarm(float t) { return t < 0.0 ? mix(vec3(1.0), vec3(0.0, 0.0, 1.0), -t) : mix(vec3(1.0), vec3(1.0, 0.0, 0.0), t); }
 
 #endif // INCLUDE_UTILITIES

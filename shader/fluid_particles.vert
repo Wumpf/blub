@@ -18,7 +18,7 @@ void main() {
     out_Radius = 0.25; // todo, make scale dependent
     vec3 velocity = vec3(Particles[gl_InstanceIndex].VelocityMatrix[0].w, Particles[gl_InstanceIndex].VelocityMatrix[1].w,
                          Particles[gl_InstanceIndex].VelocityMatrix[2].w);
-    out_Tint = heatmapColor(length(velocity) * Rendering.VelocityVisualizationScale);
+    out_Tint = colormapHeat(length(velocity) * Rendering.VelocityVisualizationScale);
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position;
     out_WorldPosition = spanParticle(out_ParticleWorldPosition, out_Radius);
     gl_Position = Camera.ViewProjection * vec4(out_WorldPosition, 1.0);

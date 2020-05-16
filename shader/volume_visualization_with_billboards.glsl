@@ -21,12 +21,13 @@ void main() {
 
 #if defined(VISUALIZE_DIVERGENCE)
     float divergence = texelFetch(DivergenceVolume, volumeCoordinate, 0).x;
-    float scale = saturate(sq(divergence) * 0.8);
-    out_Tint = heatmapColor(scale).bgr;
+    float scale = clamp(divergence * 10.0, -1.0, 1.0);
+    out_Tint = colormapCoolToWarm(scale);
+    scale = abs(scale);
 #elif defined(VISUALIZE_PRESSURE)
     float pressure = texelFetch(PressureVolume, volumeCoordinate, 0).x;
-    float scale = saturate(abs(pressure) * 0.5);
-    out_Tint = heatmapColor(scale).grb;
+    float scale = saturate(pressure * pressure * 0.05);
+    out_Tint = colormapHeat(scale).grb;
 #endif
 
     out_ParticleWorldPosition = volumeCoordinate + vec3(0.5);

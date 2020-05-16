@@ -25,6 +25,6 @@ void main() {
         linePosition += velocity * scale;
     }
 
-    out_Color = heatmapColor(velocityMagnitude * Rendering.VelocityVisualizationScale);
+    out_Color = colormapHeat(velocityMagnitude * Rendering.VelocityVisualizationScale);
     gl_Position = Camera.ViewProjection * vec4(linePosition, 1.0);
 }
