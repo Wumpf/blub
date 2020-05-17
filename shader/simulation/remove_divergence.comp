@@ -13,40 +13,52 @@ void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
     vec4 velocity = imageLoad(VelocityVolume, gridCoord);
-    if (velocity.w != CELL_FLUID)
-        return;
+    //if (velocity.w != CELL_FLUID)
+    //    return;
 
     // Compute pressure gradient with central differences
     ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
     ivec3 largestGridCoord = gridSize - ivec3(1);
 
+    float pressureAtCenter = texelFetch(PressureVolume, gridCoord, 0).x;
+
     // At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
-    // However, as we just skipped writing those cells in our pressure solve iterations, we need to enforce the result here directly.
-    // (check 4.1 in https://www.cs.ubc.ca/~rbridson/fluidsimulation/fluids_notes.pdf for details on what pressure should be and why)
     vec3 velocityGradient; // Don't need w coordinate anymore, but it's useful for debugging
-    if (gridCoord.x == 0)
-        velocity.x = max(0.0, velocity.x);
-    else if (gridCoord.x == gridSize.x - 1)
-        velocity.x = min(0.0, velocity.x);
-    else {
-        velocity.x -=
-            (texelFetch(PressureVolume, gridCoord + ivec3(1, 0, 0), 0).x - texelFetch(PressureVolume, gridCoord - ivec3(1, 0, 0), 0).x) * 0.5;
+    {
+        ivec3 neighborCellCoord = gridCoord + ivec3(1, 0, 0);
+
+        // Is this a left boundary face:
+        if (velocity.w == CELL_SOLID)
+            velocity.x = max(0.0, velocity.x);
+        // Is this a right boundary face
+        else if (gridCoord.x == largestGridCoord.x) //(texelFetch(VelocityVolume, neighborCellCoord, 0).w == CELL_SOLID)
+            velocity.x = min(0.0, velocity.x);
+        else
+            velocity.x -= texelFetch(PressureVolume, neighborCellCoord, 0).x - pressureAtCenter;
     }
-    if (gridCoord.y == 0)
-        velocity.y = max(0.0, velocity.y);
-    else if (gridCoord.y == gridSize.y - 1)
-        velocity.y = min(0.0, velocity.y);
-    else {
-        velocity.y -=
-            (texelFetch(PressureVolume, gridCoord + ivec3(0, 1, 0), 0).x - texelFetch(PressureVolume, gridCoord - ivec3(0, 1, 0), 0).x) * 0.5;
+    {
+        ivec3 neighborCellCoord = gridCoord + ivec3(0, 1, 0);
+
+        // Is this a bottom boundary face:
+        if (velocity.w == CELL_SOLID)
+            velocity.y = max(0.0, velocity.y);
+        // Is this a top boundary face
+        else if (gridCoord.y == largestGridCoord.y) //(texelFetch(VelocityVolume, neighborCellCoord, 0).w == CELL_SOLID)
+            velocity.y = min(0.0, velocity.y);
+        else
+            velocity.y -= texelFetch(PressureVolume, neighborCellCoord, 0).x - pressureAtCenter;
     }
-    if (gridCoord.z == 0)
-        velocity.z = max(0.0, velocity.z);
-    else if (gridCoord.z == gridSize.z - 1)
-        velocity.z = min(0.0, velocity.z);
-    else {
-        velocity.z -=
-            (texelFetch(PressureVolume, gridCoord + ivec3(0, 0, 1), 0).x - texelFetch(PressureVolume, gridCoord - ivec3(0, 0, 1), 0).x) * 0.5;
+    {
+        ivec3 neighborCellCoord = gridCoord + ivec3(0, 0, 1);
+
+        // Is this a bottom boundary face:
+        if (velocity.w == CELL_SOLID)
+            velocity.z = max(0.0, velocity.z);
+        // Is this a top boundary face
+        else if (gridCoord.z == largestGridCoord.z) //(texelFetch(VelocityVolume, neighborCellCoord, 0).w == CELL_SOLID)
+            velocity.z = min(0.0, velocity.z);
+        else
+            velocity.z -= texelFetch(PressureVolume, neighborCellCoord, 0).x - pressureAtCenter;
     }
 
     imageStore(VelocityVolume, gridCoord, velocity);

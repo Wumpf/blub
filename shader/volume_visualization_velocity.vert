@@ -12,19 +12,21 @@ layout(location = 0) out vec3 out_Color;
 void main() {
     ivec3 volumeSize = textureSize(VelocityVolume, 0);
 
+    uint channel = gl_InstanceIndex % 3;
+    uint positionIndex = gl_InstanceIndex / 3;
     ivec3 volumeCoordinate =
-        ivec3(gl_InstanceIndex % volumeSize.x, gl_InstanceIndex / volumeSize.x % volumeSize.y, gl_InstanceIndex / volumeSize.x / volumeSize.y);
+        ivec3(positionIndex % volumeSize.x, positionIndex / volumeSize.x % volumeSize.y, positionIndex / volumeSize.x / volumeSize.y);
 
     vec3 cellCenter = volumeCoordinate + vec3(0.5);
     vec3 linePosition = cellCenter;
+    linePosition[channel] += 0.5;
 
     vec3 velocity = texelFetch(VelocityVolume, volumeCoordinate, 0).xyz;
-    float velocityMagnitude = length(velocity);
-    float scale = min(velocityMagnitude * Rendering.VelocityVisualizationScale, 1.0) / velocityMagnitude;
+    float scale = clamp(velocity[channel] * Rendering.VelocityVisualizationScale, -1.0, 1.0);
     if (gl_VertexIndex == 0) {
-        linePosition += velocity * scale;
+        linePosition[channel] += scale;
     }
 
-    out_Color = colormapHeat(velocityMagnitude * Rendering.VelocityVisualizationScale);
+    out_Color = colormapCoolToWarm(scale);
     gl_Position = Camera.ViewProjection * vec4(linePosition, 1.0);
 }

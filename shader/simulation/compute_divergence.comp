@@ -13,29 +13,17 @@ layout(set = 2, binding = 3, r32f) uniform restrict image3D DivergenceVolume;
 
 COMPUTE_PASS_VOLUME
 
-const ivec3 dirs[3] = ivec3[3](ivec3(1, 0, 0), ivec3(0, 1, 0), ivec3(0, 0, 1));
-
-void AddDivergenceInDir(inout float divergence, ivec3 gridCoord, uint dir) {
-    // Divergence exists only from solid/fluid or fluid/fluid!
-    vec4 vneg = texelFetch(VelocityVolume, gridCoord - dirs[dir], 0);
-    if (vneg.w != CELL_AIR) {
-        vec4 vpos = texelFetch(VelocityVolume, gridCoord + dirs[dir], 0);
-        [[flatten]] if (vpos.w != CELL_AIR) divergence += vpos[dir] - vneg[dir];
-    }
-}
-
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     float divergence = 0.0;
 
     // Don't compute divergence if there's no fluid
     // (Divergence tells us how much fluid is going in/out. If there's air/solid, then that's clearly zero!)
-    vec4 mid = texelFetch(VelocityVolume, gridCoord, 0);
-    [[dont_flatten]] if (mid.w == CELL_FLUID) {
-        AddDivergenceInDir(divergence, gridCoord, 0);
-        AddDivergenceInDir(divergence, gridCoord, 1);
-        AddDivergenceInDir(divergence, gridCoord, 2);
-        divergence *= 0.5;
+    vec4 currentCellStaggeredVelocities = texelFetch(VelocityVolume, gridCoord, 0);
+    [[dont_flatten]] if (currentCellStaggeredVelocities.w == CELL_FLUID) {
+        divergence += currentCellStaggeredVelocities.x - texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+        divergence += currentCellStaggeredVelocities.y - texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).y;
+        divergence += currentCellStaggeredVelocities.z - texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).z;
     }
 
     imageStore(DivergenceVolume, gridCoord, divergence.xxxx);

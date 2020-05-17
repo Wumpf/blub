@@ -59,29 +59,36 @@ void main() {
     vec3 cy = mix(v_x10, v_x11, interpolants.z) - mix(v_x00, v_x01, interpolants.z);
     vec3 cz = v_xy1 - v_xy0;
 
+    newVelocity.x =
+        textureLod(sampler3D(VelocityVolume, SamplerTrilinearClamp), (originalPosition - vec3(0.5, 0.0, 0.0)) * gridTexelSizeNormalized, 0.0).x;
+    newVelocity.y =
+        textureLod(sampler3D(VelocityVolume, SamplerTrilinearClamp), (originalPosition - vec3(0.0, 0.5, 0.0)) * gridTexelSizeNormalized, 0.0).y;
+    newVelocity.z =
+        textureLod(sampler3D(VelocityVolume, SamplerTrilinearClamp), (originalPosition - vec3(0.0, 0.0, 0.5)) * gridTexelSizeNormalized, 0.0).z;
+
     // Advect with Runge Kutta 4
     // confined to current cell for which we know velocities are defined and we already sampled all corners - which makes this relatively cheap.
-    vec3 k1 = newVelocity;
-    vec3 k2 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolants + Time.SimulationDelta * 0.5 * k1));
-    vec3 k3 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolants + Time.SimulationDelta * 0.5 * k2));
-    vec3 k4 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolants + Time.SimulationDelta * k3));
-    vec3 totalMovement = Time.SimulationDelta * (1.0 / 6.0) * (k1 + 2.0 * (k2 + k3) + k4);
-    // vec3 totalMovement = newVelocity * Time.SimulationDelta; // Euler integration
+    //vec3 k1 = newVelocity;
+    //vec3 k2 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolants + Time.SimulationDelta * 0.5 * k1));
+    //vec3 k3 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolants + Time.SimulationDelta * 0.5 * k2));
+    //vec3 k4 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolants + Time.SimulationDelta * k3));
+    //vec3 totalMovement = Time.SimulationDelta * (1.0 / 6.0) * (k1 + 2.0 * (k2 + k3) + k4);
+    vec3 totalMovement = newVelocity * Time.SimulationDelta; // Euler integration
 
     // Enforce boundary.
     // Moving particle back a bit resulted in a lot of sticky particles that are hard to get rid of.
     // vec3 clampedMovement = clamp(originalPosition + totalMovement, boundaryMin, boundaryMax) - originalPosition;
     // vec3 clampRatio = clampedMovement / totalMovement;
     // float clampFactor = min(min(clampRatio.x, clampRatio.y), clampRatio.z);
-    vec3 newPosition = clamp(originalPosition + totalMovement, vec3(0.5), gridSize - vec3(0.5));
+    vec3 newPosition = clamp(originalPosition + totalMovement, vec3(1.0), gridSize + vec3(1.0));
 
     // Write out particle.
     Particles[particleIndex].Position = newPosition;
-    Particles[particleIndex].VelocityMatrix[0] = vec4(cx, newVelocity.x);
-    Particles[particleIndex].VelocityMatrix[1] = vec4(cy, newVelocity.y);
-    Particles[particleIndex].VelocityMatrix[2] = vec4(cz, newVelocity.z);
+    // Particles[particleIndex].VelocityMatrix[0] = vec4(cx, newVelocity.x);
+    // Particles[particleIndex].VelocityMatrix[1] = vec4(cy, newVelocity.y);
+    // Particles[particleIndex].VelocityMatrix[2] = vec4(cz, newVelocity.z);
     // PIC only
-    // Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
-    // Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);
-    // Particles[particleIndex].VelocityMatrix[2] = vec4(vec3(0), newVelocity.z);
+    Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
+    Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);
+    Particles[particleIndex].VelocityMatrix[2] = vec4(vec3(0), newVelocity.z);
 }
