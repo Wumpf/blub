@@ -1,6 +1,6 @@
 use super::particle_renderer::ParticleRenderer;
 use super::static_line_renderer::{LineVertex, StaticLineRenderer};
-use super::volume_renderer::VolumeRenderer;
+use super::volume_renderer::{VolumeRenderer, VolumeVisualizationMode};
 use crate::{
     hybrid_fluid::HybridFluid,
     scene::Scene,
@@ -11,14 +11,6 @@ use crate::{
 pub enum FluidRenderingMode {
     None,
     Particles,
-}
-
-#[derive(Clone, Copy, Debug, EnumIter)]
-pub enum VolumeVisualizationMode {
-    None,
-    Velocity,
-    DivergenceUncorrected,
-    PseudoPressure,
 }
 
 #[repr(C)]
@@ -164,18 +156,8 @@ impl SceneRenderer {
                 self.particle_renderer.draw(&mut rpass, pipeline_manager, &scene.fluid());
             }
         }
-        match self.volume_visualization {
-            VolumeVisualizationMode::None => {}
-            VolumeVisualizationMode::Velocity => {
-                self.volume_renderer.draw_volume_velocities(&mut rpass, pipeline_manager, &scene.fluid());
-            }
-            VolumeVisualizationMode::DivergenceUncorrected => {
-                self.volume_renderer.draw_volume_divergence(&mut rpass, pipeline_manager, &scene.fluid());
-            }
-            VolumeVisualizationMode::PseudoPressure => {
-                self.volume_renderer.draw_volume_pressure(&mut rpass, pipeline_manager, &scene.fluid());
-            }
-        }
+        self.volume_renderer
+            .draw(&mut rpass, pipeline_manager, &scene.fluid(), self.volume_visualization);
 
         if self.enable_box_lines {
             self.bounds_line_renderer.draw(&mut rpass, pipeline_manager);

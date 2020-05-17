@@ -1,4 +1,5 @@
 #include "per_frame_resources.glsl"
+#include "simulation/hybrid_fluid.glsl"
 #include "sphere_particles.glsl"
 #include "utilities.glsl"
 
@@ -28,6 +29,13 @@ void main() {
     float pressure = texelFetch(PressureVolume, volumeCoordinate, 0).x;
     float scale = saturate(pressure * pressure * 0.05);
     out_Tint = colormapHeat(scale).grb;
+#elif defined(VISUALIZE_MARKER)
+    float marker = texelFetch(VelocityVolume, volumeCoordinate, 0).w;
+    float scale = marker == CELL_AIR ? 0.0 : 1.0;
+    if (marker == CELL_FLUID)
+        out_Tint = vec3(0.5, 0.5, 1.0);
+    else
+        out_Tint = vec3(0.0);
 #endif
 
     out_ParticleWorldPosition = volumeCoordinate + vec3(0.5);

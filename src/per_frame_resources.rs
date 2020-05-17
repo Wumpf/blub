@@ -1,8 +1,7 @@
 use crate::camera;
-use crate::renderer::scene_renderer;
 use crate::timer;
 use crate::wgpu_utils::binding_builder::*;
-use crate::wgpu_utils::*;
+use crate::{renderer, wgpu_utils::*};
 use uniformbuffer::UniformBuffer;
 
 #[repr(C)]
@@ -10,7 +9,7 @@ use uniformbuffer::UniformBuffer;
 struct PerFrameUniformBufferContent {
     camera: camera::CameraUniformBufferContent,
     time: timer::FrameTimeUniformBufferContent,
-    rendering: scene_renderer::GlobalRenderSettingsUniformBufferContent,
+    rendering: renderer::GlobalRenderSettingsUniformBufferContent,
 }
 
 type PerFrameUniformBuffer = UniformBuffer<PerFrameUniformBufferContent>;
@@ -52,7 +51,7 @@ impl PerFrameResources {
         device: &wgpu::Device,
         camera: camera::CameraUniformBufferContent,
         time: timer::FrameTimeUniformBufferContent,
-        rendering: scene_renderer::GlobalRenderSettingsUniformBufferContent,
+        rendering: renderer::GlobalRenderSettingsUniformBufferContent,
     ) {
         self.ubo
             .update_content(encoder, device, PerFrameUniformBufferContent { camera, time, rendering });

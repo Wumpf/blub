@@ -17,7 +17,7 @@ mod timer;
 mod wgpu_utils;
 
 use per_frame_resources::*;
-use renderer::scene_renderer::SceneRenderer;
+use renderer::SceneRenderer;
 use screen::*;
 use simulation_controller::SimulationControllerStatus;
 use std::path::{Path, PathBuf};
