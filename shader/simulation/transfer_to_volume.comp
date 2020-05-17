@@ -8,12 +8,12 @@
 
 COMPUTE_PASS_VOLUME
 
-void gatherStaggeredVelocitiesFromLinkedList(inout vec3 velocity, inout vec3 totalWeights, vec3 velocityGridPosition, ivec3 llgridCoord) {
+void gatherStaggeredVelocitiesFromLinkedList(inout vec3 velocity, inout vec3 totalWeights, vec3 cellCenter, ivec3 llgridCoord) {
     uint particleIndex = imageLoad(LinkedListDualGrid, llgridCoord).r - 1;
 
     // while (particleIndex != INVALID_LINKED_LIST_PTR) {
     for (int i = 0; i < 32 && particleIndex != INVALID_LINKED_LIST_PTR; ++i) {
-        vec3 toGridCenter = velocityGridPosition - Particles[particleIndex].Position;
+        vec3 toGridCenter = cellCenter - Particles[particleIndex].Position;
         vec3 dCenter = saturate(vec3(1.0) - abs(toGridCenter));
         vec3 dOffset = saturate(vec3(1.0) - abs(toGridCenter + vec3(0.5)));
 
@@ -27,7 +27,7 @@ void gatherStaggeredVelocitiesFromLinkedList(inout vec3 velocity, inout vec3 tot
 }
 
 void main() {
-    vec3 velocityGridPosition = vec3(gl_GlobalInvocationID) + vec3(0.5); // velocity is stored at the center.
+    vec3 cellCenter = vec3(gl_GlobalInvocationID) + vec3(0.5); // center of the cell
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     vec3 velocity = vec3(0.0);
     vec3 weights = vec3(0.0);
@@ -35,36 +35,33 @@ void main() {
     [[unroll]] for (int z = -1; z <= 1; ++z) {
         [[unroll]] for (int y = -1; y <= 1; ++y) {
             [[unroll]] for (int x = -1; x <= 1; ++x) {
-                gatherStaggeredVelocitiesFromLinkedList(velocity, weights, velocityGridPosition, gridCoord + ivec3(x, y, z));
+                gatherStaggeredVelocitiesFromLinkedList(velocity, weights, cellCenter, gridCoord + ivec3(x, y, z));
             }
         }
     }
 
-    // wouldn't this make sense? (doesn't work)
-    // float marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_FLUID : CELL_AIR;
-    float marker = CELL_AIR;
+    [[flatten]] if (weights.x > 0.0) { velocity.x /= weights.x; }
+    [[flatten]] if (weights.y > 0.0) { velocity.y /= weights.y; }
+    [[flatten]] if (weights.z > 0.0) { velocity.z /= weights.z; }
 
-    [[flatten]] if (weights.x > 0.0) {
-        velocity.x /= weights.x;
-        marker = CELL_FLUID;
-    }
-    [[flatten]] if (weights.y > 0.0) {
-        velocity.y /= weights.y;
-        marker = CELL_FLUID;
-    }
-    [[flatten]] if (weights.z > 0.0) {
-        velocity.z /= weights.z;
-        marker = CELL_FLUID;
-    }
-
-    [[flatten]] if (marker == CELL_FLUID) {
-        // Apply global forces.
-        // todo: make configurable
-        velocity.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
-    }
+    // TODO: Doing it sparse like this makes a lot of sense to me but
+    float marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_AIR : CELL_FLUID;
+    //float marker = any(greaterThan(weights, vec3(0.0))) ? CELL_FLUID : CELL_AIR;
 
     // in order to define boundary wall velocities for the bottom/left/back boundary, we need to mark those cells as solid.
-    [[flatten]] if (gridCoord.x == 0 || gridCoord.y == 0 || gridCoord.z == 0) marker = CELL_SOLID;
+    [[flatten]] if (gridCoord.x == 0 || gridCoord.y == 0 || gridCoord.z == 0) {
+        marker = CELL_SOLID;
+        // It's tempting to set velocity to all zero, but it's wrong!
+        // Any velocity transfered from the particles needs to be interpolated back.
+        // While particles are not allowed inside solid cells, they may still interpolate values that are stored there!
+        // More details in divergence remove step.
+    }
+
+    // Apply global forces. In the spirit of extrapolation this applies to air cells as well!
+    // However need to be careful not to add a force _into_ a boundary cell
+    // todo: make configurable
+    if (gridCoord.y != 0)
+        velocity.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
 
     imageStore(VelocityVolume, gridCoord, vec4(velocity, marker));
 }

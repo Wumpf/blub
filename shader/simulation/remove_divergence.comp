@@ -13,8 +13,6 @@ void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
     vec4 velocity = imageLoad(VelocityVolume, gridCoord);
-    //if (velocity.w != CELL_FLUID)
-    //    return;
 
     // Compute pressure gradient with central differences
     ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
@@ -22,44 +20,63 @@ void main() {
 
     float pressureAtCenter = texelFetch(PressureVolume, gridCoord, 0).x;
 
+    // Here's something not quite intuitive:
+    // If the current cell is marked CELL_SOLID, we still need to preserve velocity between neighboring solid cells!
+    // Why?
+    // Imagine a vertical wall, any particle falling down directly next to it trilinearly interpolates "into" the solid cell.
+    // It's not inside, but in the transfer-to-volume step the vertical velocity was correctly picked up into the wall.
+    // If we would meddle with this vertical velocity, the particle will get stuck!
+
+    // TODO: Can't sample marker grid right now because it's one with the velocity grid which we're writing here.
+
     // At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
     vec3 velocityGradient; // Don't need w coordinate anymore, but it's useful for debugging
     {
         ivec3 neighborCellCoord = gridCoord + ivec3(1, 0, 0);
+        float neighborCellStatus = any(equal(neighborCellCoord, gridSize)) || any(equal(neighborCellCoord, ivec3(0)))
+                                       ? CELL_SOLID
+                                       : CELL_AIR; // texelFetch(VelocityVolume, neighborCellCoord, 0).w;
 
         // Is this a left boundary face:
-        if (velocity.w == CELL_SOLID)
+        if (velocity.w == CELL_SOLID && neighborCellStatus != CELL_SOLID)
             velocity.x = max(0.0, velocity.x);
         // Is this a right boundary face
-        else if (gridCoord.x == largestGridCoord.x) //(texelFetch(VelocityVolume, neighborCellCoord, 0).w == CELL_SOLID)
+        else if (velocity.w != CELL_SOLID && neighborCellStatus == CELL_SOLID)
             velocity.x = min(0.0, velocity.x);
-        else
+        else if (velocity.w != CELL_SOLID && neighborCellStatus != CELL_SOLID)
             velocity.x -= texelFetch(PressureVolume, neighborCellCoord, 0).x - pressureAtCenter;
     }
     {
         ivec3 neighborCellCoord = gridCoord + ivec3(0, 1, 0);
+        float neighborCellStatus = any(equal(neighborCellCoord, gridSize)) || any(equal(neighborCellCoord, ivec3(0)))
+                                       ? CELL_SOLID
+                                       : CELL_AIR; // texelFetch(VelocityVolume, neighborCellCoord, 0).w;
 
         // Is this a bottom boundary face:
-        if (velocity.w == CELL_SOLID)
+        if (velocity.w == CELL_SOLID && neighborCellStatus != CELL_SOLID)
             velocity.y = max(0.0, velocity.y);
         // Is this a top boundary face
-        else if (gridCoord.y == largestGridCoord.y) //(texelFetch(VelocityVolume, neighborCellCoord, 0).w == CELL_SOLID)
+        else if (velocity.w != CELL_SOLID && neighborCellStatus == CELL_SOLID)
             velocity.y = min(0.0, velocity.y);
-        else
+        else if (velocity.w != CELL_SOLID && neighborCellStatus != CELL_SOLID)
             velocity.y -= texelFetch(PressureVolume, neighborCellCoord, 0).x - pressureAtCenter;
     }
     {
         ivec3 neighborCellCoord = gridCoord + ivec3(0, 0, 1);
+        float neighborCellStatus = any(equal(neighborCellCoord, gridSize)) || any(equal(neighborCellCoord, ivec3(0)))
+                                       ? CELL_SOLID
+                                       : CELL_AIR; // texelFetch(VelocityVolume, neighborCellCoord, 0).w;
 
-        // Is this a bottom boundary face:
-        if (velocity.w == CELL_SOLID)
+        // Is this a z+ boundary face:
+        if (velocity.w == CELL_SOLID && neighborCellStatus != CELL_SOLID)
             velocity.z = max(0.0, velocity.z);
-        // Is this a top boundary face
-        else if (gridCoord.z == largestGridCoord.z) //(texelFetch(VelocityVolume, neighborCellCoord, 0).w == CELL_SOLID)
+        // Is this a z- boundary face
+        else if (velocity.w != CELL_SOLID && neighborCellStatus == CELL_SOLID)
             velocity.z = min(0.0, velocity.z);
-        else
+        else if (velocity.w != CELL_SOLID && neighborCellStatus != CELL_SOLID)
             velocity.z -= texelFetch(PressureVolume, neighborCellCoord, 0).x - pressureAtCenter;
     }
 
+    // todo: skip write if not needed.
     imageStore(VelocityVolume, gridCoord, velocity);
 }
