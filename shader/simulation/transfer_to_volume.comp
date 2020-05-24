@@ -44,24 +44,21 @@ void main() {
     [[flatten]] if (weights.y > 0.0) { velocity.y /= weights.y; }
     [[flatten]] if (weights.z > 0.0) { velocity.z /= weights.z; }
 
-    // TODO: Doing it sparse like this makes a lot of sense to me but
-    float marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_AIR : CELL_FLUID;
-    //float marker = any(greaterThan(weights, vec3(0.0))) ? CELL_FLUID : CELL_AIR;
-
-    // in order to define boundary wall velocities for the bottom/left/back boundary, we need to mark those cells as solid.
-    [[flatten]] if (gridCoord.x == 0 || gridCoord.y == 0 || gridCoord.z == 0) {
-        marker = CELL_SOLID;
-        // It's tempting to set velocity to all zero, but it's wrong!
-        // Any velocity transfered from the particles needs to be interpolated back.
-        // While particles are not allowed inside solid cells, they may still interpolate values that are stored there!
-        // More details in divergence remove step.
-    }
-
     // Apply global forces. In the spirit of extrapolation this applies to air cells as well!
-    // However need to be careful not to add a force _into_ a boundary cell
-    // todo: make configurable
-    if (gridCoord.y != 0)
-        velocity.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
+    velocity.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
+
+    // Mark this cell only as a fluid cell if there is actually fluid inside.
+    // Note that air cells still get velocity with our transfer scheme, which is great because otherwise we would need to extrapolate to it!
+    float marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_AIR : CELL_FLUID;
+
+    // Reinforce global boundaries.
+    // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
+    // (top/right/front are marked implicitely and there are walls readily available!)
+    [[flatten]] if (any(lessThanEqual(gridCoord, ivec3(0)))) { marker = CELL_SOLID; }
+    // TODO: This probably needs to be a separate pass as we can't really do this on the fly in compute divergence
+    // (which looks at wall differences within a cell rather than what's in the next cell)
+    ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
+    velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
 
     imageStore(VelocityVolume, gridCoord, vec4(velocity, marker));
 }

@@ -1,5 +1,5 @@
 // Pressure (PPE) solving iteration
-// we're solving a pseudo pressure which is (density / deltaTime * pressure)
+// we're solving a pseudo pressure which is pseudopressure = (density / deltaTime * pressure)
 
 #version 450
 
@@ -18,11 +18,11 @@ void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
     // Inside...
-    // Air cells: Pressure is zero (could be any constant value really)
-    // Solid cells: Not defined!
-    //      But for easier derivation we can just set imagine to set it to a value that would cause the velocity at the fluid/solid interface to fulfill the boundary condition.
-    //      Note that this means though that we have different pressure values for every boundary face.
-    //      For details check out chapter 4.1 in Bridson's SIGGRAPH2007 course notes https://www.cs.ubc.ca/~rbridson/fluidsimulation/fluids_notes.pdf
+    // * Air cells: Pressure is zero (could be any constant value really)
+    // * Solid cells: Not defined!
+    //      But for easier derivation we can just set imagine to set it to a value that would cause the velocity at the fluid/solid interface to
+    //      fulfill the boundary condition. Note that this means though that we have different pressure values for every boundary face. For details
+    //      check out chapter 4.1 in Bridson's SIGGRAPH2007 course notes https://www.cs.ubc.ca/~rbridson/fluidsimulation/fluids_notes.pdf
 
     // Boundary conditions:
     // Air: Dirichlet (-> pressure is set to zero)
