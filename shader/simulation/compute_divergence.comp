@@ -14,19 +14,31 @@ layout(set = 2, binding = 4, r32f) uniform restrict image3D DivergenceVolume;
 
 COMPUTE_PASS_VOLUME
 
+float computeDivergenceForDirection(ivec3 coord, vec3 currentCellStaggeredVelocities, const uint component) {
+    coord[component] -= 1;
+
+    uint oppositeWallType = texelFetch(MarkerVolume, coord, 0).x;
+    if (oppositeWallType == CELL_FLUID)
+        return currentCellStaggeredVelocities[component] - texelFetch(VelocityVolume, coord, 0)[component];
+    else if (oppositeWallType == CELL_SOLID)
+        return currentCellStaggeredVelocities[component];
+    else
+        return 0.0;
+}
+
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    float divergence = 0.0;
 
     // Don't compute divergence if there's no fluid
+    // Divergence tells us how much fluid is going in/out. If we're at a air/solid cell then that's clearly zero as there's no fluid in the first
+    // place!
     if (texelFetch(MarkerVolume, gridCoord, 0).x != CELL_FLUID)
-        return; // Clear?
+        return; // Clear? Nah, just means we need to be careful with debug viz!
 
-    // (Divergence tells us how much fluid is going in/out. If there's air/solid, then that's clearly zero!)
-    vec4 currentCellStaggeredVelocities = texelFetch(VelocityVolume, gridCoord, 0);
-    divergence += currentCellStaggeredVelocities.x - texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    divergence += currentCellStaggeredVelocities.y - texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).y;
-    divergence += currentCellStaggeredVelocities.z - texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).z;
+    vec3 currentCellStaggeredVelocities = texelFetch(VelocityVolume, gridCoord, 0).xyz;
+    float divergence = computeDivergenceForDirection(gridCoord, currentCellStaggeredVelocities, 0);
+    divergence += computeDivergenceForDirection(gridCoord, currentCellStaggeredVelocities, 1);
+    divergence += computeDivergenceForDirection(gridCoord, currentCellStaggeredVelocities, 2);
 
     imageStore(DivergenceVolume, gridCoord, divergence.xxxx);
 }

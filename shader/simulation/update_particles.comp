@@ -7,6 +7,7 @@
 
 layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 layout(set = 2, binding = 1) uniform texture3D VelocityVolume;
+layout(set = 2, binding = 2) uniform utexture3D MarkerVolume;
 
 COMPUTE_PASS_PARTICLES
 
@@ -14,6 +15,10 @@ vec3 InterpolateTrilinear(vec3 v_000, vec3 v_100, vec3 v_010, vec3 v_110, vec3 v
                           vec3 interpolantsY, vec3 interpolantsZ) {
     return mix(mix(mix(v_000, v_100, interpolantsX), mix(v_010, v_110, interpolantsX), interpolantsY),
                mix(mix(v_001, v_101, interpolantsX), mix(v_011, v_111, interpolantsX), interpolantsY), interpolantsZ);
+}
+
+float sampleVelocity(ivec3 coord, uint component, float centerValue) {
+    return (texelFetch(MarkerVolume, coord, 0).x == CELL_FLUID) ? texelFetch(VelocityVolume, coord, 0)[component] : centerValue;
 }
 
 void main() {
@@ -38,18 +43,21 @@ void main() {
         max(vec3(0.0), originalPosition - vec3(0.5, 0.5, 1.0)),
     };
 
+    vec3 centerVelocities = texelFetch(VelocityVolume, ivec3(originalPosition), 0).xyz;
+
     vec3 v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111;
     [[unroll]] for (int i = 0; i < 3; ++i) {
         ivec3 volumeCoordMin = ivec3(offsetPositions[i]);
         ivec3 volumeCoordMax = min(volumeCoordMin + ivec3(1, 1, 1), ivec3(gridSize - ivec3(1)));
-        v_000[i] = texelFetch(VelocityVolume, volumeCoordMin, 0)[i];
-        v_100[i] = texelFetch(VelocityVolume, ivec3(volumeCoordMax.x, volumeCoordMin.yz), 0)[i];
-        v_010[i] = texelFetch(VelocityVolume, ivec3(volumeCoordMin.x, volumeCoordMax.y, volumeCoordMin.z), 0)[i];
-        v_110[i] = texelFetch(VelocityVolume, ivec3(volumeCoordMax.xy, volumeCoordMin.z), 0)[i];
-        v_001[i] = texelFetch(VelocityVolume, ivec3(volumeCoordMin.xy, volumeCoordMax.z), 0)[i];
-        v_101[i] = texelFetch(VelocityVolume, ivec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z), 0)[i];
-        v_011[i] = texelFetch(VelocityVolume, ivec3(volumeCoordMin.x, volumeCoordMax.yz), 0)[i];
-        v_111[i] = texelFetch(VelocityVolume, volumeCoordMax, 0)[i];
+
+        v_000[i] = sampleVelocity(volumeCoordMin, i, centerVelocities[i]);
+        v_100[i] = sampleVelocity(ivec3(volumeCoordMax.x, volumeCoordMin.yz), i, centerVelocities[i]);
+        v_010[i] = sampleVelocity(ivec3(volumeCoordMin.x, volumeCoordMax.y, volumeCoordMin.z), i, centerVelocities[i]);
+        v_110[i] = sampleVelocity(ivec3(volumeCoordMax.xy, volumeCoordMin.z), i, centerVelocities[i]);
+        v_001[i] = sampleVelocity(ivec3(volumeCoordMin.xy, volumeCoordMax.z), i, centerVelocities[i]);
+        v_101[i] = sampleVelocity(ivec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z), i, centerVelocities[i]);
+        v_011[i] = sampleVelocity(ivec3(volumeCoordMin.x, volumeCoordMax.yz), i, centerVelocities[i]);
+        v_111[i] = sampleVelocity(volumeCoordMax, i, centerVelocities[i]);
     }
 
     // Update velocity and the APIC affine matrix.

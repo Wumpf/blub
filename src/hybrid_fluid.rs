@@ -86,6 +86,7 @@ impl HybridFluid {
         let group_layout_write_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles
             .next_binding_compute(binding_glsl::texture3D()) // vgrid
+            .next_binding_compute(binding_glsl::utexture3D()) // marker volume
             .create(device, "BindGroupLayout: Update Particles and/or Velocity Grid");
         let group_layout_pressure_solve = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture3D()) // vgrid
@@ -144,6 +145,7 @@ impl HybridFluid {
         let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
             .buffer(&particles, 0..particle_buffer_size)
             .texture(&volume_velocity_view)
+            .texture(&volume_marker_view)
             .create(device, "BindGroup: Update Particles");
         let bind_group_compute_divergence = BindGroupBuilder::new(&group_layout_pressure_solve)
             .texture(&volume_velocity_view)

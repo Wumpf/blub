@@ -8,30 +8,35 @@
 
 COMPUTE_PASS_VOLUME
 
+float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, vec3 currentCellStaggeredVelocities, const uint component) {
+    coord[component] += 1;
+
+    uint neighborType = imageLoad(MarkerVolume, coord).x;
+    float neighborPressure = neighborType == CELL_FLUID ? texelFetch(PressureVolume, coord, 0).x : 0.0;
+
+    [[flatten]] if (neighborType == CELL_SOLID) {
+        // At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
+        // No support for non-static boundary yet
+        // -> No flow between boundary and non-boundary allowed.
+        return 0.0;
+    }
+    else {
+        return currentCellStaggeredVelocities[component] - (neighborPressure - pressureAtCenter);
+    }
+}
+
 void main() {
     vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
-    vec4 velocity = imageLoad(VelocityVolume, gridCoord);
-
     uint cellType = imageLoad(MarkerVolume, gridCoord).x;
-    uvec3 cellTypeNeighbors = uvec3(imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).x, imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).x,
-                                    imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).x);
+    if (cellType != CELL_FLUID)
+        return;
 
-    // Compute pressure gradient with central differences
-    float pressureAtCenter = cellType == CELL_FLUID ? texelFetch(PressureVolume, gridCoord, 0).x : 0.0;
-    float pressurePosX = cellTypeNeighbors.x == CELL_FLUID ? texelFetch(PressureVolume, gridCoord + ivec3(1, 0, 0), 0).x : 0.0;
-    float pressurePosY = cellTypeNeighbors.y == CELL_FLUID ? texelFetch(PressureVolume, gridCoord + ivec3(0, 1, 0), 0).x : 0.0;
-    float pressurePosZ = cellTypeNeighbors.z == CELL_FLUID ? texelFetch(PressureVolume, gridCoord + ivec3(0, 0, 1), 0).x : 0.0;
-
-    velocity.x -= pressurePosX - pressureAtCenter;
-    velocity.y -= pressurePosY - pressureAtCenter;
-    velocity.z -= pressurePosZ - pressureAtCenter;
-
-    // Reenforce boundary condition (any pressure sampled in solids was garbage)
-    velocity.xyz = enforceBoundaryCondition(velocity.xyz, cellType == CELL_SOLID, equal(cellTypeNeighbors, uvec3(CELL_SOLID)));
-
-    // Write result.
-    // TODO: skip write if not needed?
-    imageStore(VelocityVolume, gridCoord, velocity);
+    vec3 velocity = imageLoad(VelocityVolume, gridCoord).xyz;
+    float pressureAtCenter = texelFetch(PressureVolume, gridCoord, 0).x;
+    velocity.x = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 0);
+    velocity.y = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 1);
+    velocity.z = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 2);
+    imageStore(VelocityVolume, gridCoord, velocity.xyzz);
 }

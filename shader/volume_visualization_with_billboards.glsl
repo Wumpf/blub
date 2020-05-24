@@ -2,11 +2,7 @@
 #include "simulation/hybrid_fluid.glsl"
 #include "sphere_particles.glsl"
 #include "utilities.glsl"
-
-layout(set = 1, binding = 1) uniform texture3D VelocityVolume;
-layout(set = 1, binding = 2) uniform utexture3D MarkerVolume;
-layout(set = 1, binding = 3) uniform texture3D DivergenceVolume;
-layout(set = 1, binding = 4) uniform texture3D PressureVolume;
+#include "volume_visualization.glsl"
 
 out gl_PerVertex { vec4 gl_Position; };
 
@@ -16,10 +12,8 @@ layout(location = 2) out vec3 out_Tint;
 layout(location = 3) out float out_Radius;
 
 void main() {
-    ivec3 volumeSize = textureSize(VelocityVolume, 0);
-
-    ivec3 volumeCoordinate =
-        ivec3(gl_InstanceIndex % volumeSize.x, gl_InstanceIndex / volumeSize.x % volumeSize.y, gl_InstanceIndex / volumeSize.x / volumeSize.y);
+    ivec3 volumeCoordinate = getVolumeCoordinate(gl_InstanceIndex);
+    uint marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
 
 #if defined(VISUALIZE_DIVERGENCE)
     // uncorrected divergence
@@ -34,6 +28,10 @@ void main() {
     //     divergence += currentCellStaggeredVelocities.z - texelFetch(VelocityVolume, volumeCoordinate - ivec3(0, 0, 1), 0).z;
     // }
 
+    // We don't clear divergence, so if there's not fluid, it has not valid value.
+    if (marker != CELL_FLUID)
+        divergence = 0.0;
+
     float scale = clamp(divergence * 10.0, -1.0, 1.0);
     out_Tint = colormapCoolToWarm(scale);
     scale = abs(scale);
@@ -42,7 +40,6 @@ void main() {
     float scale = saturate(pressure * pressure * 0.05);
     out_Tint = colormapHeat(scale).grb;
 #elif defined(VISUALIZE_MARKER)
-    uint marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
     float scale = marker == CELL_AIR ? 0.0 : 1.0;
     if (marker == CELL_FLUID)
         out_Tint = vec3(0.5, 0.5, 1.0);

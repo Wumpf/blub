@@ -26,40 +26,59 @@ void gatherStaggeredVelocitiesFromLinkedList(inout vec3 velocity, inout vec3 tot
     }
 }
 
+// Once we support arbitrary boundaries, this will likely go away.
+vec3 enforceGlobalWallBoundaryCondition(vec3 velocity, ivec3 cellPos, ivec3 gridSize) {
+    // At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
+    // No support for non-static boundary yet
+    // -> No flow between boundary and non-boundary allowed.
+    bvec3 isBoundaryCellPositiveNeighbor = greaterThanEqual(cellPos + ivec3(1), gridSize);
+    return mix(velocity, vec3(0), isBoundaryCellPositiveNeighbor);
+}
+
 void main() {
     vec3 cellCenter = vec3(gl_GlobalInvocationID) + vec3(0.5); // center of the cell
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     vec3 velocity = vec3(0.0);
-    vec3 weights = vec3(0.0);
-
-    [[unroll]] for (int z = -1; z <= 1; ++z) {
-        [[unroll]] for (int y = -1; y <= 1; ++y) {
-            [[unroll]] for (int x = -1; x <= 1; ++x) {
-                gatherStaggeredVelocitiesFromLinkedList(velocity, weights, cellCenter, gridCoord + ivec3(x, y, z));
-            }
-        }
-    }
-
-    [[flatten]] if (weights.x > 0.0) { velocity.x /= weights.x; }
-    [[flatten]] if (weights.y > 0.0) { velocity.y /= weights.y; }
-    [[flatten]] if (weights.z > 0.0) { velocity.z /= weights.z; }
-
-    // Apply global forces. In the spirit of extrapolation this applies to air cells as well!
-    velocity.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
 
     // Mark this cell only as a fluid cell if there is actually fluid inside.
     // Note that air cells still get velocity with our transfer scheme, which is great because otherwise we would need to extrapolate to it!
     uint marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_AIR : CELL_FLUID;
 
-    // Reinforce global boundaries.
     // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
     // (top/right/front are marked implicitely and there are walls readily available!)
     [[flatten]] if (any(lessThanEqual(gridCoord, ivec3(0)))) { marker = CELL_SOLID; }
-    // TODO: This probably needs to be a separate pass as we can't really do this on the fly in compute divergence
-    // (which looks at wall differences within a cell rather than what's in the next cell)
-    ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
-    velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
 
-    imageStore(VelocityVolume, gridCoord, vec4(velocity, 0.0));
+    // Velocities in non-fluid cells are needed, but there is no point in writing to them
+    [[dont_flatten]] if (marker == CELL_FLUID) {
+        vec3 weights = vec3(0.0);
+        [[unroll]] for (int z = -1; z <= 1; ++z) {
+            [[unroll]] for (int y = -1; y <= 1; ++y) {
+                [[unroll]] for (int x = -1; x <= 1; ++x) {
+                    gatherStaggeredVelocitiesFromLinkedList(velocity, weights, cellCenter, gridCoord + ivec3(x, y, z));
+                }
+            }
+        }
+        [[flatten]] if (weights.x > 0.0) { velocity.x /= weights.x; }
+        [[flatten]] if (weights.y > 0.0) { velocity.y /= weights.y; }
+        [[flatten]] if (weights.z > 0.0) { velocity.z /= weights.z; }
+
+        // Apply global forces. TODO: Make configurable and scale dependent
+        velocity.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
+
+        // Reinforce global boundaries.
+        // TODO: This probably needs to be a separate pass as we can't really do this on the fly in compute divergence
+        // (which looks at wall differences within a cell rather than what's in the next cell)
+        ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
+        velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
+
+        imageStore(VelocityVolume, gridCoord, vec4(velocity, 0.0));
+    }
+    else {
+        // No need to clear velocity volume since anyone sampling it outside needs special handling anyway
+        // What we typically want is:
+        // * CELL_SOLID: zero
+        // * CELL_AIR: extrapolated value
+    }
+
     imageStore(MarkerVolume, gridCoord, marker.xxxx);
 }

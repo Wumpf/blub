@@ -14,7 +14,7 @@ Implements currently APIC, [SIGGRAPH 2015, Jiang et al., The Affine Particle-In-
 ### Particle to Grid Transfer
 
 Transferring the particle's velocity to the grid is tricky/costly to do in parallel!
-Either, velocities are scattered by doing 8 atomic adds for every particle to surrounding grid cells, or grid cells traverse all neighboring cells.
+Either, velocities are scattered by doing 8 atomic adds for every particle to surrounding grid cells, or grid cells traverse all neighboring cells. (times 3 for staggered grid!)
 There's some good ideas on how to do efficient scattering in [Ming et al 2018, GPU Optimization of Material Point Methods](http://www.cs.utah.edu/~kwu/GPU_MPM/GPU_MPM.pdf).
 
 In Blub I tried something new (to my knowledge):
@@ -28,16 +28,21 @@ Note that this all makes MAC/staggered grids a lot less appealing since the volu
 Typical implementations of PIC/FLIP/APIC include a velocity extrapolation step which extends velocities from fluid cells into air cells.
 This is done in order to...
 * fix discrete [divergence](https://en.wikipedia.org/wiki/Divergence)
-    * thing of a falling droplet, modeled as a single fluid cell with downward velocity. As there's not other forces, our tiny fluid is divergence free. If we were to take central differences of velocity with the surrounding cells as is though we would come to a different conclusion!
-* deal with particles leaving fluid cells during advection
+    * think of a falling droplet, modeled as a single fluid cell with downward velocity. As there's not other forces, our tiny fluid is divergence free. If we were to take central differences of velocity with the surrounding cells as is though we would come to a different conclusion!
+* particle advection
+  * particles interpolating velocities, thus grabbing velocity from solid/fluid cells.
+  * particles leaving fluid cells during advection
     * advection is usually done via higher order differential equation solver which may sample the velocity grid outside of the cell any particular particle started in
-* useful for some visualizations (I believe)
+* useful for some kind of renderings (I believe)
 
-As the avid reader may have noticed, Blub doesn't have a velocity extrapolation step!
-How can we get away with it (so far)?
-* discrete laplacian identifies air cells and extrapolates velocity on the flow
-* keep particle advection confined to it's surrounding cells during advection
-
+Blub doesn't have a velocity extrapolation step! How:
+* divergence computation
+  * fix on the fly by looking into marker grid (doesn't go far, so this is rather cheap)
+* particle advection (TODO: Here it gets quite costly!)
+  * use velocity from the cell we know the current particle marked as fluid as a fallback whenever velocity is not defined
+  * keep particle advection confined to it's surrounding cells during advection
+* don't use anything fancy that needs velocity elsewhere 🙂
+Note that depending on the extrapolation strategy the result is quite different from the classic approach, since we don't need to find a "global solution" where a extrapolated cell is influenced by many "real" cells.
 
 ## Name
 
