@@ -49,7 +49,7 @@ void main() {
 
     // Mark this cell only as a fluid cell if there is actually fluid inside.
     // Note that air cells still get velocity with our transfer scheme, which is great because otherwise we would need to extrapolate to it!
-    float marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_AIR : CELL_FLUID;
+    uint marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_AIR : CELL_FLUID;
 
     // Reinforce global boundaries.
     // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
@@ -60,5 +60,6 @@ void main() {
     ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
     velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
 
-    imageStore(VelocityVolume, gridCoord, vec4(velocity, marker));
+    imageStore(VelocityVolume, gridCoord, vec4(velocity, 0.0));
+    imageStore(MarkerVolume, gridCoord, marker.xxxx);
 }

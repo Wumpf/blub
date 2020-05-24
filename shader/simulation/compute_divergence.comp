@@ -7,9 +7,10 @@
 #include "utilities.glsl"
 
 layout(set = 2, binding = 0) uniform texture3D VelocityVolume;
-// layout(set = 2, binding = 1) uniform texture3D DivergenceVolume;
-// layout(set = 2, binding = 2) uniform texture3D PressureVolumeRead;
-layout(set = 2, binding = 3, r32f) uniform restrict image3D DivergenceVolume;
+layout(set = 2, binding = 1) uniform utexture3D MarkerVolume;
+// layout(set = 2, binding = 2) uniform texture3D DivergenceVolume;
+// layout(set = 2, binding = 3) uniform texture3D PressureVolumeRead;
+layout(set = 2, binding = 4, r32f) uniform restrict image3D DivergenceVolume;
 
 COMPUTE_PASS_VOLUME
 
@@ -18,13 +19,14 @@ void main() {
     float divergence = 0.0;
 
     // Don't compute divergence if there's no fluid
+    if (texelFetch(MarkerVolume, gridCoord, 0).x != CELL_FLUID)
+        return; // Clear?
+
     // (Divergence tells us how much fluid is going in/out. If there's air/solid, then that's clearly zero!)
     vec4 currentCellStaggeredVelocities = texelFetch(VelocityVolume, gridCoord, 0);
-    [[dont_flatten]] if (currentCellStaggeredVelocities.w == CELL_FLUID) {
-        divergence += currentCellStaggeredVelocities.x - texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-        divergence += currentCellStaggeredVelocities.y - texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).y;
-        divergence += currentCellStaggeredVelocities.z - texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).z;
-    }
+    divergence += currentCellStaggeredVelocities.x - texelFetch(VelocityVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    divergence += currentCellStaggeredVelocities.y - texelFetch(VelocityVolume, gridCoord - ivec3(0, 1, 0), 0).y;
+    divergence += currentCellStaggeredVelocities.z - texelFetch(VelocityVolume, gridCoord - ivec3(0, 0, 1), 0).z;
 
     imageStore(DivergenceVolume, gridCoord, divergence.xxxx);
 }

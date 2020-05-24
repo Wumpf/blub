@@ -4,8 +4,9 @@
 #include "utilities.glsl"
 
 layout(set = 1, binding = 1) uniform texture3D VelocityVolume;
-layout(set = 1, binding = 2) uniform texture3D DivergenceVolume;
-layout(set = 1, binding = 3) uniform texture3D PressureVolume;
+layout(set = 1, binding = 2) uniform utexture3D MarkerVolume;
+layout(set = 1, binding = 3) uniform texture3D DivergenceVolume;
+layout(set = 1, binding = 4) uniform texture3D PressureVolume;
 
 out gl_PerVertex { vec4 gl_Position; };
 
@@ -41,7 +42,7 @@ void main() {
     float scale = saturate(pressure * pressure * 0.05);
     out_Tint = colormapHeat(scale).grb;
 #elif defined(VISUALIZE_MARKER)
-    float marker = texelFetch(VelocityVolume, volumeCoordinate, 0).w;
+    uint marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
     float scale = marker == CELL_AIR ? 0.0 : 1.0;
     if (marker == CELL_FLUID)
         out_Tint = vec3(0.5, 0.5, 1.0);

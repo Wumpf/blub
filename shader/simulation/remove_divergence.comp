@@ -14,20 +14,22 @@ void main() {
 
     vec4 velocity = imageLoad(VelocityVolume, gridCoord);
 
+    uint cellType = imageLoad(MarkerVolume, gridCoord).x;
+    uvec3 cellTypeNeighbors = uvec3(imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).x, imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).x,
+                                    imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).x);
+
     // Compute pressure gradient with central differences
-    float pressureAtCenter = texelFetch(PressureVolume, gridCoord, 0).x;
-    float pressurePosX = texelFetch(PressureVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    float pressurePosY = texelFetch(PressureVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    float pressurePosZ = texelFetch(PressureVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    float pressureAtCenter = cellType == CELL_FLUID ? texelFetch(PressureVolume, gridCoord, 0).x : 0.0;
+    float pressurePosX = cellTypeNeighbors.x == CELL_FLUID ? texelFetch(PressureVolume, gridCoord + ivec3(1, 0, 0), 0).x : 0.0;
+    float pressurePosY = cellTypeNeighbors.y == CELL_FLUID ? texelFetch(PressureVolume, gridCoord + ivec3(0, 1, 0), 0).x : 0.0;
+    float pressurePosZ = cellTypeNeighbors.z == CELL_FLUID ? texelFetch(PressureVolume, gridCoord + ivec3(0, 0, 1), 0).x : 0.0;
 
     velocity.x -= pressurePosX - pressureAtCenter;
     velocity.y -= pressurePosY - pressureAtCenter;
     velocity.z -= pressurePosZ - pressureAtCenter;
 
-    // Reinforce boundary condition (any pressure sampled in solids was garbage)
-    // TODO: Can't sample marker grid right now because it's one with the velocity grid which we're writing here.
-    ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
-    velocity.xyz = enforceGlobalWallBoundaryCondition(velocity.xyz, gridCoord, gridSize);
+    // Reenforce boundary condition (any pressure sampled in solids was garbage)
+    velocity.xyz = enforceBoundaryCondition(velocity.xyz, cellType == CELL_SOLID, equal(cellTypeNeighbors, uvec3(CELL_SOLID)));
 
     // Write result.
     // TODO: skip write if not needed?
