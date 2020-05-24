@@ -306,13 +306,31 @@ impl HybridFluid {
         let new_particles =
             unsafe { std::slice::from_raw_parts_mut(particle_buffer_mapping.data.as_mut_ptr() as *mut Particle, num_new_particles as usize) };
         for (i, particle) in new_particles.iter_mut().enumerate() {
-            //let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
-            let cell = cgmath::Point3::new(
-                (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32 + 0.5,
-                (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32 + 0.5,
-                (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32 + 0.5,
+            let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
+            let cell = cgmath::point3(
+                (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
+                (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
+                (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
             );
-            let position = cell + rng.gen::<cgmath::Vector3<f32>>();
+
+            let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
+
+            // pure random
+            // let offset = rng.gen::<cgmath::Vector3<f32>>();
+
+            // pure regular
+            // let offset = cgmath::vec3(
+            //     (sample_idx % 2) as f32 + 0.5,
+            //     (sample_idx / 2 % 2) as f32 + 0.5,
+            //     (sample_idx / 4 % 2) as f32 + 0.5,
+            // ) * 0.5;
+
+            // stratified
+            let offset = cgmath::vec3((sample_idx % 2) as f32, (sample_idx / 2 % 2) as f32, (sample_idx / 4 % 2) as f32) * 0.5
+                + rng.gen::<cgmath::Vector3<f32>>() * 0.5;
+
+            let position = cell + offset;
+
             *particle = Particle {
                 position,
                 linked_list_next: 0xFFFFFFFF,
