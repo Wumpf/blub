@@ -1,11 +1,9 @@
 #version 450
 
 #include "per_frame_resources.glsl"
-#include "simulation/particles.glsl"
 #include "sphere_particles.glsl"
 #include "utilities.glsl"
-
-layout(set = 1, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
+#include "visualization.glsl"
 
 out gl_PerVertex { vec4 gl_Position; };
 

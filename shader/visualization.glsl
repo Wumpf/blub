@@ -1,3 +1,6 @@
+#include "simulation/particles.glsl"
+
+layout(set = 1, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 layout(set = 1, binding = 1) uniform texture3D VelocityVolume;
 layout(set = 1, binding = 2) uniform utexture3D MarkerVolume;
 layout(set = 1, binding = 3) uniform texture3D DivergenceVolume;
