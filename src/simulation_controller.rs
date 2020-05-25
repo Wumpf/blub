@@ -99,7 +99,7 @@ impl SimulationController {
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
         // TODO: Dynamic estimate to keep batches around 0.5 seconds.
-        const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 256;
+        const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 64;
 
         if let SimulationControllerStatus::FastForward { simulation_jump_length } = self.status {
             // re-use stopping standard stopping mechanism to halt the simulation
