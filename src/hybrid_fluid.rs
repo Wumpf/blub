@@ -37,6 +37,7 @@ pub struct HybridFluid {
     pipeline_compute_divergence: ComputePipelineHandle,
     pipeline_pressure_solve: ComputePipelineHandle,
     pipeline_remove_divergence: ComputePipelineHandle,
+    pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_update_particles: ComputePipelineHandle,
 
     num_particles: u32,
@@ -240,6 +241,11 @@ impl HybridFluid {
             shader_dir,
             ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("simulation/remove_divergence.comp")),
         );
+        let pipeline_extrapolate_velocity = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_write_particles_volume.clone(), Path::new("simulation/extrapolate_velocity.comp")),
+        );
         let pipeline_update_particles = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
@@ -266,6 +272,7 @@ impl HybridFluid {
             pipeline_transfer_to_volume,
             pipeline_compute_divergence,
             pipeline_pressure_solve,
+            pipeline_extrapolate_velocity,
             pipeline_remove_divergence,
             pipeline_update_particles,
 
@@ -458,6 +465,10 @@ impl HybridFluid {
 
             // Make velocity grid divergence free
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_remove_divergence));
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+
+            // Extrapolate velocity
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         {

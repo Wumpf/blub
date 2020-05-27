@@ -9,3 +9,6 @@ layout(set = 1, binding = 0) uniform SimulationProperties { uint NumParticles; }
 #define CELL_SOLID 0
 #define CELL_FLUID 1
 #define CELL_AIR 2
+
+// TODO: Idea: Cell marker could encode direct neighborhood and thus safe us quite a few samplings!
+// TODO: Idea: Put cell marker into w channel of velocity volume redundantly

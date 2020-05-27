@@ -5,6 +5,8 @@
 layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
 // Staggered velocity volume with marker at the center and velocity components on the positive walls.
 // Texel at imageCoord(0,0,0) represents cell at grid coord (0.5, 0.5, 0.5)
+// Note that 3 R32f velocity volumes seem to be generally slower since sampling RGBA32f on my Nvidia card 0.5x the speed or R32f
+// Other gpus it's even sample RGBA32f as fast as R32f! See https://github.com/sebbbi/perftest#nvidia-maxwell-gtx-980-ti
 layout(set = 2, binding = 1, rgba32f) uniform restrict image3D VelocityVolume;
 
 // Linked list cells.

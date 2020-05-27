@@ -1,0 +1,37 @@
+// Extrapolates velocity into air and solid for easy access in particle update
+
+#version 450
+
+#include "../utilities.glsl"
+#include "bindings_write_particles_volume.glsl"
+
+COMPUTE_PASS_VOLUME
+
+float extrapolateDirection(ivec3 coord, float currentVelocity, uint cellType, const uint component) {
+    ivec3 neightborForward = coord;
+    neightborForward[component] += 1;
+    ivec3 neightborBackward = coord;
+    neightborBackward[component] -= 1;
+
+    if (cellType == CELL_AIR) {
+
+    } else // CELL_SOLID
+    {
+    }
+}
+
+void main() {
+    vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+
+    uint cellType = imageLoad(MarkerVolume, gridCoord).x;
+    if (cellType == CELL_FLUID)
+        return; // all good already!
+
+    vec3 velocity = imageLoad(VelocityVolume, gridCoord).xyz;
+
+    // velocity.x = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 0);
+    // velocity.y = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 1);
+    // velocity.z = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 2);
+    imageStore(VelocityVolume, gridCoord, velocity.xyzz);
+}
