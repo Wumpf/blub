@@ -20,7 +20,9 @@ void main() {
     linePosition[channel] += 0.5;
 
     vec3 velocity = texelFetch(VelocityVolume, volumeCoordinate, 0).xyz;
-    float scale = marker == CELL_FLUID ? clamp(velocity[channel] * Rendering.VelocityVisualizationScale, -1.0, 1.0) : 0.0;
+    float scale = clamp(velocity[channel] * Rendering.VelocityVisualizationScale, -1.0, 1.0);
+    if (marker != CELL_FLUID)
+        scale = 0.0;
     if (gl_VertexIndex == 0) {
         linePosition[channel] += scale;
     }

@@ -18,7 +18,8 @@ float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, 
         // At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
         // No support for non-static boundary yet
         // -> No flow between boundary and non-boundary allowed.
-        return 0.0;
+        // To avoid sticking to walls we allow velocity away from it even though it violates continuity equations.
+        return min(0.0, currentCellStaggeredVelocities[component]);
     }
     else {
         return currentCellStaggeredVelocities[component] - (neighborPressure - pressureAtCenter);

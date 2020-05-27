@@ -41,7 +41,17 @@ void main() {
     out_Tint = colormapHeat(scale).grb;
 #elif defined(VISUALIZE_MARKER)
     float scale = marker == CELL_AIR ? 0.0 : 1.0;
-    out_Tint = marker == CELL_FLUID ? vec3(0.5, 0.5, 1.0) : vec3(0.0);
+
+    if (marker == CELL_SOLID)
+        out_Tint = vec3(0.0, 0.0, 0.0);
+    else if (marker == CELL_FLUID)
+        out_Tint = vec3(0.0, 0.0, 1.0);
+    // else if (marker == CELL_SOLID_EXTRAPOLATED)
+    //     out_Tint = vec3(0.1, 0.1, 0.2);
+    // else if (marker == CELL_AIR_EXTRAPOLATED)
+    //     out_Tint = vec3(0.5, 0.5, 1.0);
+    else
+        out_Tint = vec3(0.0);
 #endif
 
     out_ParticleWorldPosition = volumeCoordinate + vec3(0.5);

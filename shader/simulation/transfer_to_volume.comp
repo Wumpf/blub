@@ -32,7 +32,7 @@ vec3 enforceGlobalWallBoundaryCondition(vec3 velocity, ivec3 cellPos, ivec3 grid
     // No support for non-static boundary yet
     // -> No flow between boundary and non-boundary allowed.
     bvec3 isBoundaryCellPositiveNeighbor = greaterThanEqual(cellPos + ivec3(1), gridSize);
-    return mix(velocity, vec3(0), isBoundaryCellPositiveNeighbor);
+    return mix(velocity, min(vec3(0), velocity), isBoundaryCellPositiveNeighbor);
 }
 
 void main() {
@@ -69,15 +69,15 @@ void main() {
         // TODO: This probably needs to be a separate pass as we can't really do this on the fly in compute divergence
         // (which looks at wall differences within a cell rather than what's in the next cell)
         ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
-        velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
+
+        // TODO: Do we need to do this?
+        // velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
 
         imageStore(VelocityVolume, gridCoord, vec4(velocity, 0.0));
     }
     else {
         // No need to clear velocity volume since anyone sampling it outside needs special handling anyway
-        // What we typically want is:
-        // * CELL_SOLID: zero
-        // * CELL_AIR: extrapolated value
+        // imageStore(VelocityVolume, gridCoord, vec4(0.0));
     }
 
     imageStore(MarkerVolume, gridCoord, marker.xxxx);

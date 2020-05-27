@@ -17,9 +17,7 @@ vec3 InterpolateTrilinear(vec3 v_000, vec3 v_100, vec3 v_010, vec3 v_110, vec3 v
                mix(mix(v_001, v_101, interpolantsX), mix(v_011, v_111, interpolantsX), interpolantsY), interpolantsZ);
 }
 
-float sampleVelocity(ivec3 coord, uint component, float centerValue) {
-    return (texelFetch(MarkerVolume, coord, 0).x == CELL_FLUID) ? texelFetch(VelocityVolume, coord, 0)[component] : centerValue;
-}
+float sampleVelocity(ivec3 coord, uint component, float centerValue) { return texelFetch(VelocityVolume, coord, 0)[component]; }
 
 void main() {
     uint particleIndex = gl_GlobalInvocationID.x;

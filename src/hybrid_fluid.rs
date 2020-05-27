@@ -468,6 +468,8 @@ impl HybridFluid {
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Extrapolate velocity
+            // can only do a single extrapolation since we can't change cell types without double buffering
+            // (this makes the extrapolation a bit heavier since it needs to sample all 8 diagonals as well)
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }

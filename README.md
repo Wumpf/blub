@@ -25,7 +25,7 @@ Note that this all makes MAC/staggered grids a lot less appealing since the volu
 
 ### Velocity Extrapolation
 
-Typical implementations of PIC/FLIP/APIC include a velocity extrapolation step which extends velocities from fluid cells into air cells.
+Typical implementations of PIC/FLIP/APIC include a velocity extrapolation step which extends velocities from fluid cells into air and (with some tweaks) solid cells.
 This is done in order to...
 * fix discrete [divergence](https://en.wikipedia.org/wiki/Divergence)
     * think of a falling droplet, modeled as a single fluid cell with downward velocity. As there's not other forces, our tiny fluid is divergence free. If we were to take central differences of velocity with the surrounding cells as is though we would come to a different conclusion!
@@ -35,14 +35,13 @@ This is done in order to...
     * advection is usually done via higher order differential equation solver which may sample the velocity grid outside of the cell any particular particle started in
 * useful for some kind of renderings (I believe)
 
-Blub doesn't have a velocity extrapolation step! How:
+Extrapolation in Blub:
 * divergence computation
   * fix on the fly by looking into marker grid (doesn't go far, so this is rather cheap)
-* particle advection (TODO: Here it gets quite costly!)
-  * use velocity from the cell we know the current particle marked as fluid as a fallback whenever velocity is not defined
-  * keep particle advection confined to it's surrounding cells during advection
+* particle advection
+  * do a single pass extrapolation
+    * it's a bit more complex than normal extrapolation schemes since in order to get around double buffering velocities/markers we do everything in a single pass.
 * don't use anything fancy that needs velocity elsewhere 🙂
-Note that depending on the extrapolation strategy the result is quite different from the classic approach, since we don't need to find a "global solution" where a extrapolated cell is influenced by many "real" cells.
 
 ## Name
 

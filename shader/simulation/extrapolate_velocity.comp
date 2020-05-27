@@ -1,4 +1,5 @@
 // Extrapolates velocity into air and solid for easy access in particle update
+// Note that we can run the extrapolation pass only once since we don't double buffer markers.
 
 #version 450
 
@@ -7,17 +8,16 @@
 
 COMPUTE_PASS_VOLUME
 
-float extrapolateDirection(ivec3 coord, float currentVelocity, uint cellType, const uint component) {
-    ivec3 neightborForward = coord;
-    neightborForward[component] += 1;
-    ivec3 neightborBackward = coord;
-    neightborBackward[component] -= 1;
-
-    if (cellType == CELL_AIR) {
-
-    } else // CELL_SOLID
-    {
+void AccumulateNeighbors(uint neighborCellType, ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
+    if (neighborCellType == CELL_FLUID) {
+        accumulator += imageLoad(VelocityVolume, neighborCellCoord).xyz * weight;
+        accumulatedWeight += weight;
     }
+}
+
+void AccumulateNeighbors(ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
+    uint neighborCellType = imageLoad(MarkerVolume, neighborCellCoord).x;
+    AccumulateNeighbors(neighborCellType, neighborCellCoord, accumulator, accumulatedWeight, weight);
 }
 
 void main() {
@@ -28,10 +28,53 @@ void main() {
     if (cellType == CELL_FLUID)
         return; // all good already!
 
-    vec3 velocity = imageLoad(VelocityVolume, gridCoord).xyz;
+    // TODO: Double buffering and duplicating marker into VelocityVolume should help a lot.
+    // TODO: Concept of a "VOID" cell to identify places where there is no information? (solid may or may not have info... sorta.. complicated :/)
 
-    // velocity.x = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 0);
-    // velocity.y = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 1);
-    // velocity.z = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 2);
+    // Direct neighbor cells are special, need them later.
+    uint cellTypePosX = imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).x;
+    uint cellTypePosY = imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).x;
+    uint cellTypePosZ = imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).x;
+
+    // Average velocity over neighbors.
+    vec3 velocity = vec3(0.0);
+    {
+        float accumulatedWeight = 0.0;
+
+        // direct neighbor cells.
+        AccumulateNeighbors(cellTypePosX, gridCoord + ivec3(1, 0, 0), velocity, accumulatedWeight, 1.0);
+        AccumulateNeighbors(gridCoord - ivec3(1, 0, 0), velocity, accumulatedWeight, 1.0);
+        AccumulateNeighbors(cellTypePosY, gridCoord + ivec3(0, 1, 0), velocity, accumulatedWeight, 1.0);
+        AccumulateNeighbors(gridCoord - ivec3(0, 1, 0), velocity, accumulatedWeight, 1.0);
+        AccumulateNeighbors(cellTypePosZ, gridCoord + ivec3(0, 0, 1), velocity, accumulatedWeight, 1.0);
+        AccumulateNeighbors(gridCoord - ivec3(0, 0, 1), velocity, accumulatedWeight, 1.0);
+
+        // diagonal neighbor cells. Need to do this or do a second pass, otherwise particles may still sample invalid velocities.
+        const float diagonalWeight = 0.577; // 1 / distance = 1 / sqrt(3)
+        AccumulateNeighbors(gridCoord + ivec3(1, 1, 1), velocity, accumulatedWeight, diagonalWeight);
+        AccumulateNeighbors(gridCoord + ivec3(-1, 1, 1), velocity, accumulatedWeight, diagonalWeight);
+        AccumulateNeighbors(gridCoord + ivec3(1, -1, 1), velocity, accumulatedWeight, diagonalWeight);
+        AccumulateNeighbors(gridCoord + ivec3(-1, -1, 1), velocity, accumulatedWeight, diagonalWeight);
+        AccumulateNeighbors(gridCoord + ivec3(1, 1, -1), velocity, accumulatedWeight, diagonalWeight);
+        AccumulateNeighbors(gridCoord + ivec3(-1, 1, -1), velocity, accumulatedWeight, diagonalWeight);
+        AccumulateNeighbors(gridCoord + ivec3(1, -1, -1), velocity, accumulatedWeight, diagonalWeight);
+        AccumulateNeighbors(gridCoord + ivec3(-1, -1, -1), velocity, accumulatedWeight, diagonalWeight);
+
+        if (accumulatedWeight == 0.0)
+            return;
+        velocity /= accumulatedWeight;
+    }
+
+    // don't allow flow into solid cells
+    // To avoid sticking to walls we allow velocity away from it even though it violates continuity equations.
+    if (cellType == CELL_SOLID) {
+        if (cellTypePosX != CELL_SOLID)
+            velocity.x = max(0.0, velocity.x);
+        if (cellTypePosY != CELL_SOLID)
+            velocity.y = max(0.0, velocity.y);
+        if (cellTypePosY != CELL_SOLID)
+            velocity.z = max(0.0, velocity.z);
+    }
+
     imageStore(VelocityVolume, gridCoord, velocity.xyzz);
 }
