@@ -21,7 +21,7 @@ struct TimerData {
 
 struct GlobalRenderingSettings {
     float VelocityVisualizationScale;
-    vec3 _padding0;
+    // vec3 _padding0;
 };
 
 // Constants that change at max per frame.

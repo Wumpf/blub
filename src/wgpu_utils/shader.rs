@@ -66,8 +66,11 @@ impl ShaderDirectory {
             //options.set_hlsl_io_mapping(true);
             options.set_warnings_as_errors();
             options.set_target_env(shaderc::TargetEnv::Vulkan, 0);
-            options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-            // options.set_optimization_level(shaderc::OptimizationLevel::Zero); // Useful for debugging/inspecting, e.g. via RenderDoc
+            if cfg!(debug_assertions) {
+                options.set_optimization_level(shaderc::OptimizationLevel::Zero);
+            } else {
+                options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+            }
 
             options.set_include_callback(|name, include_type, source_file, _depth| {
                 let path = if include_type == shaderc::IncludeType::Relative {

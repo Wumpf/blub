@@ -66,8 +66,6 @@ impl Application {
                     power_preference: wgpu::PowerPreference::HighPerformance,
                     compatible_surface: Some(&window_surface),
                 },
-                // Didn't get it to work with DX12 so far: Issues with bindings in compute pipelines.
-                // Some (!) of these issues are fixed with https://github.com/gfx-rs/wgpu/pull/572
                 wgpu::BackendBit::PRIMARY, //wgpu::BackendBit::DX12,
             )
             .await
@@ -297,7 +295,8 @@ impl Application {
 }
 
 fn main() {
-    env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info"));
+    // Silence warnings from `naga::front::spirv` for now since as of writing it doesn't know enough spirv yet.
+    env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info,blub=info,naga=error"));
     let event_loop = EventLoop::new();
     let application = futures::executor::block_on(Application::new(&event_loop));
     application.run(event_loop);

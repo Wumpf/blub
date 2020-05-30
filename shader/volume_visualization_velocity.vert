@@ -7,7 +7,32 @@
 
 out gl_PerVertex { vec4 gl_Position; };
 
-layout(location = 0) out vec3 out_Color;
+layout(location = 0) out vec4 out_Color;
+
+float getChannel(vec3 v, uint channel) {
+    switch (channel) {
+    case 0:
+        return v.x;
+    case 1:
+        return v.y;
+    default:
+        return v.z;
+    }
+}
+
+void addToChannel(inout vec3 v, float value, uint channel) {
+    switch (channel) {
+    case 0:
+        v.x += value;
+        break;
+    case 1:
+        v.y += value;
+        break;
+    default:
+        v.z += value;
+        break;
+    }
+}
 
 void main() {
     ivec3 volumeCoordinate = getVolumeCoordinate(gl_InstanceIndex / 3);
@@ -17,16 +42,16 @@ void main() {
 
     vec3 cellCenter = volumeCoordinate + vec3(0.5);
     vec3 linePosition = cellCenter;
-    linePosition[channel] += 0.5;
+    addToChannel(linePosition, 0.5, channel);
 
-    vec3 velocity = texelFetch(VelocityVolume, volumeCoordinate, 0).xyz;
-    float scale = clamp(velocity[channel] * Rendering.VelocityVisualizationScale, -1.0, 1.0);
+    float velocity = getChannel(texelFetch(VelocityVolume, volumeCoordinate, 0).xyz, channel);
+    float scale = clamp(velocity * Rendering.VelocityVisualizationScale, -1.0, 1.0);
     if (marker != CELL_FLUID)
         scale = 0.0;
     if (gl_VertexIndex == 0) {
-        linePosition[channel] += scale;
+        addToChannel(linePosition, scale, channel);
     }
 
-    out_Color = colormapCoolToWarm(scale);
+    out_Color = vec4(colormapCoolToWarm(scale), 1.0);
     gl_Position = Camera.ViewProjection * vec4(linePosition, 1.0);
 }
