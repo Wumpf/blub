@@ -92,8 +92,9 @@ impl StaticLineRenderer {
             return;
         }
 
+        // TODO: use queue.write_buffer
         let new_vertices_size = (lines.len() * LINE_VERTEX_SIZE) as u64;
-        let particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
+        let mut particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
             label: Some("Buffer: StaticLine Update"),
             size: new_vertices_size,
             usage: wgpu::BufferUsage::COPY_SRC,
@@ -102,7 +103,7 @@ impl StaticLineRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 lines.as_ptr() as *const u8,
-                particle_buffer_mapping.data.as_mut_ptr(),
+                particle_buffer_mapping.data().as_mut_ptr(),
                 new_vertices_size as usize,
             );
         }
@@ -121,7 +122,7 @@ impl StaticLineRenderer {
     pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager) {
         rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
         let num_vertices = self.num_lines * 2;
-        rpass.set_vertex_buffer(0, &self.vertex_buffer, 0, (num_vertices * LINE_VERTEX_SIZE) as u64);
+        rpass.set_vertex_buffer(0, self.vertex_buffer.slice(0..(num_vertices as u64 * LINE_VERTEX_SIZE as u64)));
         rpass.draw(0..(num_vertices as u32), 0..1);
     }
 }

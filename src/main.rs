@@ -51,6 +51,7 @@ struct Application {
 
 impl Application {
     async fn new(event_loop: &EventLoop<()>) -> Application {
+        let wgpu_instance = wgpu::Instance::new();
         let window = WindowBuilder::new()
             .with_title("Blub")
             .with_resizable(true)
@@ -58,25 +59,30 @@ impl Application {
             .build(&event_loop)
             .unwrap();
 
-        let window_surface = wgpu::Surface::create(&window);
-        let adapter = wgpu::Adapter::request(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&window_surface),
-            },
-            // Didn't get it to work with DX12 so far: Issues with bindings in compute pipelines.
-            // Some (!) of these issues are fixed with https://github.com/gfx-rs/wgpu/pull/572
-            wgpu::BackendBit::PRIMARY, //wgpu::BackendBit::DX12,
-        )
-        .await
-        .unwrap();
+        let window_surface = unsafe { wgpu_instance.create_surface(&window) };
+        let adapter = wgpu_instance
+            .request_adapter(
+                &wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    compatible_surface: Some(&window_surface),
+                },
+                // Didn't get it to work with DX12 so far: Issues with bindings in compute pipelines.
+                // Some (!) of these issues are fixed with https://github.com/gfx-rs/wgpu/pull/572
+                wgpu::BackendBit::PRIMARY, //wgpu::BackendBit::DX12,
+            )
+            .await
+            .unwrap();
 
         let (device, mut command_queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                extensions: wgpu::Extensions { anisotropic_filtering: true },
-                limits: wgpu::Limits::default(),
-            })
-            .await;
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    extensions: wgpu::Extensions { anisotropic_filtering: true },
+                    limits: wgpu::Limits::default(),
+                },
+                None,
+            )
+            .await
+            .unwrap();
 
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let mut pipeline_manager = pipelines::PipelineManager::new();
@@ -101,7 +107,7 @@ impl Application {
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
 
-        command_queue.submit(&[init_encoder.finish()]);
+        command_queue.submit(Some(init_encoder.finish()));
         device.poll(wgpu::Maintain::Wait);
 
         Application {
@@ -226,7 +232,7 @@ impl Application {
                 self.per_frame_resources.bind_group_layout(),
             );
             self.scene_renderer.on_new_scene(&self.device, &mut init_encoder, &self.scene);
-            self.command_queue.submit(&[init_encoder.finish()]);
+            self.command_queue.submit(Some(init_encoder.finish()));
             self.device.poll(wgpu::Maintain::Wait);
         }
 
@@ -284,7 +290,7 @@ impl Application {
         );
 
         self.screen.copy_to_swapchain(&frame, &mut encoder);
-        self.command_queue.submit(&[encoder.finish()]);
+        self.command_queue.submit(Some(encoder.finish()));
         self.screen.end_frame(&self.device, frame);
         self.simulation_controller.on_frame_submitted();
     }

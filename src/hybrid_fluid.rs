@@ -103,13 +103,12 @@ impl HybridFluid {
         let particles = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Buffer: ParticleBuffer"),
             size: particle_buffer_size,
-            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::STORAGE_READ | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
         });
         let create_volume_texture_descriptor = |label: &'static str, format: wgpu::TextureFormat| -> wgpu::TextureDescriptor {
             wgpu::TextureDescriptor {
                 label: Some(label),
                 size: grid_dimension,
-                array_layer_count: 1,
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D3,
@@ -137,14 +136,14 @@ impl HybridFluid {
             .resource(simulation_properties_uniformbuffer.binding_resource())
             .create(device, "BindGroup: HybridFluid Uniform");
         let bind_group_write_particles_volume = BindGroupBuilder::new(&group_layout_write_particles_volume)
-            .buffer(&particles, 0..particle_buffer_size)
+            .buffer(particles.slice(..))
             .texture(&volume_velocity_view)
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_view)
             .texture(&volume_pressure0_view)
             .create(device, "BindGroup: Update Particles and/or Velocity Grid");
         let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
-            .buffer(&particles, 0..particle_buffer_size)
+            .buffer(particles.slice(..))
             .texture(&volume_velocity_view)
             .texture(&volume_marker_view)
             .create(device, "BindGroup: Update Particles");
@@ -173,7 +172,7 @@ impl HybridFluid {
         ];
 
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
-            .buffer(&particles, 0..particle_buffer_size)
+            .buffer(particles.slice(..))
             .texture(&volume_velocity_view)
             .texture(&volume_marker_view)
             .texture(&volume_divergence_view)
@@ -312,8 +311,9 @@ impl HybridFluid {
         }
         info!("Adding {} new particles", num_new_particles);
 
+        // TODO: Consider using queue write operation (might not be applicable here since this is a one-off write?)
         let particle_size = std::mem::size_of::<Particle>() as u64;
-        let particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
+        let mut particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
             label: Some("Buffer: Particle Update"),
             size: num_new_particles as u64 * particle_size,
             usage: wgpu::BufferUsage::COPY_SRC,
@@ -322,7 +322,7 @@ impl HybridFluid {
         // Fill buffer with particle data
         let mut rng: rand::rngs::SmallRng = rand::SeedableRng::seed_from_u64(num_new_particles as u64);
         let new_particles =
-            unsafe { std::slice::from_raw_parts_mut(particle_buffer_mapping.data.as_mut_ptr() as *mut Particle, num_new_particles as usize) };
+            unsafe { std::slice::from_raw_parts_mut(particle_buffer_mapping.data().as_mut_ptr() as *mut Particle, num_new_particles as usize) };
         for (i, particle) in new_particles.iter_mut().enumerate() {
             let cell = cgmath::point3(
                 (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,

@@ -36,7 +36,7 @@ impl GUI {
             }),
         }]);
 
-        let imgui_renderer = imgui_wgpu::Renderer::new(&mut imgui_context, &device, command_queue, crate::Screen::FORMAT_BACKBUFFER, None);
+        let imgui_renderer = imgui_wgpu::Renderer::new(&mut imgui_context, device, command_queue, crate::Screen::FORMAT_BACKBUFFER, None);
 
         GUI {
             imgui_context,

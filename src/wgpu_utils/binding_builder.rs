@@ -82,8 +82,8 @@ impl<'a> BindGroupBuilder<'a> {
         });
         self
     }
-    pub fn buffer(self, buffer: &'a wgpu::Buffer, range: std::ops::Range<wgpu::BufferAddress>) -> Self {
-        self.resource(wgpu::BindingResource::Buffer { buffer, range })
+    pub fn buffer(self, slice: wgpu::BufferSlice<'a>) -> Self {
+        self.resource(wgpu::BindingResource::Buffer(slice))
     }
     pub fn sampler(self, sampler: &'a wgpu::Sampler) -> Self {
         self.resource(wgpu::BindingResource::Sampler(sampler))
@@ -105,8 +105,9 @@ impl<'a> BindGroupBuilder<'a> {
 
 // Shortcuts for resource views
 
-pub fn simple_sampler(address_mode: wgpu::AddressMode, filter_mode: wgpu::FilterMode) -> wgpu::SamplerDescriptor {
+pub fn simple_sampler<'a>(address_mode: wgpu::AddressMode, filter_mode: wgpu::FilterMode, label: &'a str) -> wgpu::SamplerDescriptor<'a> {
     wgpu::SamplerDescriptor {
+        label: Some(label),
         address_mode_u: address_mode,
         address_mode_v: address_mode,
         address_mode_w: address_mode,

@@ -29,8 +29,16 @@ impl PerFrameResources {
             .create(device, "BindGroupLayout: PerFrameResources");
 
         let ubo = PerFrameUniformBuffer::new(&device);
-        let trilinear_sampler = device.create_sampler(&simple_sampler(wgpu::AddressMode::ClampToEdge, wgpu::FilterMode::Linear));
-        let point_sampler = device.create_sampler(&simple_sampler(wgpu::AddressMode::ClampToEdge, wgpu::FilterMode::Nearest));
+        let trilinear_sampler = device.create_sampler(&simple_sampler(
+            wgpu::AddressMode::ClampToEdge,
+            wgpu::FilterMode::Linear,
+            "Sampler LinearClamp (global)",
+        ));
+        let point_sampler = device.create_sampler(&simple_sampler(
+            wgpu::AddressMode::ClampToEdge,
+            wgpu::FilterMode::Nearest,
+            "Sampler NearestClamp (global)",
+        ));
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
             .resource(ubo.binding_resource())

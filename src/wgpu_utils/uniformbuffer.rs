@@ -25,28 +25,26 @@ impl<Content: Copy + 'static> UniformBuffer<Content> {
         }
     }
 
-    pub fn size(&self) -> u64 {
-        std::mem::size_of::<Content>() as u64
-    }
-
     pub fn update_content(&self, encoder: &mut wgpu::CommandEncoder, device: &wgpu::Device, content: Content) {
+        // TODO: This is a clear usecase for queue.write_buffer
         let size = std::mem::size_of_val(&content) as wgpu::BufferAddress;
-        let mapped_buffer = device.create_buffer_mapped(&wgpu::BufferDescriptor {
+        let mut mapped_buffer = device.create_buffer_mapped(&wgpu::BufferDescriptor {
             label: Some(&format!("UniformBuffer Update: {}", Self::name())),
             size,
             usage: wgpu::BufferUsage::COPY_SRC,
         });
         unsafe {
-            std::ptr::copy((&content as *const Content) as *const u8, mapped_buffer.data.as_mut_ptr(), size as usize);
+            std::ptr::copy(
+                (&content as *const Content) as *const u8,
+                mapped_buffer.data().as_mut_ptr(),
+                size as usize,
+            );
         }
         encoder.copy_buffer_to_buffer(&mapped_buffer.finish(), 0, &self.buffer, 0, size);
     }
 
     pub fn binding_resource(&self) -> wgpu::BindingResource {
-        wgpu::BindingResource::Buffer {
-            buffer: &self.buffer,
-            range: 0..self.size(),
-        }
+        wgpu::BindingResource::Buffer(self.buffer.slice(..))
     }
 }
 

@@ -52,7 +52,6 @@ impl Screen {
         let backbuffer = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Texture: Backbuffer"),
             size,
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -64,7 +63,6 @@ impl Screen {
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Texture: Screen DepthBuffer"),
             size,
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -150,14 +148,15 @@ impl Screen {
             wgpu::TextureCopyView {
                 texture: &self.backbuffer,
                 mip_level: 0,
-                array_layer: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             wgpu::BufferCopyView {
                 buffer: &self.screenshot_buffer,
-                offset: 0,
-                bytes_per_row: std::mem::size_of::<u32>() as u32 * self.resolution.width,
-                rows_per_image: 0,
+                layout: wgpu::TextureDataLayout {
+                    offset: 0,
+                    bytes_per_row: std::mem::size_of::<u32>() as u32 * self.resolution.width,
+                    rows_per_image: 0,
+                },
             },
             wgpu::Extent3d {
                 width: self.resolution.width,

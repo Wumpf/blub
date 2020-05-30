@@ -127,7 +127,7 @@ impl SimulationController {
                             }
                         }
                     }
-                    queue.submit(&[encoder.finish()]);
+                    queue.submit(Some(encoder.finish()));
                     info!("simulation fast forwarding batch submitted (size {})", batch_size);
                     device.poll(wgpu::Maintain::Wait); // Seems to be necessary to do the full wait every time to avoid TDR.
                 }
