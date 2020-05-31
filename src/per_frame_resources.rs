@@ -11,6 +11,8 @@ struct PerFrameUniformBufferContent {
     time: timer::FrameTimeUniformBufferContent,
     rendering: renderer::GlobalRenderSettingsUniformBufferContent,
 }
+unsafe impl bytemuck::Pod for PerFrameUniformBufferContent {}
+unsafe impl bytemuck::Zeroable for PerFrameUniformBufferContent {}
 
 type PerFrameUniformBuffer = UniformBuffer<PerFrameUniformBufferContent>;
 
@@ -55,14 +57,12 @@ impl PerFrameResources {
 
     pub fn update_gpu_data(
         &self,
-        encoder: &mut wgpu::CommandEncoder,
-        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         camera: camera::CameraUniformBufferContent,
         time: timer::FrameTimeUniformBufferContent,
         rendering: renderer::GlobalRenderSettingsUniformBufferContent,
     ) {
-        self.ubo
-            .update_content(encoder, device, PerFrameUniformBufferContent { camera, time, rendering });
+        self.ubo.update_content(queue, PerFrameUniformBufferContent { camera, time, rendering });
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {

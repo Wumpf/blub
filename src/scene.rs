@@ -12,6 +12,7 @@ impl Scene {
     pub fn new(
         device: &wgpu::Device,
         init_encoder: &mut wgpu::CommandEncoder,
+        queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
@@ -27,6 +28,7 @@ impl Scene {
         hybrid_fluid.add_fluid_cube(
             device,
             init_encoder,
+            queue,
             cgmath::Point3::new(1.0, 1.0, 1.0),
             cgmath::Point3::new(64.0, 40.0, 64.0),
         );

@@ -95,6 +95,7 @@ impl Application {
         let scene = scene::Scene::new(
             &device,
             &mut init_encoder,
+            &command_queue,
             &shader_dir,
             &mut pipeline_manager,
             per_frame_resources.bind_group_layout(),
@@ -225,6 +226,7 @@ impl Application {
             self.scene = scene::Scene::new(
                 &self.device,
                 &mut init_encoder,
+                &self.command_queue,
                 &self.shader_dir,
                 &mut self.pipeline_manager,
                 self.per_frame_resources.bind_group_layout(),
@@ -255,8 +257,7 @@ impl Application {
         });
 
         self.per_frame_resources.update_gpu_data(
-            &mut encoder,
-            &self.device,
+            &self.command_queue,
             self.camera.fill_global_uniform_buffer(aspect_ratio),
             self.simulation_controller.timer().fill_global_uniform_buffer(),
             self.scene_renderer.fill_global_uniform_buffer(),

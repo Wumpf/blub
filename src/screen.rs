@@ -39,7 +39,7 @@ impl Screen {
                 format: Screen::FORMAT_SWAPCHAIN,
                 width: resolution.width,
                 height: resolution.height,
-                present_mode: wgpu::PresentMode::Immediate,
+                present_mode: wgpu::PresentMode::Immediate, // TODO Mailbox?
             },
         );
 

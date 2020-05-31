@@ -14,6 +14,8 @@ struct SimulationPropertiesUniformBufferContent {
     padding1: f32,
     padding2: f32,
 }
+unsafe impl bytemuck::Pod for SimulationPropertiesUniformBufferContent {}
+unsafe impl bytemuck::Zeroable for SimulationPropertiesUniformBufferContent {}
 
 pub struct HybridFluid {
     //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
@@ -293,6 +295,7 @@ impl HybridFluid {
         &mut self,
         device: &wgpu::Device,
         init_encoder: &mut wgpu::CommandEncoder,
+        queue: &wgpu::Queue,
         min_grid: cgmath::Point3<f32>,
         max_grid: cgmath::Point3<f32>,
     ) {
@@ -366,13 +369,12 @@ impl HybridFluid {
         );
         self.num_particles += num_new_particles;
 
-        self.update_simulation_properties_uniformbuffer(device, init_encoder);
+        self.update_simulation_properties_uniformbuffer(queue);
     }
 
-    fn update_simulation_properties_uniformbuffer(&mut self, device: &wgpu::Device, init_encoder: &mut wgpu::CommandEncoder) {
+    fn update_simulation_properties_uniformbuffer(&mut self, queue: &wgpu::Queue) {
         self.simulation_properties_uniformbuffer.update_content(
-            init_encoder,
-            device,
+            queue,
             SimulationPropertiesUniformBufferContent {
                 num_particles: self.num_particles,
                 padding0: 0.0,
