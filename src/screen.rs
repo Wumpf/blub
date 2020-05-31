@@ -139,8 +139,8 @@ impl Screen {
         &self.depth_view
     }
 
-    pub fn start_frame(&mut self) -> wgpu::SwapChainOutput {
-        self.swap_chain.get_next_texture().unwrap()
+    pub fn start_frame(&mut self) -> wgpu::SwapChainTexture {
+        self.swap_chain.get_next_frame().unwrap().output
     }
 
     pub fn take_screenshot(&mut self, encoder: &mut wgpu::CommandEncoder, path: &Path) {
@@ -167,7 +167,7 @@ impl Screen {
         self.next_screenshot_file = path.into();
     }
 
-    pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainOutput, encoder: &mut wgpu::CommandEncoder) {
+    pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder) {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &output.view,
@@ -184,15 +184,12 @@ impl Screen {
         render_pass.draw(0..3, 0..1);
     }
 
-    pub fn end_frame(&mut self, device: &wgpu::Device, _output: wgpu::SwapChainOutput) {
+    pub fn end_frame(&mut self, device: &wgpu::Device, _output: wgpu::SwapChainTexture) {
         if self.next_screenshot_file == PathBuf::default() {
             return;
         }
 
-        let buffer_future = self.screenshot_buffer.map_read(
-            0,
-            (self.resolution.width * self.resolution.height) as u64 * std::mem::size_of::<u32>() as u64,
-        );
+        let buffer_future = self.screenshot_buffer.map_read(0, wgpu::BufferSize::WHOLE);
 
         // TODO: This is the worst possible way to deal with this. Should do Polls on frame starts and keep several buffers in order to never block on this.
         // Since we want to do video rendering here, we really should avoid any full stop on gpu rendering!

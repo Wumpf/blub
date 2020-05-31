@@ -283,6 +283,7 @@ impl Application {
             &self.device,
             &self.window,
             &mut encoder,
+            &self.command_queue,
             &self.screen.backbuffer(),
             &mut self.simulation_controller,
             &mut self.scene_renderer,

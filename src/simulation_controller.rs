@@ -39,7 +39,7 @@ fn delta_from_steps_per_second(steps_per_second: u64) -> Duration {
 
 impl SimulationController {
     pub fn new() -> Self {
-        const DEFAULT_SIMULATION_STEPS_PER_SECOND: u64 = 120;
+        const DEFAULT_SIMULATION_STEPS_PER_SECOND: u64 = 60;
 
         SimulationController {
             scheduled_restart: false,

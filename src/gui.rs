@@ -213,6 +213,7 @@ impl GUI {
         device: &wgpu::Device,
         window: &winit::window::Window,
         encoder: &mut wgpu::CommandEncoder,
+        queue: &wgpu::Queue,
         view: &wgpu::TextureView,
         simulation_controller: &mut SimulationController,
         scene_renderer: &mut SceneRenderer,
@@ -227,7 +228,7 @@ impl GUI {
         Self::setup_ui(&ui, state, simulation_controller, scene_renderer);
         self.imgui_platform.prepare_render(&ui, &window);
         self.imgui_renderer
-            .render(ui.render(), &device, encoder, view)
+            .render(ui.render(), &device, encoder, queue, view)
             .expect("IMGUI rendering failed");
     }
 
