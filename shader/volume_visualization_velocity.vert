@@ -40,16 +40,16 @@ void main() {
 
     uint marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
 
-    vec3 cellCenter = volumeCoordinate + vec3(0.5);
+    vec3 cellCenter = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
     vec3 linePosition = cellCenter;
-    addToChannel(linePosition, 0.5, channel);
+    addToChannel(linePosition, 0.5 * Rendering.FluidGridToWorldScale, channel);
 
     float velocity = getChannel(texelFetch(VelocityVolume, volumeCoordinate, 0).xyz, channel);
     float scale = clamp(velocity * Rendering.VelocityVisualizationScale, -1.0, 1.0);
     if (marker != CELL_FLUID)
         scale = 0.0;
     if (gl_VertexIndex == 0) {
-        addToChannel(linePosition, scale, channel);
+        addToChannel(linePosition, scale * Rendering.FluidGridToWorldScale, channel);
     }
 
     out_Color = vec4(colormapCoolToWarm(scale), 1.0);

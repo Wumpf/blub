@@ -39,7 +39,7 @@ fn delta_from_steps_per_second(steps_per_second: u64) -> Duration {
 
 impl SimulationController {
     pub fn new() -> Self {
-        const DEFAULT_SIMULATION_STEPS_PER_SECOND: u64 = 60;
+        const DEFAULT_SIMULATION_STEPS_PER_SECOND: u64 = 120;
 
         SimulationController {
             scheduled_restart: false,
@@ -121,7 +121,7 @@ impl SimulationController {
                         compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
 
                         for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
-                            if !self.single_step(scene, &mut compute_pass, pipeline_manager) {
+                            if !self.single_step(scene, &mut compute_pass, pipeline_manager, queue) {
                                 batch_size = i;
                                 break;
                             }
@@ -151,6 +151,7 @@ impl SimulationController {
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
         per_frame_bind_group: &wgpu::BindGroup,
+        queue: &wgpu::Queue,
     ) {
         if !self.start_simulation_frame() {
             return;
@@ -158,7 +159,7 @@ impl SimulationController {
 
         let mut compute_pass = encoder.begin_compute_pass();
         compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
-        while self.single_step(scene, &mut compute_pass, pipeline_manager) {}
+        while self.single_step(scene, &mut compute_pass, pipeline_manager, queue) {}
     }
 
     fn start_simulation_frame(&mut self) -> bool {
@@ -178,7 +179,13 @@ impl SimulationController {
         return true;
     }
 
-    fn single_step<'a>(&mut self, scene: &'a Scene, compute_pass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager) -> bool {
+    fn single_step<'a>(
+        &mut self,
+        scene: &'a Scene,
+        compute_pass: &mut wgpu::ComputePass<'a>,
+        pipeline_manager: &'a PipelineManager,
+        queue: &wgpu::Queue,
+    ) -> bool {
         // frame drops are only relevant in realtime mode.
         let max_total_step_per_frame = if self.status == SimulationControllerStatus::Realtime {
             Duration::from_secs_f64(1.0 / MIN_REALTIME_FPS)
@@ -192,7 +199,7 @@ impl SimulationController {
         }
 
         if self.timer.simulation_frame_loop(max_total_step_per_frame) == SimulationStepResult::PerformStepAndCallAgain {
-            scene.step(compute_pass, pipeline_manager);
+            scene.step(compute_pass, pipeline_manager, queue);
             return true;
         }
         return false;

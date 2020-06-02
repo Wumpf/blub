@@ -3,7 +3,10 @@
 #define COMPUTE_PASS_VOLUME layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 
 // todo: gravity
-layout(set = 1, binding = 0) uniform SimulationProperties { uint NumParticles; };
+layout(set = 1, binding = 0) uniform SimulationProperties {
+    vec3 GravityGridSpace;
+    uint NumParticles;
+};
 
 // Boundary is zero, so texel fetch outside of the domain always gives us boundary cells.
 #define CELL_SOLID 0

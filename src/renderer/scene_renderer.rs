@@ -16,6 +16,8 @@ pub enum FluidRenderingMode {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GlobalRenderSettingsUniformBufferContent {
+    fluid_origin: cgmath::Point3<f32>,
+    fluid_grid_to_world_scale: f32,
     velocity_visualization_scale: f32,
     padding: cgmath::Point3<f32>,
 }
@@ -61,16 +63,17 @@ impl SceneRenderer {
             fluid_rendering_mode: FluidRenderingMode::Particles,
             volume_visualization: VolumeVisualizationMode::None,
             enable_box_lines: true,
-            velocity_visualization_scale: 0.05,
+            velocity_visualization_scale: 0.008,
         }
     }
 
     // Needs to be called whenever immutable scene properties change.
     pub fn on_new_scene(&mut self, device: &wgpu::Device, init_encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
         let line_color = cgmath::vec3(0.0, 0.0, 0.0);
-        let grid_extent = scene.fluid().grid_dimension();
-        let min = scene.fluid_origin;
-        let max = min + cgmath::vec3(grid_extent.width as f32, grid_extent.height as f32, grid_extent.depth as f32) * scene.fluid_to_world_scale;
+        let grid_extent = scene.config.fluid.grid_dimension;
+        let min = scene.config.fluid.world_position;
+        let max = min
+            + cgmath::vec3(grid_extent.width as f32, grid_extent.height as f32, grid_extent.depth as f32) * scene.config.fluid.grid_to_world_scale;
 
         self.bounds_line_renderer.clear_lines();
         self.bounds_line_renderer.add_lines(
@@ -108,8 +111,10 @@ impl SceneRenderer {
         );
     }
 
-    pub fn fill_global_uniform_buffer(&self) -> GlobalRenderSettingsUniformBufferContent {
+    pub fn fill_global_uniform_buffer(&self, scene: &Scene) -> GlobalRenderSettingsUniformBufferContent {
         GlobalRenderSettingsUniformBufferContent {
+            fluid_origin: scene.config.fluid.world_position,
+            fluid_grid_to_world_scale: scene.config.fluid.grid_to_world_scale,
             velocity_visualization_scale: self.velocity_visualization_scale,
             padding: cgmath::point3(0.0, 0.0, 0.0),
         }

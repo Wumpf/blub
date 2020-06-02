@@ -63,7 +63,7 @@ void main() {
         [[flatten]] if (weights.z > 0.0) { velocity.z /= weights.z; }
 
         // Apply global forces. TODO: Make configurable and scale dependent
-        velocity.xyz += vec3(0.0, -9.81, 0.0) * Time.SimulationDelta;
+        velocity.xyz += GravityGridSpace * Time.SimulationDelta;
 
         // Reinforce global boundaries.
         // TODO: This probably needs to be a separate pass as we can't really do this on the fly in compute divergence

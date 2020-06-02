@@ -95,7 +95,6 @@ impl Application {
         let scene = scene::Scene::new(
             &device,
             &mut init_encoder,
-            &command_queue,
             &shader_dir,
             &mut pipeline_manager,
             per_frame_resources.bind_group_layout(),
@@ -226,7 +225,6 @@ impl Application {
             self.scene = scene::Scene::new(
                 &self.device,
                 &mut init_encoder,
-                &self.command_queue,
                 &self.shader_dir,
                 &mut self.pipeline_manager,
                 self.per_frame_resources.bind_group_layout(),
@@ -260,11 +258,16 @@ impl Application {
             &self.command_queue,
             self.camera.fill_global_uniform_buffer(aspect_ratio),
             self.simulation_controller.timer().fill_global_uniform_buffer(),
-            self.scene_renderer.fill_global_uniform_buffer(),
+            self.scene_renderer.fill_global_uniform_buffer(&self.scene),
         );
 
-        self.simulation_controller
-            .frame_steps(&self.scene, &mut encoder, &self.pipeline_manager, self.per_frame_resources.bind_group());
+        self.simulation_controller.frame_steps(
+            &mut self.scene,
+            &mut encoder,
+            &self.pipeline_manager,
+            self.per_frame_resources.bind_group(),
+            &self.command_queue,
+        );
         self.scene_renderer.draw(
             &self.scene,
             &mut encoder,
@@ -298,7 +301,7 @@ impl Application {
 
 fn main() {
     // Silence warnings from `naga::front::spirv` for now since as of writing it doesn't know enough spirv yet.
-    env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info,blub=info,naga=error"));
+    env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info,naga=error"));
     let event_loop = EventLoop::new();
     let application = futures::executor::block_on(Application::new(&event_loop));
     application.run(event_loop);

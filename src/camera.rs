@@ -36,7 +36,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Camera {
-        let position = cgmath::Point3::new(100.0f32, 50.0, 100.0);
+        let position = cgmath::Point3::new(1.0f32, 1.0, 1.0);
         Camera {
             position,
             direction: cgmath::Point3::new(0f32, 0.0, 0.0) - position,
@@ -46,7 +46,7 @@ impl Camera {
             active_move_commands: Default::default(),
             mouse_delta: (0.0, 0.0),
 
-            translation_speed: 8.0,
+            translation_speed: 0.5,
             rotation_speed: 0.001,
         }
     }

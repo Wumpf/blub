@@ -4,15 +4,13 @@ use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::uniformbuffer::*;
 use crate::wgpu_utils::*;
 use rand::prelude::*;
-use std::{path::Path, rc::Rc};
+use std::{cell::Cell, path::Path, rc::Rc};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct SimulationPropertiesUniformBufferContent {
+    gravity_grid: cgmath::Vector3<f32>,
     num_particles: u32,
-    padding0: f32,
-    padding1: f32,
-    padding2: f32,
 }
 unsafe impl bytemuck::Pod for SimulationPropertiesUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for SimulationPropertiesUniformBufferContent {}
@@ -23,6 +21,8 @@ pub struct HybridFluid {
 
     particles: wgpu::Buffer,
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
+    simulation_properties: SimulationPropertiesUniformBufferContent,
+    simulation_properties_dirty: Cell<bool>,
 
     bind_group_uniform: wgpu::BindGroup,
     bind_group_write_particles_volume: wgpu::BindGroup,
@@ -42,7 +42,6 @@ pub struct HybridFluid {
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_update_particles: ComputePipelineHandle,
 
-    num_particles: u32,
     max_num_particles: u32,
 }
 
@@ -259,6 +258,11 @@ impl HybridFluid {
 
             particles,
             simulation_properties_uniformbuffer,
+            simulation_properties: SimulationPropertiesUniformBufferContent {
+                num_particles: 0,
+                gravity_grid: cgmath::vec3(0.0, -9.81, 0.0),
+            },
+            simulation_properties_dirty: Cell::new(true),
 
             bind_group_uniform,
             bind_group_write_particles_volume,
@@ -277,7 +281,6 @@ impl HybridFluid {
             pipeline_remove_divergence,
             pipeline_update_particles,
 
-            num_particles: 0,
             max_num_particles,
         }
     }
@@ -295,7 +298,6 @@ impl HybridFluid {
         &mut self,
         device: &wgpu::Device,
         init_encoder: &mut wgpu::CommandEncoder,
-        queue: &wgpu::Queue,
         min_grid: cgmath::Point3<f32>,
         max_grid: cgmath::Point3<f32>,
     ) {
@@ -305,16 +307,16 @@ impl HybridFluid {
         let extent_cell = max_grid - min_grid;
 
         let mut num_new_particles = (extent_cell.x * extent_cell.y * extent_cell.z * Self::PARTICLES_PER_GRID_CELL) as u32;
-        if self.max_num_particles < num_new_particles + self.num_particles {
+        if self.max_num_particles < num_new_particles + self.simulation_properties.num_particles {
             error!(
                 "Can't add {} particles, max is {}, current is {}",
-                num_new_particles, self.max_num_particles, self.num_particles
+                num_new_particles, self.max_num_particles, self.simulation_properties.num_particles
             );
-            num_new_particles = self.max_num_particles - self.num_particles;
+            num_new_particles = self.max_num_particles - self.simulation_properties.num_particles;
         }
         info!("Adding {} new particles", num_new_particles);
 
-        // TODO: Consider using queue write operation (might not be applicable here since this is a one-off write?)
+        // Not using queue write operation since this is a large one-off write
         let particle_size = std::mem::size_of::<Particle>() as u64;
         let mut particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
             label: Some("Buffer: Particle Update"),
@@ -364,28 +366,20 @@ impl HybridFluid {
             &particle_buffer_mapping.finish(),
             0,
             &self.particles,
-            self.num_particles as u64 * particle_size,
+            self.simulation_properties.num_particles as u64 * particle_size,
             num_new_particles as u64 * particle_size,
         );
-        self.num_particles += num_new_particles;
-
-        self.update_simulation_properties_uniformbuffer(queue);
+        self.simulation_properties.num_particles += num_new_particles;
+        self.simulation_properties_dirty.set(true);
     }
 
-    fn update_simulation_properties_uniformbuffer(&mut self, queue: &wgpu::Queue) {
-        self.simulation_properties_uniformbuffer.update_content(
-            queue,
-            SimulationPropertiesUniformBufferContent {
-                num_particles: self.num_particles,
-                padding0: 0.0,
-                padding1: 0.0,
-                padding2: 0.0,
-            },
-        );
+    pub fn set_gravity_grid(&mut self, gravity: cgmath::Vector3<f32>) {
+        self.simulation_properties.gravity_grid = gravity;
+        self.simulation_properties_dirty.set(true);
     }
 
     pub fn num_particles(&self) -> u32 {
-        self.num_particles
+        self.simulation_properties.num_particles
     }
 
     pub fn get_or_create_group_layout_renderer(device: &wgpu::Device) -> &BindGroupLayoutWithDesc {
@@ -411,7 +405,12 @@ impl HybridFluid {
     }
 
     // todo: timing
-    pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager) {
+    pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, queue: &wgpu::Queue) {
+        if self.simulation_properties_dirty.get() {
+            self.simulation_properties_uniformbuffer.update_content(queue, self.simulation_properties);
+            self.simulation_properties_dirty.set(false);
+        }
+
         const COMPUTE_LOCAL_SIZE_FLUID: wgpu::Extent3d = wgpu::Extent3d {
             width: 8,
             height: 8,
@@ -424,7 +423,8 @@ impl HybridFluid {
             height: self.grid_dimension.height / COMPUTE_LOCAL_SIZE_FLUID.height,
             depth: self.grid_dimension.depth / COMPUTE_LOCAL_SIZE_FLUID.depth,
         };
-        let particle_work_groups = (self.num_particles as u32 + COMPUTE_LOCAL_SIZE_PARTICLES - 1) / COMPUTE_LOCAL_SIZE_PARTICLES;
+        let particle_work_groups =
+            (self.simulation_properties.num_particles as u32 + COMPUTE_LOCAL_SIZE_PARTICLES - 1) / COMPUTE_LOCAL_SIZE_PARTICLES;
 
         cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
 

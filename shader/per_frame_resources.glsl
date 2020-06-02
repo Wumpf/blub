@@ -20,8 +20,9 @@ struct TimerData {
 };
 
 struct GlobalRenderingSettings {
+    vec3 FluidWorldOrigin;
+    float FluidGridToWorldScale;
     float VelocityVisualizationScale;
-    // vec3 _padding0;
 };
 
 // Constants that change at max per frame.
