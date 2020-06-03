@@ -28,6 +28,7 @@ pub struct SimulationController {
     simulation_steps_per_second: u64,
     pub status: SimulationControllerStatus,
     pub simulation_stop_time: Duration,
+    pub time_scale: f32,
 }
 
 const MIN_REALTIME_FPS: f64 = 20.0;
@@ -48,6 +49,7 @@ impl SimulationController {
             simulation_steps_per_second: DEFAULT_SIMULATION_STEPS_PER_SECOND,
             timer: Timer::new(delta_from_steps_per_second(DEFAULT_SIMULATION_STEPS_PER_SECOND)),
             computation_time_last_fast_forward: Default::default(),
+            time_scale: 1.0,
         }
     }
 
@@ -56,7 +58,7 @@ impl SimulationController {
     }
 
     pub fn on_frame_submitted(&mut self) {
-        self.timer.on_frame_submitted();
+        self.timer.on_frame_submitted(self.time_scale);
     }
 
     pub fn computation_time_last_fast_forward(&self) -> Duration {
@@ -133,7 +135,7 @@ impl SimulationController {
                 }
                 self.computation_time_last_fast_forward = start_time.elapsed();
             }
-            self.timer.on_frame_submitted();
+            self.timer.on_frame_submitted(1.0);
 
             self.timer.force_frame_delta(Duration::from_secs(0));
             self.simulation_stop_time = previous_simulation_end;

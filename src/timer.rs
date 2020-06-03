@@ -68,19 +68,19 @@ impl Timer {
     // Usually the frame delta is just the time between the last two on_frame_submitted calls, but this overwrites it.
     // Useful to jump to a specific time (recording, or fast forwarding the simulation).
     pub fn force_frame_delta(&mut self, delta: Duration) {
+        self.total_rendered_time -= self.current_frame_delta;
         self.current_frame_delta = delta;
+        self.total_rendered_time += self.current_frame_delta;
     }
 
-    pub fn on_frame_submitted(&mut self) {
-        // Frame is submitted, so we finally can advance the render time.
-        self.total_rendered_time += self.current_frame_delta;
-
+    pub fn on_frame_submitted(&mut self, time_scale: f32) {
         self.duration_last_frame = self.timestamp_last_frame.elapsed();
         if self.frame_duration_history.len() == FRAME_DURATION_HISTORY_LENGTH {
             self.frame_duration_history.pop_front();
         }
         self.frame_duration_history.push_back(self.duration_last_frame);
-        self.current_frame_delta = self.duration_last_frame;
+        self.current_frame_delta = self.duration_last_frame.mul_f32(time_scale);
+        self.total_rendered_time += self.current_frame_delta;
 
         self.timestamp_last_frame = std::time::Instant::now();
         self.num_simulation_steps_this_frame = 0;
@@ -93,7 +93,8 @@ impl Timer {
 
     pub fn simulation_frame_loop(&mut self, max_total_step_per_frame: Duration) -> SimulationStepResult {
         // simulation time shouldn't advance faster than render time
-        let residual_time = (self.total_rendered_time + self.current_frame_delta)
+        let residual_time = self
+            .total_rendered_time
             .checked_sub(self.total_simulated_time + self.accepted_simulation_to_render_lag)
             .unwrap();
         if residual_time < self.simulation_delta {
@@ -145,7 +146,7 @@ impl Timer {
         &self.frame_duration_history
     }
 
-    // Total render time. (equal to real time if not configured otherwise!)
+    // Total render time, including current frame. (equal to real time if not configured otherwise!)
     pub fn total_render_time(&self) -> Duration {
         self.total_rendered_time
     }

@@ -11,7 +11,7 @@ struct CameraData {
 
 // All timings in seconds.
 struct TimerData {
-    float TotalPassed;        // How much time has passed on the rendering clock since rendering started.
+    float TotalPassed;        // How much time has passed on the rendering clock since rendering started (including the current frame).
     float FrameDelta;         // How long a previous frame took in seconds.
     float TotalSimulatedTime; // How much time has passed in the simulation *excluding any steps in the current frame*.
     // How much we're advancing the simulation for each step in the current frame.

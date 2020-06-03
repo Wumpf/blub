@@ -121,6 +121,15 @@ impl GUI {
                     simulation_controller.set_simulation_steps_per_second(simulation_steps_per_second.max(20).min(60 * 20) as u64);
                 }
 
+                if ui
+                    .input_float(im_str!("time scale"), &mut simulation_controller.time_scale)
+                    .step(0.05)
+                    .enter_returns_true(true)
+                    .build()
+                {
+                    simulation_controller.time_scale = simulation_controller.time_scale.max(0.01).min(100.0);
+                }
+
                 {
                     if ui.button(im_str!("Reset"), [50.0, DEFAULT_BUTTON_HEIGHT]) {
                         simulation_controller.schedule_restart();
