@@ -73,7 +73,9 @@ void main() {
         // TODO: Do we need to do this?
         // velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
 
-        imageStore(VelocityVolume, gridCoord, vec4(velocity, 0.0));
+        imageStore(VelocityVolumeX, gridCoord, velocity.xxxx);
+        imageStore(VelocityVolumeY, gridCoord, velocity.yyyy);
+        imageStore(VelocityVolumeZ, gridCoord, velocity.zzzz);
     }
     else {
         // No need to clear velocity volume since anyone sampling it outside needs special handling anyway

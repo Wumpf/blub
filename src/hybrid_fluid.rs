@@ -80,18 +80,24 @@ impl HybridFluid {
             .create(device, "BindGroupLayout: HybridFluid Uniform");
         let group_layout_write_particles_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles
-            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::Rgba32Float, false)) // vgrid
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityX
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityY
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityZ
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R8Uint, false)) // marker volume
             .next_binding_compute(binding_glsl::texture2D()) // pressure
             .create(device, "BindGroupLayout: Update Particles and/or Velocity Grid");
         let group_layout_write_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles
-            .next_binding_compute(binding_glsl::texture3D()) // vgrid
+            .next_binding_compute(binding_glsl::texture3D()) // velocityX
+            .next_binding_compute(binding_glsl::texture3D()) // velocityY
+            .next_binding_compute(binding_glsl::texture3D()) // velocityZ
             .next_binding_compute(binding_glsl::utexture3D()) // marker volume
             .create(device, "BindGroupLayout: Update Particles and/or Velocity Grid");
         let group_layout_pressure_solve = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::texture3D()) // vgrid
+            .next_binding_compute(binding_glsl::texture3D()) // velocityX
+            .next_binding_compute(binding_glsl::texture3D()) // velocityY
+            .next_binding_compute(binding_glsl::texture3D()) // velocityZ
             .next_binding_compute(binding_glsl::utexture3D()) // marker volume
             .next_binding_compute(binding_glsl::texture3D()) // dummy or divergence
             .next_binding_compute(binding_glsl::texture3D()) // pressure
@@ -117,7 +123,9 @@ impl HybridFluid {
                 usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
             }
         };
-        let volume_velocity = device.create_texture(&create_volume_texture_descriptor("Velocity Volume", wgpu::TextureFormat::Rgba32Float));
+        let volume_velocity_x = device.create_texture(&create_volume_texture_descriptor("Velocity Volume X", wgpu::TextureFormat::R32Float));
+        let volume_velocity_y = device.create_texture(&create_volume_texture_descriptor("Velocity Volume Y", wgpu::TextureFormat::R32Float));
+        let volume_velocity_z = device.create_texture(&create_volume_texture_descriptor("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_descriptor("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker = device.create_texture(&create_volume_texture_descriptor("Marker Grid", wgpu::TextureFormat::R8Uint));
         let volume_divergence = device.create_texture(&create_volume_texture_descriptor("Velocity Volume", wgpu::TextureFormat::R32Float)); // TODO: could reuse data from volume_linked_lists
@@ -125,7 +133,9 @@ impl HybridFluid {
         let volume_pressure1 = device.create_texture(&create_volume_texture_descriptor("Pressure Volume 1", wgpu::TextureFormat::R32Float));
 
         // Resource views
-        let volume_velocity_view = volume_velocity.create_default_view();
+        let volume_velocity_view_x = volume_velocity_x.create_default_view();
+        let volume_velocity_view_y = volume_velocity_y.create_default_view();
+        let volume_velocity_view_z = volume_velocity_z.create_default_view();
         let volume_linked_lists_view = volume_linked_lists.create_default_view();
         let volume_marker_view = volume_marker.create_default_view();
         let volume_divergence_view = volume_divergence.create_default_view();
@@ -138,18 +148,24 @@ impl HybridFluid {
             .create(device, "BindGroup: HybridFluid Uniform");
         let bind_group_write_particles_volume = BindGroupBuilder::new(&group_layout_write_particles_volume)
             .buffer(particles.slice(..))
-            .texture(&volume_velocity_view)
+            .texture(&volume_velocity_view_x)
+            .texture(&volume_velocity_view_y)
+            .texture(&volume_velocity_view_z)
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_view)
             .texture(&volume_pressure0_view)
             .create(device, "BindGroup: Update Particles and/or Velocity Grid");
         let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
             .buffer(particles.slice(..))
-            .texture(&volume_velocity_view)
+            .texture(&volume_velocity_view_x)
+            .texture(&volume_velocity_view_y)
+            .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
             .create(device, "BindGroup: Update Particles");
         let bind_group_compute_divergence = BindGroupBuilder::new(&group_layout_pressure_solve)
-            .texture(&volume_velocity_view)
+            .texture(&volume_velocity_view_x)
+            .texture(&volume_velocity_view_y)
+            .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
             .texture(&volume_pressure0_view)
             .texture(&volume_pressure1_view)
@@ -157,14 +173,18 @@ impl HybridFluid {
             .create(device, "BindGroup: Compute Divergence");
         let bind_group_pressure_write = [
             BindGroupBuilder::new(&group_layout_pressure_solve)
-                .texture(&volume_velocity_view)
+                .texture(&volume_velocity_view_x)
+                .texture(&volume_velocity_view_y)
+                .texture(&volume_velocity_view_z)
                 .texture(&volume_marker_view)
                 .texture(&volume_divergence_view)
                 .texture(&volume_pressure1_view)
                 .texture(&volume_pressure0_view)
                 .create(device, "BindGroup: Pressure write 0"),
             BindGroupBuilder::new(&group_layout_pressure_solve)
-                .texture(&volume_velocity_view)
+                .texture(&volume_velocity_view_x)
+                .texture(&volume_velocity_view_y)
+                .texture(&volume_velocity_view_z)
                 .texture(&volume_marker_view)
                 .texture(&volume_divergence_view)
                 .texture(&volume_pressure0_view)
@@ -174,7 +194,9 @@ impl HybridFluid {
 
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(particles.slice(..))
-            .texture(&volume_velocity_view)
+            .texture(&volume_velocity_view_x)
+            .texture(&volume_velocity_view_y)
+            .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
             .texture(&volume_divergence_view)
             .texture(&volume_pressure0_view)
@@ -387,7 +409,9 @@ impl HybridFluid {
             GROUP_LAYOUT_RENDERER.get_or_insert_with(|| {
                 BindGroupLayoutBuilder::new()
                     .next_binding_vertex(binding_glsl::buffer(true)) // particles
-                    .next_binding_vertex(binding_glsl::texture3D()) // velocity
+                    .next_binding_vertex(binding_glsl::texture3D()) // velocityX
+                    .next_binding_vertex(binding_glsl::texture3D()) // velocityY
+                    .next_binding_vertex(binding_glsl::texture3D()) // velocityZ
                     .next_binding_vertex(binding_glsl::utexture3D()) // marker
                     .next_binding_vertex(binding_glsl::texture3D()) // divergence
                     .next_binding_vertex(binding_glsl::texture3D()) // pressure

@@ -6,8 +6,10 @@
 #include "particles.glsl"
 
 layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
-layout(set = 2, binding = 1) uniform texture3D VelocityVolume;
-layout(set = 2, binding = 2) uniform utexture3D MarkerVolume;
+layout(set = 2, binding = 1) uniform texture3D VelocityVolumeX;
+layout(set = 2, binding = 2) uniform texture3D VelocityVolumeY;
+layout(set = 2, binding = 3) uniform texture3D VelocityVolumeZ;
+layout(set = 2, binding = 4) uniform utexture3D MarkerVolume;
 
 COMPUTE_PASS_PARTICLES
 
@@ -17,14 +19,21 @@ vec3 InterpolateTrilinear(vec3 v_000, vec3 v_100, vec3 v_010, vec3 v_110, vec3 v
                mix(mix(v_001, v_101, interpolantsX), mix(v_011, v_111, interpolantsX), interpolantsY), interpolantsZ);
 }
 
-float sampleVelocity(ivec3 coord, uint component, float centerValue) { return texelFetch(VelocityVolume, coord, 0)[component]; }
+float sampleVelocity(ivec3 coord, uint component) {
+    if (component == 0)
+        return texelFetch(VelocityVolumeX, coord, 0).x;
+    else if (component == 1)
+        return texelFetch(VelocityVolumeY, coord, 0).x;
+    else
+        return texelFetch(VelocityVolumeZ, coord, 0).x;
+}
 
 void main() {
     uint particleIndex = gl_GlobalInvocationID.x;
     if (particleIndex >= NumParticles)
         return;
 
-    vec3 gridSize = textureSize(VelocityVolume, 0);
+    vec3 gridSize = textureSize(VelocityVolumeX, 0);
     vec3 gridTexelSizeNormalized = 1.0 / gridSize;
 
     // Sample all 8 neighboring velocity grid cells
@@ -41,21 +50,19 @@ void main() {
         max(vec3(0.0), originalPosition - vec3(0.5, 0.5, 1.0)),
     };
 
-    vec3 centerVelocities = texelFetch(VelocityVolume, ivec3(originalPosition), 0).xyz;
-
     vec3 v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111;
     [[unroll]] for (int i = 0; i < 3; ++i) {
         ivec3 volumeCoordMin = ivec3(offsetPositions[i]);
         ivec3 volumeCoordMax = min(volumeCoordMin + ivec3(1, 1, 1), ivec3(gridSize - ivec3(1)));
 
-        v_000[i] = sampleVelocity(volumeCoordMin, i, centerVelocities[i]);
-        v_100[i] = sampleVelocity(ivec3(volumeCoordMax.x, volumeCoordMin.yz), i, centerVelocities[i]);
-        v_010[i] = sampleVelocity(ivec3(volumeCoordMin.x, volumeCoordMax.y, volumeCoordMin.z), i, centerVelocities[i]);
-        v_110[i] = sampleVelocity(ivec3(volumeCoordMax.xy, volumeCoordMin.z), i, centerVelocities[i]);
-        v_001[i] = sampleVelocity(ivec3(volumeCoordMin.xy, volumeCoordMax.z), i, centerVelocities[i]);
-        v_101[i] = sampleVelocity(ivec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z), i, centerVelocities[i]);
-        v_011[i] = sampleVelocity(ivec3(volumeCoordMin.x, volumeCoordMax.yz), i, centerVelocities[i]);
-        v_111[i] = sampleVelocity(volumeCoordMax, i, centerVelocities[i]);
+        v_000[i] = sampleVelocity(volumeCoordMin, i);
+        v_100[i] = sampleVelocity(ivec3(volumeCoordMax.x, volumeCoordMin.yz), i);
+        v_010[i] = sampleVelocity(ivec3(volumeCoordMin.x, volumeCoordMax.y, volumeCoordMin.z), i);
+        v_110[i] = sampleVelocity(ivec3(volumeCoordMax.xy, volumeCoordMin.z), i);
+        v_001[i] = sampleVelocity(ivec3(volumeCoordMin.xy, volumeCoordMax.z), i);
+        v_101[i] = sampleVelocity(ivec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z), i);
+        v_011[i] = sampleVelocity(ivec3(volumeCoordMin.x, volumeCoordMax.yz), i);
+        v_111[i] = sampleVelocity(volumeCoordMax, i);
     }
 
     // Update velocity and the APIC affine matrix.

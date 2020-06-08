@@ -19,15 +19,6 @@ void main() {
     // uncorrected divergence
     float divergence = texelFetch(DivergenceVolume, volumeCoordinate, 0).x;
 
-    // corrected divergence
-    // float divergence = 0.0;
-    // vec4 currentCellStaggeredVelocities = texelFetch(VelocityVolume, volumeCoordinate, 0);
-    // [[dont_flatten]] if (currentCellStaggeredVelocities.w == CELL_FLUID) {
-    //     divergence += currentCellStaggeredVelocities.x - texelFetch(VelocityVolume, volumeCoordinate - ivec3(1, 0, 0), 0).x;
-    //     divergence += currentCellStaggeredVelocities.y - texelFetch(VelocityVolume, volumeCoordinate - ivec3(0, 1, 0), 0).y;
-    //     divergence += currentCellStaggeredVelocities.z - texelFetch(VelocityVolume, volumeCoordinate - ivec3(0, 0, 1), 0).z;
-    // }
-
     // We don't clear divergence, so if there's not fluid, it has not valid value.
     if (marker != CELL_FLUID)
         divergence = 0.0;

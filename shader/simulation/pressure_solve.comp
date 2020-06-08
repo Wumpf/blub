@@ -7,11 +7,13 @@
 #include "../utilities.glsl"
 #include "hybrid_fluid.glsl"
 
-// layout(set = 2, binding = 0) uniform texture3D VelocityVolume;
-layout(set = 2, binding = 1) uniform utexture3D MarkerVolume;
-layout(set = 2, binding = 2) uniform texture3D DivergenceVolume;
-layout(set = 2, binding = 3) uniform texture3D PressureVolumeRead;
-layout(set = 2, binding = 4, r32f) uniform restrict image3D PressureVolumeWrite;
+// layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
+// layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
+// layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
+layout(set = 2, binding = 3) uniform utexture3D MarkerVolume;
+layout(set = 2, binding = 4) uniform texture3D DivergenceVolume;
+layout(set = 2, binding = 5) uniform texture3D PressureVolumeRead;
+layout(set = 2, binding = 6, r32f) uniform restrict image3D PressureVolumeWrite;
 
 COMPUTE_PASS_VOLUME
 

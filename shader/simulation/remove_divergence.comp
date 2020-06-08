@@ -8,7 +8,7 @@
 
 COMPUTE_PASS_VOLUME
 
-float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, vec3 currentCellStaggeredVelocities, const uint component) {
+float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, float currentCellStaggeredVelocity, const uint component) {
     coord[component] += 1;
 
     uint neighborType = imageLoad(MarkerVolume, coord).x;
@@ -19,10 +19,10 @@ float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, 
         // No support for non-static boundary yet
         // -> No flow between boundary and non-boundary allowed.
         // To avoid sticking to walls we allow velocity away from it even though it violates continuity equations.
-        return min(0.0, currentCellStaggeredVelocities[component]);
+        return min(0.0, currentCellStaggeredVelocity);
     }
     else {
-        return currentCellStaggeredVelocities[component] - (neighborPressure - pressureAtCenter);
+        return currentCellStaggeredVelocity - (neighborPressure - pressureAtCenter);
     }
 }
 
@@ -34,10 +34,20 @@ void main() {
     if (cellType != CELL_FLUID)
         return;
 
-    vec3 velocity = imageLoad(VelocityVolume, gridCoord).xyz;
     float pressureAtCenter = texelFetch(PressureVolume, gridCoord, 0).x;
-    velocity.x = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 0);
-    velocity.y = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 1);
-    velocity.z = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 2);
-    imageStore(VelocityVolume, gridCoord, velocity.xyzz);
+    {
+        float velocity = imageLoad(VelocityVolumeX, gridCoord).x;
+        velocity = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 0);
+        imageStore(VelocityVolumeX, gridCoord, velocity.xxxx);
+    }
+    {
+        float velocity = imageLoad(VelocityVolumeY, gridCoord).x;
+        velocity = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 1);
+        imageStore(VelocityVolumeY, gridCoord, velocity.xxxx);
+    }
+    {
+        float velocity = imageLoad(VelocityVolumeZ, gridCoord).x;
+        velocity = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 2);
+        imageStore(VelocityVolumeZ, gridCoord, velocity.xxxx);
+    }
 }

@@ -10,7 +10,9 @@ COMPUTE_PASS_VOLUME
 
 void AccumulateNeighbors(uint neighborCellType, ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
     if (neighborCellType == CELL_FLUID) {
-        accumulator += imageLoad(VelocityVolume, neighborCellCoord).xyz * weight;
+        accumulator.x += imageLoad(VelocityVolumeX, neighborCellCoord).x * weight;
+        accumulator.y += imageLoad(VelocityVolumeY, neighborCellCoord).x * weight;
+        accumulator.z += imageLoad(VelocityVolumeZ, neighborCellCoord).x * weight;
         accumulatedWeight += weight;
     }
 }
@@ -28,7 +30,7 @@ void main() {
     if (cellType == CELL_FLUID)
         return; // all good already!
 
-    // TODO: Double buffering and duplicating marker into VelocityVolume should help a lot.
+    // TODO: Double buffering and duplicating marker into VelocityVolumes should help a lot.
     // TODO: Concept of a "VOID" cell to identify places where there is no information? (solid may or may not have info... sorta.. complicated :/)
 
     // Direct neighbor cells are special, need them later.
@@ -76,5 +78,7 @@ void main() {
             velocity.z = max(0.0, velocity.z);
     }
 
-    imageStore(VelocityVolume, gridCoord, velocity.xyzz);
+    imageStore(VelocityVolumeX, gridCoord, velocity.xxxx);
+    imageStore(VelocityVolumeY, gridCoord, velocity.yyyy);
+    imageStore(VelocityVolumeZ, gridCoord, velocity.zzzz);
 }

@@ -9,17 +9,6 @@ out gl_PerVertex { vec4 gl_Position; };
 
 layout(location = 0) out vec4 out_Color;
 
-float getChannel(vec3 v, uint channel) {
-    switch (channel) {
-    case 0:
-        return v.x;
-    case 1:
-        return v.y;
-    default:
-        return v.z;
-    }
-}
-
 void addToChannel(inout vec3 v, float value, uint channel) {
     switch (channel) {
     case 0:
@@ -44,7 +33,19 @@ void main() {
     vec3 linePosition = cellCenter;
     addToChannel(linePosition, 0.5 * Rendering.FluidGridToWorldScale, channel);
 
-    float velocity = getChannel(texelFetch(VelocityVolume, volumeCoordinate, 0).xyz, channel);
+    float velocity = 0.0;
+    switch (channel) {
+    case 0:
+        velocity = texelFetch(VelocityVolumeX, volumeCoordinate, 0).x;
+        break;
+    case 1:
+        velocity = texelFetch(VelocityVolumeY, volumeCoordinate, 0).x;
+        break;
+    default:
+        velocity = texelFetch(VelocityVolumeZ, volumeCoordinate, 0).x;
+        break;
+    }
+
     float scale = clamp(velocity * Rendering.VelocityVisualizationScale, -1.0, 1.0);
     if (marker != CELL_FLUID)
         scale = 0.0;

@@ -1,4 +1,4 @@
-// Computes velocity divergence of VelocityVolume
+// Computes velocity divergence of VelocityVolumes
 
 #version 450
 
@@ -6,22 +6,25 @@
 #include "per_frame_resources.glsl"
 #include "utilities.glsl"
 
-layout(set = 2, binding = 0) uniform texture3D VelocityVolume;
-layout(set = 2, binding = 1) uniform utexture3D MarkerVolume;
-// layout(set = 2, binding = 2) uniform texture3D DivergenceVolume;
-// layout(set = 2, binding = 3) uniform texture3D PressureVolumeRead;
-layout(set = 2, binding = 4, r32f) uniform restrict image3D DivergenceVolume;
+layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
+layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
+layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
+layout(set = 2, binding = 3) uniform utexture3D MarkerVolume;
+// layout(set = 2, binding = 4) uniform texture3D DivergenceVolume;
+// layout(set = 2, binding = 5) uniform texture3D PressureVolumeRead;
+layout(set = 2, binding = 6, r32f) uniform restrict image3D DivergenceVolume;
 
 COMPUTE_PASS_VOLUME
 
-float computeDivergenceForDirection(ivec3 coord, vec3 currentCellStaggeredVelocities, const uint component) {
-    coord[component] -= 1;
+float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, const uint component) {
+    ivec3 neighborCoord = coord;
+    neighborCoord[component] -= 1;
 
-    uint oppositeWallType = texelFetch(MarkerVolume, coord, 0).x;
+    uint oppositeWallType = texelFetch(MarkerVolume, neighborCoord, 0).x;
     if (oppositeWallType == CELL_FLUID)
-        return currentCellStaggeredVelocities[component] - texelFetch(VelocityVolume, coord, 0)[component];
+        return texelFetch(velocityVolume, coord, 0).x - texelFetch(velocityVolume, neighborCoord, 0).x;
     else if (oppositeWallType == CELL_SOLID)
-        return currentCellStaggeredVelocities[component];
+        return texelFetch(velocityVolume, coord, 0).x;
     else
         return 0.0;
 }
@@ -35,10 +38,9 @@ void main() {
     if (texelFetch(MarkerVolume, gridCoord, 0).x != CELL_FLUID)
         return; // Clear? Nah, just means we need to be careful with debug viz!
 
-    vec3 currentCellStaggeredVelocities = texelFetch(VelocityVolume, gridCoord, 0).xyz;
-    float divergence = computeDivergenceForDirection(gridCoord, currentCellStaggeredVelocities, 0);
-    divergence += computeDivergenceForDirection(gridCoord, currentCellStaggeredVelocities, 1);
-    divergence += computeDivergenceForDirection(gridCoord, currentCellStaggeredVelocities, 2);
+    float divergence = computeDivergenceForDirection(gridCoord, VelocityVolumeX, 0);
+    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeY, 1);
+    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeZ, 2);
 
     imageStore(DivergenceVolume, gridCoord, divergence.xxxx);
 }
