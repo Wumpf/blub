@@ -122,7 +122,7 @@ impl Camera {
     }
 
     fn view_projection(&self, aspect_ratio: f32) -> cgmath::Matrix4<f32> {
-        let projection = cgmath::perspective(cgmath::Deg(80f32), aspect_ratio, 0.1, 1000.0);
+        let projection = cgmath::perspective(cgmath::Deg(80f32), aspect_ratio, 0.01, 1000.0);
         let view = cgmath::Matrix4::look_at_dir(self.position, self.direction, self.rotational_up);
         OPENGL_TO_WGPU_MATRIX * projection * view
     }
