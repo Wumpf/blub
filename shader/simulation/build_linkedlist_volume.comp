@@ -19,7 +19,7 @@ void main() {
 
     vec3 offset = vec3(0.5);
     offset[VelocityTransferComponent] = 0.0;
-    ivec3 nearestDualGridCell = ivec3(position + offset);
+    ivec3 nearestDualGridCell = ivec3(max(position - offset, vec3(0.0)));
 
     // Remember, indices in grid are offset by +1 for easy handling of empty cells.
     Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;

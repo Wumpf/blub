@@ -44,14 +44,14 @@ void main() {
     staggeredVelocitySamplePosition[VelocityTransferComponent] += 0.5;
     float velocityComponent = 0.0;
     float velocityWeight = 0.0;
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 0, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 0, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 1, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 1, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 0, 1));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 0, 1));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 1, 1));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 1, 1));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 0, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 0, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 1, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 1, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 0, 1));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 0, 1));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 1, 1));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 1, 1));
 
     if (velocityWeight > 0.0)
         velocityComponent /= velocityWeight;
