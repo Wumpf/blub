@@ -1,8 +1,9 @@
 // Clears the linked list grid.
+// Clears markers on first pass.
 
 #version 450
 
-#include "bindings_transfer_velocity.glsl"
+#include "transfer_bindings.glsl"
 
 COMPUTE_PASS_VOLUME
 

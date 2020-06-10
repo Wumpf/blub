@@ -43,9 +43,9 @@ pub struct HybridFluid {
     // The interface to any renderer of the fluid. Readonly access to relevant resources
     bind_group_renderer: wgpu::BindGroup,
 
-    pipeline_clear_llgrid: ComputePipelineHandle,
-    pipeline_build_linkedlist_volume: ComputePipelineHandle,
-    pipeline_transfer_to_volume: ComputePipelineHandle,
+    pipeline_transfer_clear_linkedlist: ComputePipelineHandle,
+    pipeline_transfer_build_linkedlist: ComputePipelineHandle,
+    pipeline_transfer_gather: ComputePipelineHandle,
     pipeline_compute_divergence: ComputePipelineHandle,
     pipeline_pressure_solve: ComputePipelineHandle,
     pipeline_remove_divergence: ComputePipelineHandle,
@@ -282,20 +282,20 @@ impl HybridFluid {
             ],
         }));
 
-        let pipeline_clear_llgrid = pipeline_manager.create_compute_pipeline(
+        let pipeline_transfer_clear_linkedlist = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/clear_llgrid.comp")),
+            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_clear_linkedlist.comp")),
         );
-        let pipeline_build_linkedlist_volume = pipeline_manager.create_compute_pipeline(
+        let pipeline_transfer_build_linkedlist = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/build_linkedlist_volume.comp")),
+            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_build_linkedlist.comp")),
         );
-        let pipeline_transfer_to_volume = pipeline_manager.create_compute_pipeline(
+        let pipeline_transfer_gather = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_to_volume.comp")),
+            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_gather.comp")),
         );
         let pipeline_compute_divergence = pipeline_manager.create_compute_pipeline(
             device,
@@ -344,9 +344,9 @@ impl HybridFluid {
 
             bind_group_renderer,
 
-            pipeline_clear_llgrid,
-            pipeline_build_linkedlist_volume,
-            pipeline_transfer_to_volume,
+            pipeline_transfer_clear_linkedlist,
+            pipeline_transfer_build_linkedlist,
+            pipeline_transfer_gather,
             pipeline_compute_divergence,
             pipeline_pressure_solve,
             pipeline_extrapolate_velocity,
@@ -510,16 +510,16 @@ impl HybridFluid {
                 // clear front velocity and linkedlist grid
                 // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
                 // (might still be faster because RT clear operations are usually very quick :/)
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_clear_llgrid));
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear_linkedlist));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
                 // Create particle linked lists and write heads in dual grids
                 // Transfer velocities to grid. (write grid, read particles)
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_build_linkedlist_volume));
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_build_linkedlist));
                 cpass.dispatch(particle_work_groups, 1, 1);
 
                 // Gather velocities in velocity grid and apply global forces.
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_to_volume));
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             }
         }

@@ -1,8 +1,9 @@
 // Builds linked lists of particles into the linked list dual grid.
+// Marks fluid cells on first
 
 #version 450
 
-#include "bindings_transfer_velocity.glsl"
+#include "transfer_bindings.glsl"
 
 COMPUTE_PASS_PARTICLES
 
