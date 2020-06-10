@@ -94,6 +94,7 @@ impl Application {
 
         let scene = scene::Scene::new(
             &device,
+            &command_queue,
             &mut init_encoder,
             &shader_dir,
             &mut pipeline_manager,
@@ -224,6 +225,7 @@ impl Application {
             });
             self.scene = scene::Scene::new(
                 &self.device,
+                &self.command_queue,
                 &mut init_encoder,
                 &self.shader_dir,
                 &mut self.pipeline_manager,

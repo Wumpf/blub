@@ -4,83 +4,58 @@
 #version 450
 
 #include "../utilities.glsl"
-#include "bindings_write_particles_volume.glsl"
+#include "bindings_transfer_velocity.glsl"
 
 COMPUTE_PASS_VOLUME
 
-void gatherStaggeredVelocitiesFromLinkedList(inout vec3 velocity, inout vec3 totalWeights, vec3 cellCenter, ivec3 llgridCoord) {
+void gatherStaggeredVelocitiesFromLinkedList(inout float velocityComponent, inout float totalWeight, vec3 staggeredVelocitySamplePosition,
+                                             ivec3 llgridCoord) {
     uint particleIndex = imageLoad(LinkedListDualGrid, llgridCoord).r - 1;
 
     // while (particleIndex != INVALID_LINKED_LIST_PTR) {
     for (int i = 0; i < 32 && particleIndex != INVALID_LINKED_LIST_PTR; ++i) {
-        vec3 toGridCenter = cellCenter - Particles[particleIndex].Position;
-        vec3 dCenter = saturate(vec3(1.0) - abs(toGridCenter));
-        vec3 dOffset = saturate(vec3(1.0) - abs(toGridCenter + vec3(0.5)));
+        vec3 toSamplePosition = staggeredVelocitySamplePosition - Particles[particleIndex].Position;
+        vec3 offset = saturate(vec3(1.0) - abs(toSamplePosition));
+        float weight = offset.x * offset.y * offset.z;
 
-        vec3 weights = vec3(dOffset.x * dCenter.y * dCenter.z, dCenter.x * dOffset.y * dCenter.z, dCenter.x * dCenter.y * dOffset.z);
-        velocity.xyz += weights * vec3(dot(Particles[particleIndex].VelocityMatrix[0], vec4(toGridCenter + vec3(0.5, 0.0, 0.0), 1.0)),
-                                       dot(Particles[particleIndex].VelocityMatrix[1], vec4(toGridCenter + vec3(0.0, 0.5, 0.0), 1.0)),
-                                       dot(Particles[particleIndex].VelocityMatrix[2], vec4(toGridCenter + vec3(0.0, 0.0, 0.5), 1.0)));
-        totalWeights += weights;
+        velocityComponent += weight * dot(Particles[particleIndex].VelocityMatrix[VelocityTransferComponent], vec4(toSamplePosition, 1.0));
+        totalWeight += weight;
+
         particleIndex = Particles[particleIndex].LinkedListNext;
     }
 }
 
-// Once we support arbitrary boundaries, this will likely go away.
-vec3 enforceGlobalWallBoundaryCondition(vec3 velocity, ivec3 cellPos, ivec3 gridSize) {
-    // At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
-    // No support for non-static boundary yet
-    // -> No flow between boundary and non-boundary allowed.
-    bvec3 isBoundaryCellPositiveNeighbor = greaterThanEqual(cellPos + ivec3(1), gridSize);
-    return mix(velocity, min(vec3(0), velocity), isBoundaryCellPositiveNeighbor);
-}
-
 void main() {
-    vec3 cellCenter = vec3(gl_GlobalInvocationID) + vec3(0.5); // center of the cell
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    vec3 velocity = vec3(0.0);
-
-    // Mark this cell only as a fluid cell if there is actually fluid inside.
-    // Note that air cells still get velocity with our transfer scheme, which is great because otherwise we would need to extrapolate to it!
-    uint marker = imageLoad(LinkedListDualGrid, gridCoord).r == 0 ? CELL_AIR : CELL_FLUID;
+    uint marker = imageLoad(MarkerVolume, gridCoord).r;
 
     // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
     // (top/right/front are marked implicitely and there are walls readily available!)
-    [[flatten]] if (any(lessThanEqual(gridCoord, ivec3(0)))) { marker = CELL_SOLID; }
-
-    // Velocities in non-fluid cells are needed, but there is no point in writing to them
-    [[dont_flatten]] if (marker == CELL_FLUID) {
-        vec3 weights = vec3(0.0);
-        [[unroll]] for (int z = -1; z <= 1; ++z) {
-            [[unroll]] for (int y = -1; y <= 1; ++y) {
-                [[unroll]] for (int x = -1; x <= 1; ++x) {
-                    gatherStaggeredVelocitiesFromLinkedList(velocity, weights, cellCenter, gridCoord + ivec3(x, y, z));
-                }
-            }
-        }
-        [[flatten]] if (weights.x > 0.0) { velocity.x /= weights.x; }
-        [[flatten]] if (weights.y > 0.0) { velocity.y /= weights.y; }
-        [[flatten]] if (weights.z > 0.0) { velocity.z /= weights.z; }
-
-        // Apply global forces. TODO: Make configurable and scale dependent
-        velocity.xyz += GravityGridSpace * Time.SimulationDelta;
-
-        // Reinforce global boundaries.
-        // TODO: This probably needs to be a separate pass as we can't really do this on the fly in compute divergence
-        // (which looks at wall differences within a cell rather than what's in the next cell)
-        ivec3 gridSize = ivec3(textureSize(PressureVolume, 0));
-
-        // TODO: Do we need to do this?
-        // velocity = enforceGlobalWallBoundaryCondition(velocity, gridCoord, gridSize);
-
-        imageStore(VelocityVolumeX, gridCoord, velocity.xxxx);
-        imageStore(VelocityVolumeY, gridCoord, velocity.yyyy);
-        imageStore(VelocityVolumeZ, gridCoord, velocity.zzzz);
-    }
-    else {
-        // No need to clear velocity volume since anyone sampling it outside needs special handling anyway
-        // imageStore(VelocityVolume, gridCoord, vec4(0.0));
+    if (VelocityTransferComponent == 0 && any(lessThanEqual(gridCoord, ivec3(0)))) {
+        marker = CELL_SOLID;
+        imageStore(MarkerVolume, gridCoord, uvec4(CELL_SOLID));
     }
 
-    imageStore(MarkerVolume, gridCoord, marker.xxxx);
+    // No need to clear velocity volume since anyone sampling it outside needs special handling anyway
+    if (marker != CELL_FLUID)
+        return;
+
+    vec3 staggeredVelocitySamplePosition = vec3(gl_GlobalInvocationID) + vec3(0.5);
+    staggeredVelocitySamplePosition[VelocityTransferComponent] += 0.5;
+    float velocityComponent = 0.0;
+    float velocityWeight = 0.0;
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 0, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 0, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 1, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 1, 0));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 0, 1));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 0, 1));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(0, 1, 1));
+    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord + ivec3(1, 1, 1));
+
+    if (velocityWeight > 0.0)
+        velocityComponent /= velocityWeight;
+    velocityComponent += GravityGridSpace[VelocityTransferComponent] * Time.SimulationDelta;
+
+    imageStore(VelocityComponentVolume, gridCoord, velocityComponent.xxxx);
 }

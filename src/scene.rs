@@ -23,6 +23,7 @@ pub struct Scene {
 impl Scene {
     pub fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         init_encoder: &mut wgpu::CommandEncoder,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
@@ -43,6 +44,7 @@ impl Scene {
 
         let mut hybrid_fluid = HybridFluid::new(
             device,
+            queue,
             config.fluid.grid_dimension,
             2000000,
             shader_dir,

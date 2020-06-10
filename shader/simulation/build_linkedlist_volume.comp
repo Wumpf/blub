@@ -2,7 +2,7 @@
 
 #version 450
 
-#include "bindings_write_particles_volume.glsl"
+#include "bindings_transfer_velocity.glsl"
 
 COMPUTE_PASS_PARTICLES
 
@@ -12,7 +12,14 @@ void main() {
         return;
 
     vec3 position = Particles[particleIndex].Position;
-    ivec3 nearestDualGridCell = ivec3(position);
+
+    if (VelocityTransferComponent == 0) {
+        imageStore(MarkerVolume, ivec3(position), uvec4(CELL_FLUID));
+    }
+
+    vec3 offset = vec3(0.5);
+    offset[VelocityTransferComponent] = 0.0;
+    ivec3 nearestDualGridCell = ivec3(position + offset);
 
     // Remember, indices in grid are offset by +1 for easy handling of empty cells.
     Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
