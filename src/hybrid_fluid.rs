@@ -24,7 +24,6 @@ unsafe impl bytemuck::Pod for TransferVelocityToGridUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for TransferVelocityToGridUniformBufferContent {}
 
 pub struct HybridFluid {
-    //gravity: cgmath::Vector3<f32>, // global gravity force in m/s² (== N/kg)
     grid_dimension: wgpu::Extent3d,
 
     particles: wgpu::Buffer,
@@ -324,7 +323,6 @@ impl HybridFluid {
         );
 
         HybridFluid {
-            //gravity: cgmath::Vector3::new(0.0, -9.81, 0.0), // there needs to be some grid->world relation
             grid_dimension,
 
             particles,
