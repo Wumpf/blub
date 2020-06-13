@@ -1,61 +1,105 @@
 // Builds velocity grid from particles and llgrid
 // Uses shepard interpolation on particles.
+// Performed on one velocity component at a time.
 
 #version 450
 
 #include "../utilities.glsl"
 #include "transfer_bindings.glsl"
 
-COMPUTE_PASS_VOLUME
+// Uses a shared memory so every thread loads one particle for its current cell and then accesses remaining neighbors (a 2x2x2 environment) from
+// there. Note that the naive approach (every thread goes through linked lists of 8 cells) is an order of magnitude slower than this approach!
+layout(local_size_x = 9, local_size_y = 9, local_size_z = 9) in;
 
-void gatherStaggeredVelocitiesFromLinkedList(inout float velocityComponent, inout float totalWeight, vec3 staggeredVelocitySamplePosition,
-                                             ivec3 llgridCoord) {
-    uint particleIndex = imageLoad(LinkedListDualGrid, llgridCoord).r - 1;
+// TODO: Are we avoiding bank conflicts?
+shared vec4 SharedPositions[9][9][9];
+shared vec4 SharedVelocities[9][9][9];
 
-    // A cell starts out with 8 particles, ideally that stays roughly constant.
-    for (int i = 0; i < 12 && particleIndex != INVALID_LINKED_LIST_PTR; ++i) {
-        vec3 toSamplePosition = staggeredVelocitySamplePosition - Particles[particleIndex].Position;
-        vec3 offset = saturate(vec3(1.0) - abs(toSamplePosition));
-        float weight = offset.x * offset.y * offset.z;
+void addParticleContribution(inout float velocityComponent, inout float velocityWeight, vec3 particlePosition, vec4 particleVelocityMatrixRow,
+                             vec3 staggeredVelocitySamplePosition) {
+    vec3 toSamplePosition = staggeredVelocitySamplePosition - particlePosition;
+    vec3 offset = saturate(vec3(1.0) - abs(toSamplePosition));
+    float weight = offset.x * offset.y * offset.z;
 
-        velocityComponent += weight * dot(Particles[particleIndex].VelocityMatrix[VelocityTransferComponent], vec4(toSamplePosition, 1.0));
-        totalWeight += weight;
+    velocityComponent += weight * dot(particleVelocityMatrixRow, vec4(toSamplePosition, 1.0));
+    velocityWeight += weight;
+}
 
-        particleIndex = Particles[particleIndex].LinkedListNext;
+void addParticleContributionFromSharedMemory(inout float velocityComponent, inout float velocityWeight, uvec3 threadGroupOffset,
+                                             vec3 staggeredVelocitySamplePosition) {
+    uvec3 sharedMemoryAddress = gl_LocalInvocationID - threadGroupOffset;
+    vec4 particlePosition = SharedPositions[sharedMemoryAddress.x][sharedMemoryAddress.y][sharedMemoryAddress.z];
+    if (particlePosition.w != 0.0) {
+        vec4 particleVelocityMatrixRow = SharedVelocities[sharedMemoryAddress.x][sharedMemoryAddress.y][sharedMemoryAddress.z];
+        addParticleContribution(velocityComponent, velocityWeight, particlePosition.xyz, particleVelocityMatrixRow, staggeredVelocitySamplePosition);
     }
 }
 
 void main() {
-    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    uint marker = imageLoad(MarkerVolume, gridCoord).r;
+    ivec3 gridCoord = ivec3(gl_WorkGroupID * (gl_WorkGroupSize - uvec3(1)) + gl_LocalInvocationID) - ivec3(1);
+    // TODO: Should/can we make it so that full warps are full of border threads? 🤔
+    uint marker = imageLoad(MarkerVolume, gridCoord).r; // CELL_SOLID for negative gridCoord.
 
     // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
     // (top/right/front are marked implicitely and there are walls readily available!)
-    if (VelocityTransferComponent == 0 && any(lessThanEqual(gridCoord, ivec3(0)))) {
+    if (VelocityTransferComponent == 0 && any(equal(gridCoord, ivec3(0)))) {
         marker = CELL_SOLID;
         imageStore(MarkerVolume, gridCoord, uvec4(CELL_SOLID));
     }
 
-    // No need to clear velocity volume since anyone sampling it outside needs special handling anyway
-    if (marker != CELL_FLUID)
-        return;
+    bool isBorderThread = any(equal(gl_LocalInvocationID, uvec3(0)));
+    bool threadWritesFluid = !isBorderThread && marker == CELL_FLUID;
 
-    vec3 staggeredVelocitySamplePosition = vec3(gl_GlobalInvocationID) + vec3(0.5);
+    vec3 staggeredVelocitySamplePosition = vec3(gridCoord) + vec3(0.5);
     staggeredVelocitySamplePosition[VelocityTransferComponent] += 0.5;
     float velocityComponent = 0.0;
     float velocityWeight = 0.0;
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 0, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 0, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 1, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 1, 0));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 0, 1));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 0, 1));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(0, 1, 1));
-    gatherStaggeredVelocitiesFromLinkedList(velocityComponent, velocityWeight, staggeredVelocitySamplePosition, gridCoord - ivec3(1, 1, 1));
 
-    if (velocityWeight > 0.0)
-        velocityComponent /= velocityWeight;
-    velocityComponent += GravityGridSpace[VelocityTransferComponent] * Time.SimulationDelta;
+    uint localParticleIndex = imageLoad(LinkedListDualGrid, gridCoord).r - 1;
 
-    imageStore(VelocityComponentVolume, gridCoord, velocityComponent.xxxx);
+    // A cell starts out with 8 particles, ideally that stays roughly constant.
+    for (int i = 0; i < 12; ++i) {
+        if (localParticleIndex != INVALID_LINKED_LIST_PTR) {
+            // Load a particle
+            vec3 particlePosition = Particles[localParticleIndex].Position;
+            vec4 particleVelocityMatrixRow = Particles[localParticleIndex].VelocityMatrix[VelocityTransferComponent];
+            localParticleIndex = Particles[localParticleIndex].LinkedListNext;
+
+            // Apply it
+            if (threadWritesFluid) {
+                addParticleContribution(velocityComponent, velocityWeight, particlePosition, particleVelocityMatrixRow,
+                                        staggeredVelocitySamplePosition);
+            }
+
+            // Write particle info to shared memory in order to share with others.
+            SharedPositions[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = vec4(particlePosition, 1.0);
+            SharedVelocities[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = particleVelocityMatrixRow;
+        } else {
+            // TODO: Don't need to write every time.
+            SharedPositions[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z].w = 0.0;
+        }
+
+        // Wait for shared variables to be updated.
+        memoryBarrierShared(); // publish shared memory changes.
+        barrier();
+
+        // Load & apply remaining seven neighbor particles.
+        if (threadWritesFluid) {
+            addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 0, 0), staggeredVelocitySamplePosition);
+            addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(0, 1, 0), staggeredVelocitySamplePosition);
+            addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 1, 0), staggeredVelocitySamplePosition);
+            addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(0, 0, 1), staggeredVelocitySamplePosition);
+            addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 0, 1), staggeredVelocitySamplePosition);
+            addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(0, 1, 1), staggeredVelocitySamplePosition);
+            addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 1, 1), staggeredVelocitySamplePosition);
+        }
+    }
+
+    if (threadWritesFluid) {
+        if (velocityWeight > 0.0)
+            velocityComponent /= velocityWeight;
+        velocityComponent += GravityGridSpace[VelocityTransferComponent] * Time.SimulationDelta;
+
+        imageStore(VelocityComponentVolume, gridCoord, velocityComponent.xxxx);
+    }
 }

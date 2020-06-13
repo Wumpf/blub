@@ -9,7 +9,7 @@ layout(set = 1, binding = 0) uniform SimulationProperties {
 };
 
 // Boundary is zero, so texel fetch outside of the domain always gives us boundary cells.
-#define CELL_SOLID 0
+#define CELL_SOLID 0 // A couple of things rely on this being zero! (sampling images out of bounds returns zero)
 #define CELL_FLUID 1
 #define CELL_AIR 2
 
