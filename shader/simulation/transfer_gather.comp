@@ -80,8 +80,7 @@ void main() {
         }
 
         // Wait for shared variables to be updated.
-        memoryBarrierShared(); // publish shared memory changes.
-        barrier();
+        barrier(); // (newer GLSL specifications clarify that this is ALSO a memoryBarrierShared)
 
         // Load & apply remaining seven neighbor particles.
         if (threadWritesFluid) {
