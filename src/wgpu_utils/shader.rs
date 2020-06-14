@@ -71,6 +71,8 @@ impl ShaderDirectory {
             } else {
                 options.set_optimization_level(shaderc::OptimizationLevel::Performance);
             }
+            // Helps a lot when inspecting in ShaderDoc (will show all original source files before processing) but doesn't seem to hurt performance at all :)
+            options.set_generate_debug_info();
 
             options.set_include_callback(|name, include_type, source_file, _depth| {
                 let path = if include_type == shaderc::IncludeType::Relative {
