@@ -150,6 +150,8 @@ impl SceneRenderer {
                 stencil_store_op: wgpu::StoreOp::Store,
                 clear_depth: 1.0,
                 clear_stencil: 0,
+                depth_read_only: false,
+                stencil_read_only: true,
             }),
         });
 

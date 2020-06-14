@@ -77,7 +77,6 @@ impl HybridFluid {
 
     pub fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         grid_dimension: wgpu::Extent3d,
         max_num_particles: u32,
         shader_dir: &ShaderDirectory,
@@ -127,6 +126,7 @@ impl HybridFluid {
             label: Some("Buffer: ParticleBuffer"),
             size: particle_buffer_size,
             usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
         });
         let create_volume_texture_descriptor = |label: &'static str, format: wgpu::TextureFormat| -> wgpu::TextureDescriptor {
             wgpu::TextureDescriptor {
@@ -147,10 +147,11 @@ impl HybridFluid {
         let volume_divergence = device.create_texture(&create_volume_texture_descriptor("Velocity Volume", wgpu::TextureFormat::R32Float)); // TODO: could reuse data from volume_linked_lists
         let volume_pressure0 = device.create_texture(&create_volume_texture_descriptor("Pressure Volume 0", wgpu::TextureFormat::R32Float));
         let volume_pressure1 = device.create_texture(&create_volume_texture_descriptor("Pressure Volume 1", wgpu::TextureFormat::R32Float));
-        let ubo_transfer_velocity = [UniformBuffer::new(device), UniformBuffer::new(device), UniformBuffer::new(device)];
-        ubo_transfer_velocity[0].update_content(queue, TransferVelocityToGridUniformBufferContent { component: 0 });
-        ubo_transfer_velocity[1].update_content(queue, TransferVelocityToGridUniformBufferContent { component: 1 });
-        ubo_transfer_velocity[2].update_content(queue, TransferVelocityToGridUniformBufferContent { component: 2 });
+        let ubo_transfer_velocity = [
+            UniformBuffer::new_with_data(device, &TransferVelocityToGridUniformBufferContent { component: 0 }),
+            UniformBuffer::new_with_data(device, &TransferVelocityToGridUniformBufferContent { component: 1 }),
+            UniformBuffer::new_with_data(device, &TransferVelocityToGridUniformBufferContent { component: 2 }),
+        ];
 
         // Resource views
         let volume_velocity_view_x = volume_velocity_x.create_default_view();
@@ -388,52 +389,59 @@ impl HybridFluid {
 
         // Not using queue write operation since this is a large one-off write
         let particle_size = std::mem::size_of::<Particle>() as u64;
-        let mut particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
+        let mapped_particle_update_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Buffer: Particle Update"),
             size: num_new_particles as u64 * particle_size,
             usage: wgpu::BufferUsage::COPY_SRC,
+            mapped_at_creation: true,
         });
 
-        // Fill buffer with particle data
-        let mut rng: rand::rngs::SmallRng = rand::SeedableRng::seed_from_u64(num_new_particles as u64);
-        let new_particles =
-            unsafe { std::slice::from_raw_parts_mut(particle_buffer_mapping.data().as_mut_ptr() as *mut Particle, num_new_particles as usize) };
-        for (i, particle) in new_particles.iter_mut().enumerate() {
-            let cell = cgmath::point3(
-                (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
-                (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
-                (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
-            );
+        {
+            let mapped_particle_update_buffer_slice = mapped_particle_update_buffer.slice(..);
+            let mut particle_buffer_mapping = mapped_particle_update_buffer_slice.get_mapped_range_mut();
 
-            let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
+            // Fill buffer with particle data
+            let mut rng: rand::rngs::SmallRng = rand::SeedableRng::seed_from_u64(num_new_particles as u64);
+            let new_particles =
+                unsafe { std::slice::from_raw_parts_mut(particle_buffer_mapping.as_mut_ptr() as *mut Particle, num_new_particles as usize) };
+            for (i, particle) in new_particles.iter_mut().enumerate() {
+                let cell = cgmath::point3(
+                    (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
+                    (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
+                    (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
+                );
 
-            // pure random
-            // let offset = rng.gen::<cgmath::Vector3<f32>>();
+                let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
 
-            // pure regular
-            // let offset = cgmath::vec3(
-            //     (sample_idx % 2) as f32 + 0.5,
-            //     (sample_idx / 2 % 2) as f32 + 0.5,
-            //     (sample_idx / 4 % 2) as f32 + 0.5,
-            // ) * 0.5;
+                // pure random
+                // let offset = rng.gen::<cgmath::Vector3<f32>>();
 
-            // stratified
-            let offset = cgmath::vec3((sample_idx % 2) as f32, (sample_idx / 2 % 2) as f32, (sample_idx / 4 % 2) as f32) * 0.5
-                + rng.gen::<cgmath::Vector3<f32>>() * 0.5;
+                // pure regular
+                // let offset = cgmath::vec3(
+                //     (sample_idx % 2) as f32 + 0.5,
+                //     (sample_idx / 2 % 2) as f32 + 0.5,
+                //     (sample_idx / 4 % 2) as f32 + 0.5,
+                // ) * 0.5;
 
-            let position = cell + offset;
+                // stratified
+                let offset = cgmath::vec3((sample_idx % 2) as f32, (sample_idx / 2 % 2) as f32, (sample_idx / 4 % 2) as f32) * 0.5
+                    + rng.gen::<cgmath::Vector3<f32>>() * 0.5;
 
-            *particle = Particle {
-                position,
-                linked_list_next: 0xFFFFFFFF,
-                velocity_matrix_0: cgmath::Zero::zero(),
-                velocity_matrix_1: cgmath::Zero::zero(),
-                velocity_matrix_2: cgmath::Zero::zero(),
-            };
+                let position = cell + offset;
+
+                *particle = Particle {
+                    position,
+                    linked_list_next: 0xFFFFFFFF,
+                    velocity_matrix_0: cgmath::Zero::zero(),
+                    velocity_matrix_1: cgmath::Zero::zero(),
+                    velocity_matrix_2: cgmath::Zero::zero(),
+                };
+            }
         }
 
+        mapped_particle_update_buffer.unmap();
         init_encoder.copy_buffer_to_buffer(
-            &particle_buffer_mapping.finish(),
+            &mapped_particle_update_buffer,
             0,
             &self.particles,
             self.simulation_properties.num_particles as u64 * particle_size,

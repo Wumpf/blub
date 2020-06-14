@@ -8,6 +8,8 @@ pub struct LineVertex {
     pub position: cgmath::Point3<f32>,
     pub color: cgmath::Vector3<f32>,
 }
+unsafe impl bytemuck::Pod for LineVertex {}
+unsafe impl bytemuck::Zeroable for LineVertex {}
 
 impl LineVertex {
     pub fn new(pos: cgmath::Point3<f32>, color: cgmath::Vector3<f32>) -> Self {
@@ -66,6 +68,7 @@ impl StaticLineRenderer {
             label: Some("StaticLineRenderer VertexBuffer"),
             size: (max_num_lines * LINE_VERTEX_SIZE * 2) as wgpu::BufferAddress,
             usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
         });
 
         StaticLineRenderer {
@@ -94,22 +97,9 @@ impl StaticLineRenderer {
 
         // TODO: use queue.write_buffer
         let new_vertices_size = (lines.len() * LINE_VERTEX_SIZE) as u64;
-        let mut particle_buffer_mapping = device.create_buffer_mapped(&wgpu::BufferDescriptor {
-            label: Some("Buffer: StaticLine Update"),
-            size: new_vertices_size,
-            usage: wgpu::BufferUsage::COPY_SRC,
-        });
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                lines.as_ptr() as *const u8,
-                particle_buffer_mapping.data().as_mut_ptr(),
-                new_vertices_size as usize,
-            );
-        }
-
+        let particle_buffer_mapping = device.create_buffer_with_data(bytemuck::cast_slice(lines), wgpu::BufferUsage::COPY_SRC);
         init_encoder.copy_buffer_to_buffer(
-            &particle_buffer_mapping.finish(),
+            &particle_buffer_mapping,
             0,
             &self.vertex_buffer,
             (self.num_lines * LINE_VERTEX_SIZE) as u64,

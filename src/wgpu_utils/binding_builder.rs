@@ -24,7 +24,12 @@ impl BindGroupLayoutBuilder {
 
     pub fn next_binding(self, visibility: wgpu::ShaderStage, ty: wgpu::BindingType) -> Self {
         let binding = self.next_binding_index;
-        self.binding(wgpu::BindGroupLayoutEntry { binding, visibility, ty })
+        self.binding(wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility,
+            ty,
+            ..Default::default()
+        })
     }
 
     pub fn next_binding_compute(self, ty: wgpu::BindingType) -> Self {
@@ -100,22 +105,5 @@ impl<'a> BindGroupBuilder<'a> {
             label: Some(label),
         };
         device.create_bind_group(&descriptor)
-    }
-}
-
-// Shortcuts for resource views
-
-pub fn simple_sampler<'a>(address_mode: wgpu::AddressMode, filter_mode: wgpu::FilterMode, label: &'a str) -> wgpu::SamplerDescriptor<'a> {
-    wgpu::SamplerDescriptor {
-        label: Some(label),
-        address_mode_u: address_mode,
-        address_mode_v: address_mode,
-        address_mode_w: address_mode,
-        mag_filter: filter_mode,
-        min_filter: filter_mode,
-        mipmap_filter: filter_mode,
-        lod_min_clamp: 0.0,
-        lod_max_clamp: std::f32::MAX,
-        compare: wgpu::CompareFunction::Always,
     }
 }

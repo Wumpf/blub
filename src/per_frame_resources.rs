@@ -31,16 +31,26 @@ impl PerFrameResources {
             .create(device, "BindGroupLayout: PerFrameResources");
 
         let ubo = PerFrameUniformBuffer::new(&device);
-        let trilinear_sampler = device.create_sampler(&simple_sampler(
-            wgpu::AddressMode::ClampToEdge,
-            wgpu::FilterMode::Linear,
-            "Sampler LinearClamp (global)",
-        ));
-        let point_sampler = device.create_sampler(&simple_sampler(
-            wgpu::AddressMode::ClampToEdge,
-            wgpu::FilterMode::Nearest,
-            "Sampler NearestClamp (global)",
-        ));
+        let trilinear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Sampler LinearClamp (global)"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let point_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Sampler NearestClamp (global)"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
             .resource(ubo.binding_resource())

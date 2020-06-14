@@ -66,6 +66,7 @@ impl Application {
                     power_preference: wgpu::PowerPreference::HighPerformance,
                     compatible_surface: Some(&window_surface),
                 },
+                wgpu::UnsafeExtensions::disallow(),
                 wgpu::BackendBit::PRIMARY, //wgpu::BackendBit::DX12,
             )
             .await
@@ -74,8 +75,9 @@ impl Application {
         let (device, mut command_queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    extensions: wgpu::Extensions { anisotropic_filtering: true },
+                    extensions: wgpu::Extensions::empty(),
                     limits: wgpu::Limits::default(),
+                    shader_validation: false, // Disabled shader validation for now since we use too many things that it doesn't know about.
                 },
                 None,
             )
@@ -94,7 +96,6 @@ impl Application {
 
         let scene = scene::Scene::new(
             &device,
-            &command_queue,
             &mut init_encoder,
             &shader_dir,
             &mut pipeline_manager,
@@ -225,7 +226,6 @@ impl Application {
             });
             self.scene = scene::Scene::new(
                 &self.device,
-                &self.command_queue,
                 &mut init_encoder,
                 &self.shader_dir,
                 &mut self.pipeline_manager,
