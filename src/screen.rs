@@ -1,9 +1,63 @@
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
+use futures::*;
 use pipelines::*;
+use std::collections::VecDeque;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::sync::mpsc::{channel, Receiver, Sender};
+
+struct PendingScreenshot {
+    copy_operation: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>>,
+    buffer: wgpu::Buffer,
+    target_path: PathBuf,
+}
+
+impl PendingScreenshot {
+    fn spawn_write_thread_if_ready(
+        mut self,
+        resolution: winit::dpi::PhysicalSize<u32>,
+        completion_sender: &Sender<wgpu::Buffer>,
+    ) -> Option<PendingScreenshot> {
+        if self.copy_operation.is_none() {
+            let screenshot_buffer_slice = self.buffer.slice(..);
+            self.copy_operation = Some(screenshot_buffer_slice.map_async(wgpu::MapMode::Read).boxed());
+        }
+
+        let val = (&mut self.copy_operation.as_mut().unwrap()).now_or_never();
+        if val.is_some() {
+            let buffer = self.buffer;
+            let target_path = self.target_path;
+            let completion_sender_clone = completion_sender.clone();
+
+            std::thread::spawn(move || {
+                let start_time = std::time::Instant::now();
+                let mut png_encoder = png::Encoder::new(std::fs::File::create(&target_path).unwrap(), resolution.width, resolution.height);
+                png_encoder.set_depth(png::BitDepth::Eight);
+                png_encoder.set_color(png::ColorType::RGBA);
+                let mut png_writer = png_encoder
+                    .write_header()
+                    .unwrap()
+                    .into_stream_writer_with_size(Screen::screenshot_buffer_bytes_per_row(resolution));
+
+                let screenshot_buffer_slice = buffer.slice(..);
+                let padded_buffer = screenshot_buffer_slice.get_mapped_range().to_vec();
+                for chunk in padded_buffer.chunks(Screen::screenshot_buffer_bytes_per_padded_row(resolution) as usize) {
+                    png_writer.write(&chunk[..Screen::screenshot_buffer_bytes_per_row(resolution)]).unwrap();
+                }
+                buffer.unmap();
+                completion_sender_clone.send(buffer).unwrap();
+                png_writer.finish().unwrap();
+
+                info!("Wrote screenshot to {:?} (took {:?})", target_path, start_time.elapsed());
+            });
+            return None;
+        }
+        return Some(self);
+    }
+}
 
 pub struct Screen {
     pub resolution: winit::dpi::PhysicalSize<u32>,
@@ -16,11 +70,15 @@ pub struct Screen {
     read_backbuffer_bind_group: wgpu::BindGroup,
     copy_to_swapchain_pipeline: wgpu::RenderPipeline,
 
-    screenshot_buffer: wgpu::Buffer,
-    screenshot_buffer_bytes_per_row: usize,
-    screenshot_buffer_bytes_per_padded_row: usize,
-    next_screenshot_file: PathBuf,
+    unused_screenshot_buffers: Vec<wgpu::Buffer>,
+    pending_screenshots: VecDeque<PendingScreenshot>,
+    screenshot_completion_receiver: Receiver<wgpu::Buffer>,
+    screenshot_completion_sender: Sender<wgpu::Buffer>,
 }
+
+// This seems like an excessively high number, but it allows us to stream out video even if the picture format is heavier
+// (e.g. png. TODO: Consider high(er) quality jpeg which should be faster and smaller but still good enough)
+const NUM_SCREENSHOT_BUFFERS: usize = 10;
 
 impl Screen {
     pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
@@ -73,14 +131,16 @@ impl Screen {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
         });
 
-        let screenshot_buffer_bytes_per_row = resolution.width as usize * std::mem::size_of::<u32>();
-        let screenshot_buffer_bytes_per_padded_row = round_to_multiple(screenshot_buffer_bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize);
-        let screenshot_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            size: screenshot_buffer_bytes_per_padded_row as u64 * resolution.height as u64,
-            usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
-            label: Some("Buffer: Screenshot readback"),
-            mapped_at_creation: false,
-        });
+        let mut unused_screenshot_buffers = Vec::new();
+        for i in 0..NUM_SCREENSHOT_BUFFERS {
+            unused_screenshot_buffers.push(device.create_buffer(&wgpu::BufferDescriptor {
+                size: Self::screenshot_buffer_bytes_per_padded_row(resolution) as u64 * resolution.height as u64,
+                usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
+                label: Some(&format!("Buffer: Screenshot readback buffer {}", i)),
+                mapped_at_creation: false,
+            }));
+        }
+        let (screenshot_completion_sender, screenshot_completion_receiver) = channel();
 
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding_fragment(binding_glsl::texture2D())
@@ -128,11 +188,22 @@ impl Screen {
             read_backbuffer_bind_group,
             copy_to_swapchain_pipeline,
 
-            screenshot_buffer,
-            screenshot_buffer_bytes_per_row,
-            screenshot_buffer_bytes_per_padded_row,
-            next_screenshot_file: PathBuf::default(),
+            unused_screenshot_buffers,
+            pending_screenshots: VecDeque::new(),
+            screenshot_completion_receiver,
+            screenshot_completion_sender,
         }
+    }
+
+    fn screenshot_buffer_bytes_per_row(resolution: winit::dpi::PhysicalSize<u32>) -> usize {
+        resolution.width as usize * std::mem::size_of::<u32>()
+    }
+
+    fn screenshot_buffer_bytes_per_padded_row(resolution: winit::dpi::PhysicalSize<u32>) -> usize {
+        round_to_multiple(
+            Self::screenshot_buffer_bytes_per_row(resolution),
+            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize,
+        )
     }
 
     pub fn aspect_ratio(&self) -> f32 {
@@ -151,7 +222,17 @@ impl Screen {
         self.swap_chain.get_next_frame().unwrap().output
     }
 
-    pub fn take_screenshot(&mut self, encoder: &mut wgpu::CommandEncoder, path: &Path) {
+    pub fn take_screenshot(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, path: &Path) {
+        if self.unused_screenshot_buffers.len() == 0 {
+            warn!("No more unused screenshot buffers available. Waiting for GPU to catch up and draining screenshot queue...");
+            while self.unused_screenshot_buffers.len() == 0 {
+                device.poll(wgpu::Maintain::Poll);
+                self.process_pending_screenshots();
+                std::thread::yield_now();
+            }
+        }
+        let buffer = self.unused_screenshot_buffers.pop().unwrap();
+
         encoder.copy_texture_to_buffer(
             wgpu::TextureCopyView {
                 texture: &self.backbuffer,
@@ -159,10 +240,10 @@ impl Screen {
                 origin: wgpu::Origin3d::ZERO,
             },
             wgpu::BufferCopyView {
-                buffer: &self.screenshot_buffer,
+                buffer: &buffer,
                 layout: wgpu::TextureDataLayout {
                     offset: 0,
-                    bytes_per_row: self.screenshot_buffer_bytes_per_padded_row as u32,
+                    bytes_per_row: Self::screenshot_buffer_bytes_per_padded_row(self.resolution) as u32,
                     rows_per_image: 0,
                 },
             },
@@ -172,7 +253,12 @@ impl Screen {
                 depth: 1,
             },
         );
-        self.next_screenshot_file = path.into();
+
+        self.pending_screenshots.push_back(PendingScreenshot {
+            copy_operation: None,
+            buffer,
+            target_path: path.into(),
+        });
     }
 
     pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder) {
@@ -192,42 +278,30 @@ impl Screen {
         render_pass.draw(0..3, 0..1);
     }
 
-    pub fn end_frame(&mut self, device: &wgpu::Device, frame: wgpu::SwapChainTexture) {
-        if self.next_screenshot_file == PathBuf::default() {
-            return;
+    fn process_pending_screenshots(&mut self) {
+        if let Some(pending_screenshot) = self.pending_screenshots.pop_front() {
+            if let Some(still_pending_screenshot) =
+                pending_screenshot.spawn_write_thread_if_ready(self.resolution, &self.screenshot_completion_sender)
+            {
+                self.pending_screenshots.push_front(still_pending_screenshot);
+            }
         }
+        if let Ok(received_unused_buffer) = self.screenshot_completion_receiver.try_recv() {
+            self.unused_screenshot_buffers.push(received_unused_buffer);
+        }
+    }
+
+    pub fn end_frame(&mut self, frame: wgpu::SwapChainTexture) {
         std::mem::drop(frame);
+        self.process_pending_screenshots();
+    }
 
-        let screenshot_buffer_slice = self.screenshot_buffer.slice(..);
-        let buffer_future = screenshot_buffer_slice.map_async(wgpu::MapMode::Read);
-
-        // TODO: This is the worst possible way to deal with this. Should do Polls on frame starts and keep several buffers in order to never block on this.
-        // Since we want to do video rendering here, we really should avoid any full stop on gpu rendering!
-        device.poll(wgpu::Maintain::Wait);
-        futures::executor::block_on(buffer_future).unwrap();
-
-        // Write the buffer as a PNG
-        let start_time = std::time::Instant::now();
-        let mut png_encoder = png::Encoder::new(
-            std::fs::File::create(&self.next_screenshot_file).unwrap(),
-            self.resolution.width,
-            self.resolution.height,
-        );
-        png_encoder.set_depth(png::BitDepth::Eight);
-        png_encoder.set_color(png::ColorType::RGBA);
-        let mut png_writer = png_encoder
-            .write_header()
-            .unwrap()
-            .into_stream_writer_with_size(self.screenshot_buffer_bytes_per_row);
-
-        let padded_buffer = screenshot_buffer_slice.get_mapped_range();
-        for chunk in padded_buffer.chunks(self.screenshot_buffer_bytes_per_padded_row as usize) {
-            png_writer.write(&chunk[..self.screenshot_buffer_bytes_per_row]).unwrap();
+    pub fn wait_for_pending_screenshots(&mut self, device: &wgpu::Device) {
+        while self.unused_screenshot_buffers.len() < NUM_SCREENSHOT_BUFFERS {
+            device.poll(wgpu::Maintain::Poll);
+            self.process_pending_screenshots();
+            std::thread::yield_now();
         }
-        png_writer.finish().unwrap();
-
-        info!("Wrote screenshot to {:?} (took {:?})", self.next_screenshot_file, start_time.elapsed());
-        self.next_screenshot_file = PathBuf::default();
     }
 }
 

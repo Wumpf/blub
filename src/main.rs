@@ -33,6 +33,7 @@ struct Application {
     window: Window,
     window_surface: wgpu::Surface,
     screen: Screen,
+    next_screenshot_index: usize,
     scheduled_screenshot: PathBuf,
 
     device: wgpu::Device,
@@ -114,6 +115,7 @@ impl Application {
             window,
             window_surface,
             screen,
+            next_screenshot_index: 0,
             scheduled_screenshot: PathBuf::default(),
 
             device,
@@ -132,13 +134,16 @@ impl Application {
     }
 
     fn schedule_screenshot(&mut self) {
-        for i in 0..usize::MAX {
-            let screenshot = PathBuf::from(format!("screenshot{}.png", i));
-            if !screenshot.exists() {
-                self.scheduled_screenshot = screenshot;
-                return;
+        if self.next_screenshot_index == 0 {
+            for i in 1..usize::MAX {
+                if !PathBuf::from(format!("screenshot{}.png", i)).exists() {
+                    self.next_screenshot_index = i;
+                    break;
+                }
             }
         }
+        self.scheduled_screenshot = PathBuf::from(format!("screenshot{}.png", self.next_screenshot_index));
+        self.next_screenshot_index += 1;
     }
 
     fn run(mut self, event_loop: EventLoop<()>) {
@@ -194,6 +199,10 @@ impl Application {
                 }
                 Event::RedrawRequested(_) => {
                     self.draw();
+                }
+                Event::LoopDestroyed => {
+                    // workaround for errors on shutdown while recording screenshots
+                    self.screen.wait_for_pending_screenshots(&self.device);
                 }
                 _ => (),
             }
@@ -280,7 +289,7 @@ impl Application {
         );
 
         if self.scheduled_screenshot != PathBuf::default() {
-            self.screen.take_screenshot(&mut encoder, &self.scheduled_screenshot);
+            self.screen.take_screenshot(&self.device, &mut encoder, &self.scheduled_screenshot);
             self.scheduled_screenshot = PathBuf::default();
         }
 
@@ -296,7 +305,7 @@ impl Application {
 
         self.screen.copy_to_swapchain(&frame, &mut encoder);
         self.command_queue.submit(Some(encoder.finish()));
-        self.screen.end_frame(&self.device, frame);
+        self.screen.end_frame(frame);
         self.simulation_controller.on_frame_submitted();
     }
 }
