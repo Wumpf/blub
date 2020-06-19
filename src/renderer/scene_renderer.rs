@@ -6,6 +6,7 @@ use crate::{
     scene::Scene,
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
+use cgmath::EuclideanSpace;
 
 #[derive(Clone, Copy, Debug, EnumIter)]
 pub enum FluidRenderingMode {
@@ -72,8 +73,7 @@ impl SceneRenderer {
         let line_color = cgmath::vec3(0.0, 0.0, 0.0);
         let grid_extent = scene.config.fluid.grid_dimension;
         let min = scene.config.fluid.world_position;
-        let max = min
-            + cgmath::vec3(grid_extent.width as f32, grid_extent.height as f32, grid_extent.depth as f32) * scene.config.fluid.grid_to_world_scale;
+        let max = min + grid_extent.cast().unwrap().to_vec() * scene.config.fluid.grid_to_world_scale;
 
         self.bounds_line_renderer.clear_lines();
         self.bounds_line_renderer.add_lines(

@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cgmath = { git = "https://github.com/rustgd/cgmath", rev="50a345b", features=["rand"] }
+cgmath = { git = "https://github.com/rustgd/cgmath", rev="50a345b", features=["rand", "serde"] }
 enumflags2 = "^0.6"
 env_logger = "0.7"
 futures = "0.3"
@@ -27,3 +27,5 @@ png = "0.16"
 strum_macros = "0.18"
 strum = "0.18"
 bytemuck = "1.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

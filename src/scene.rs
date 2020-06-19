@@ -1,13 +1,24 @@
 use crate::hybrid_fluid::HybridFluid;
 use crate::wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory};
 
+use serde::Deserialize;
+use std::{
+    fs::File,
+    io::{self, BufReader},
+    path::Path,
+};
+
+// Data describing a fluid in the scene.
+#[derive(Deserialize)]
 pub struct FluidConfig {
     pub world_position: cgmath::Point3<f32>,
     pub grid_to_world_scale: f32,
-    pub grid_dimension: wgpu::Extent3d,
+    pub grid_dimension: cgmath::Point3<u32>,
+    pub max_num_particles: u32,
 }
 
-// Data describing a new scene.
+// Data describing a scene.
+#[derive(Deserialize)]
 pub struct SceneConfig {
     // global gravity (in world space)
     pub gravity: cgmath::Vector3<f32>,
@@ -22,29 +33,25 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(
+        scene_path: &Path,
         device: &wgpu::Device,
         init_encoder: &mut wgpu::CommandEncoder,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> Self {
-        let config = SceneConfig {
-            gravity: cgmath::vec3(0.0, -9.81, 0.0),
-            fluid: FluidConfig {
-                world_position: cgmath::point3(0.0, 0.0, 0.0),
-                grid_to_world_scale: 1.0 / 128.0,
-                grid_dimension: wgpu::Extent3d {
-                    width: 128,
-                    height: 64,
-                    depth: 64,
-                },
-            },
-        };
+    ) -> Result<Self, io::Error> {
+        let file = File::open(scene_path)?;
+        let reader = BufReader::new(file);
+        let config: SceneConfig = serde_json::from_reader(reader)?;
 
         let mut hybrid_fluid = HybridFluid::new(
             device,
-            config.fluid.grid_dimension,
-            2000000,
+            wgpu::Extent3d {
+                width: config.fluid.grid_dimension.x,
+                height: config.fluid.grid_dimension.y,
+                depth: config.fluid.grid_dimension.z,
+            },
+            config.fluid.max_num_particles,
             shader_dir,
             pipeline_manager,
             per_frame_bind_group_layout,
@@ -58,7 +65,7 @@ impl Scene {
         );
         hybrid_fluid.set_gravity_grid(config.gravity / config.fluid.grid_to_world_scale);
 
-        Scene { hybrid_fluid, config }
+        Ok(Scene { hybrid_fluid, config })
     }
 
     pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, queue: &wgpu::Queue) {

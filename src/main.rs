@@ -96,12 +96,14 @@ impl Application {
         });
 
         let scene = scene::Scene::new(
+            &Path::new("scenes/dam1.json"),
             &device,
             &mut init_encoder,
             &shader_dir,
             &mut pipeline_manager,
             per_frame_resources.bind_group_layout(),
-        );
+        )
+        .unwrap();
         let simulation_controller = simulation_controller::SimulationController::new();
         let mut scene_renderer = SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
         scene_renderer.on_new_scene(&device, &mut init_encoder, &scene);
@@ -234,12 +236,14 @@ impl Application {
                 label: Some("Reset Scene Encoder"),
             });
             self.scene = scene::Scene::new(
+                &Path::new("scenes/dam1.json"),
                 &self.device,
                 &mut init_encoder,
                 &self.shader_dir,
                 &mut self.pipeline_manager,
                 self.per_frame_resources.bind_group_layout(),
-            );
+            )
+            .unwrap();
             self.scene_renderer.on_new_scene(&self.device, &mut init_encoder, &self.scene);
             self.command_queue.submit(Some(init_encoder.finish()));
             self.device.poll(wgpu::Maintain::Wait);
