@@ -256,7 +256,7 @@ impl Application {
             self.per_frame_resources.bind_group(), // values from last draw are good enough.
         );
 
-        if let simulation_controller::SimulationControllerStatus::Record { output_directory } = &self.simulation_controller.status {
+        if let simulation_controller::SimulationControllerStatus::Record { output_directory, .. } = &self.simulation_controller.status {
             self.scheduled_screenshot = output_directory.join(format!("{}.png", self.simulation_controller.timer().num_frames_rendered()));
         }
     }

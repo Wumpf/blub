@@ -12,6 +12,7 @@ pub enum SimulationControllerStatus {
     Realtime,
     Record {
         output_directory: std::path::PathBuf, // todo: It's weird that the simulation controller knows about the output of a recording.
+        frame_length: Duration,
     },
 
     Paused,
@@ -32,7 +33,6 @@ pub struct SimulationController {
 }
 
 const MIN_REALTIME_FPS: f64 = 20.0;
-const RECORDING_FPS: f64 = 60.0;
 
 fn delta_from_steps_per_second(steps_per_second: u64) -> Duration {
     Duration::from_nanos(1000 * 1000 * 1000 / steps_per_second)
@@ -167,8 +167,8 @@ impl SimulationController {
     fn start_simulation_frame(&mut self) -> bool {
         match self.status {
             SimulationControllerStatus::Realtime => {}
-            SimulationControllerStatus::Record { .. } => {
-                self.timer.force_frame_delta(Duration::from_secs_f64(1.0 / RECORDING_FPS));
+            SimulationControllerStatus::Record { frame_length, .. } => {
+                self.timer.force_frame_delta(frame_length);
             }
             SimulationControllerStatus::FastForward { simulation_jump_length } => {
                 self.timer.force_frame_delta(simulation_jump_length);

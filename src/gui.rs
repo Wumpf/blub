@@ -6,6 +6,7 @@ use strum::IntoEnumIterator;
 
 struct GUIState {
     fast_forward_length_seconds: f32,
+    video_fps: i32,
 }
 pub struct GUI {
     imgui_context: imgui::Context,
@@ -45,6 +46,7 @@ impl GUI {
 
             state: GUIState {
                 fast_forward_length_seconds: 5.0,
+                video_fps: 60,
             },
         }
     }
@@ -175,11 +177,17 @@ impl GUI {
                             let output_directory = PathBuf::from(format!("recording{}", i));
                             if !output_directory.exists() {
                                 std::fs::create_dir(&output_directory).unwrap();
-                                simulation_controller.status = SimulationControllerStatus::Record { output_directory };
+                                simulation_controller.status = SimulationControllerStatus::Record {
+                                    output_directory,
+                                    frame_length: Duration::from_secs_f64(1.0 / state.video_fps as f64),
+                                };
                                 break;
                             }
                         }
                     }
+                    ui.same_line(0.0);
+                    ui.set_next_item_width(40.0);
+                    ui.drag_int(im_str!("video fps"), &mut state.video_fps).min(10).max(300).build();
                 }
 
                 //////////////////////////////////////////////////
