@@ -12,6 +12,7 @@ mod per_frame_resources;
 mod renderer;
 mod scene;
 mod screen;
+mod screenshot_recorder;
 mod simulation_controller;
 mod timer;
 mod wgpu_utils;
@@ -336,7 +337,7 @@ impl Application {
         }
 
         if self.scheduled_screenshot != PathBuf::default() {
-            self.screen.take_screenshot(&self.device, &mut encoder, &self.scheduled_screenshot);
+            self.screen.take_screenshot(&self.scheduled_screenshot, &self.device, &mut encoder);
             self.scheduled_screenshot = PathBuf::default();
         }
 
