@@ -24,10 +24,16 @@ use std::path::{Path, PathBuf};
 use wgpu_utils::{pipelines, shader};
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::Window,
     window::WindowBuilder,
 };
+
+#[derive(Debug, Clone)]
+pub enum ApplicationEvent {
+    LoadScene(PathBuf),
+    FastForwardSimulation,
+}
 
 struct Application {
     window: Window,
@@ -41,7 +47,7 @@ struct Application {
 
     shader_dir: shader::ShaderDirectory,
     pipeline_manager: pipelines::PipelineManager,
-    scene: scene::Scene,
+    scene: Option<scene::Scene>,
     scene_renderer: SceneRenderer,
     simulation_controller: simulation_controller::SimulationController,
     gui: gui::GUI,
@@ -51,7 +57,7 @@ struct Application {
 }
 
 impl Application {
-    async fn new(event_loop: &EventLoop<()>) -> Application {
+    async fn new(event_loop: &EventLoop<ApplicationEvent>) -> Application {
         let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY); //wgpu::BackendBit::DX12);
         let window = WindowBuilder::new()
             .with_title("Blub")
@@ -89,28 +95,9 @@ impl Application {
 
         let screen = Screen::new(&device, &window_surface, window.inner_size(), &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
-
-        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Startup Encoder"),
-        });
-
-        let scene = scene::Scene::new(
-            &Path::new("scenes/dam1.json"),
-            &device,
-            &mut init_encoder,
-            &shader_dir,
-            &mut pipeline_manager,
-            per_frame_resources.bind_group_layout(),
-        )
-        .unwrap();
         let simulation_controller = simulation_controller::SimulationController::new();
-        let mut scene_renderer = SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
-        scene_renderer.on_new_scene(&command_queue, &scene);
-
+        let scene_renderer = SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
-
-        command_queue.submit(Some(init_encoder.finish()));
-        device.poll(wgpu::Maintain::Wait);
 
         Application {
             window,
@@ -124,7 +111,7 @@ impl Application {
 
             shader_dir,
             pipeline_manager,
-            scene,
+            scene: None,
             scene_renderer,
             simulation_controller,
             gui,
@@ -147,13 +134,48 @@ impl Application {
         self.next_screenshot_index += 1;
     }
 
-    fn run(mut self, event_loop: EventLoop<()>) {
+    pub fn load_scene(&mut self, scene_path: &Path) {
+        let mut init_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Load Scene Encoder"),
+        });
+        let new_scene = scene::Scene::new(
+            scene_path,
+            &self.device,
+            &mut init_encoder,
+            &self.shader_dir,
+            &mut self.pipeline_manager,
+            self.per_frame_resources.bind_group_layout(),
+        );
+
+        match new_scene {
+            Ok(scene) => {
+                self.scene_renderer.on_new_scene(&self.command_queue, &scene);
+                self.scene = Some(scene);
+                self.command_queue.submit(Some(init_encoder.finish()));
+                self.simulation_controller.restart();
+                self.device.poll(wgpu::Maintain::Wait);
+            }
+            Err(error) => {
+                error!("Failed to load scene from {:?}: {:?}", scene_path, error);
+            }
+        }
+    }
+
+    fn run(mut self, event_loop: EventLoop<ApplicationEvent>) {
+        let event_loop_proxy = event_loop.create_proxy();
+
         event_loop.run(move |event, _, control_flow| {
             // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
             // dispatched any events. This is ideal for games and similar applications.
             *control_flow = ControlFlow::Poll;
 
             match &event {
+                Event::UserEvent(event) => match event {
+                    ApplicationEvent::LoadScene(scene_path) => {
+                        self.load_scene(scene_path);
+                    }
+                    ApplicationEvent::FastForwardSimulation => {}
+                },
                 Event::WindowEvent { event, .. } => {
                     self.camera.on_window_event(&event);
                     match event {
@@ -199,7 +221,7 @@ impl Application {
                     self.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
-                    self.draw();
+                    self.draw(&event_loop_proxy);
                 }
                 Event::LoopDestroyed => {
                     // workaround for errors on shutdown while recording screenshots
@@ -226,70 +248,52 @@ impl Application {
         }
         self.camera.update(self.simulation_controller.timer());
 
-        if self.simulation_controller.handle_scheduled_restart() {
-            // Idiot proof way to reset the fluid: Recreate everything.
-            // Previously, we reset the particles but then previous pressure computation results crept in making the reset more undeterministic than necessary
-            // Note that it is NOT deterministic due to some parallel processes reordering floating point operations at random.
-            // TODO?: Keeps old scene alive until new one is fully set.
-            let mut init_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Reset Scene Encoder"),
-            });
-            self.scene = scene::Scene::new(
-                &Path::new("scenes/dam1.json"),
+        if let Some(ref mut scene) = self.scene {
+            self.simulation_controller.fast_forward_steps(
                 &self.device,
-                &mut init_encoder,
-                &self.shader_dir,
-                &mut self.pipeline_manager,
-                self.per_frame_resources.bind_group_layout(),
-            )
-            .unwrap();
-            self.scene_renderer.on_new_scene(&self.command_queue, &self.scene);
-            self.command_queue.submit(Some(init_encoder.finish()));
-            self.device.poll(wgpu::Maintain::Wait);
+                &self.command_queue,
+                scene,
+                &self.pipeline_manager,
+                self.per_frame_resources.bind_group(), // values from last draw are good enough.
+            );
         }
-
-        self.simulation_controller.fast_forward_steps(
-            &self.device,
-            &self.command_queue,
-            &mut self.scene,
-            &self.pipeline_manager,
-            self.per_frame_resources.bind_group(), // values from last draw are good enough.
-        );
 
         if let simulation_controller::SimulationControllerStatus::Record { output_directory, .. } = &self.simulation_controller.status {
             self.scheduled_screenshot = output_directory.join(format!("{}.png", self.simulation_controller.timer().num_frames_rendered()));
         }
     }
 
-    fn draw(&mut self) {
+    fn draw(&mut self, event_loop_proxy: &EventLoopProxy<ApplicationEvent>) {
         let aspect_ratio = self.screen.aspect_ratio();
         let frame = self.screen.start_frame();
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Frame Main"),
         });
 
-        self.per_frame_resources.update_gpu_data(
-            &self.command_queue,
-            self.camera.fill_global_uniform_buffer(aspect_ratio),
-            self.simulation_controller.timer().fill_global_uniform_buffer(),
-            self.scene_renderer.fill_global_uniform_buffer(&self.scene),
-        );
+        if let Some(ref mut scene) = self.scene {
+            self.per_frame_resources.update_gpu_data(
+                &self.command_queue,
+                self.camera.fill_global_uniform_buffer(aspect_ratio),
+                self.simulation_controller.timer().fill_global_uniform_buffer(),
+                self.scene_renderer.fill_global_uniform_buffer(&scene),
+            );
 
-        self.simulation_controller.frame_steps(
-            &mut self.scene,
-            &mut encoder,
-            &self.pipeline_manager,
-            self.per_frame_resources.bind_group(),
-            &self.command_queue,
-        );
-        self.scene_renderer.draw(
-            &self.scene,
-            &mut encoder,
-            &self.pipeline_manager,
-            self.screen.backbuffer(),
-            self.screen.depthbuffer(),
-            self.per_frame_resources.bind_group(),
-        );
+            self.simulation_controller.frame_steps(
+                scene,
+                &mut encoder,
+                &self.pipeline_manager,
+                self.per_frame_resources.bind_group(),
+                &self.command_queue,
+            );
+            self.scene_renderer.draw(
+                scene,
+                &mut encoder,
+                &self.pipeline_manager,
+                self.screen.backbuffer(),
+                self.screen.depthbuffer(),
+                self.per_frame_resources.bind_group(),
+            );
+        }
 
         if self.scheduled_screenshot != PathBuf::default() {
             self.screen.take_screenshot(&self.device, &mut encoder, &self.scheduled_screenshot);
@@ -304,6 +308,7 @@ impl Application {
             &self.screen.backbuffer(),
             &mut self.simulation_controller,
             &mut self.scene_renderer,
+            event_loop_proxy,
         );
 
         self.screen.copy_to_swapchain(&frame, &mut encoder);
@@ -316,7 +321,7 @@ impl Application {
 fn main() {
     // Silence warnings from `naga::front::spirv` for now since as of writing it doesn't know enough spirv yet.
     env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info,naga=error"));
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::<ApplicationEvent>::with_user_event();
     let application = futures::executor::block_on(Application::new(&event_loop));
     application.run(event_loop);
 }

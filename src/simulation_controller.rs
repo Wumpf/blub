@@ -23,7 +23,6 @@ pub enum SimulationControllerStatus {
 }
 
 pub struct SimulationController {
-    scheduled_restart: bool,
     timer: Timer,
     computation_time_last_fast_forward: Duration,
     simulation_steps_per_second: u64,
@@ -43,7 +42,6 @@ impl SimulationController {
         const DEFAULT_SIMULATION_STEPS_PER_SECOND: u64 = 120;
 
         SimulationController {
-            scheduled_restart: false,
             status: SimulationControllerStatus::Realtime,
             simulation_stop_time: Duration::from_secs(60 * 60), // (an hour)
             simulation_steps_per_second: DEFAULT_SIMULATION_STEPS_PER_SECOND,
@@ -65,10 +63,6 @@ impl SimulationController {
         self.computation_time_last_fast_forward
     }
 
-    pub fn schedule_restart(&mut self) {
-        self.scheduled_restart = true;
-    }
-
     pub fn simulation_steps_per_second(&self) -> u64 {
         self.simulation_steps_per_second
     }
@@ -79,14 +73,8 @@ impl SimulationController {
             .set_simulation_delta(delta_from_steps_per_second(self.simulation_steps_per_second));
     }
 
-    pub fn handle_scheduled_restart(&mut self) -> bool {
-        if !self.scheduled_restart {
-            return false;
-        }
-
+    pub fn restart(&mut self) {
         self.timer = Timer::new(delta_from_steps_per_second(self.simulation_steps_per_second));
-        self.scheduled_restart = false;
-        true
     }
 
     // A single fast forward operation is technically just a "very long frame".
