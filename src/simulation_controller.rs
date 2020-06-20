@@ -10,16 +10,9 @@ use std::time::{Duration, Instant};
 #[derive(PartialEq, Eq)]
 pub enum SimulationControllerStatus {
     Realtime,
-    Record {
-        output_directory: std::path::PathBuf, // todo: It's weird that the simulation controller knows about the output of a recording.
-        frame_length: Duration,
-    },
-
+    RecordingWithFixedFrameLength(Duration),
+    FastForward(Duration),
     Paused,
-
-    FastForward {
-        simulation_jump_length: Duration,
-    },
 }
 
 pub struct SimulationController {
@@ -82,6 +75,7 @@ impl SimulationController {
     // Note that we assume that this never happens for realtime & recording, but it well could once a single simulation + render step takes longer than TDR time.
     pub fn fast_forward_steps(
         &mut self,
+        simulation_jump_length: Duration,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         scene: &Scene,
@@ -91,48 +85,48 @@ impl SimulationController {
         // TODO: Dynamic estimate to keep batches around 0.5 seconds.
         const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 64;
 
-        if let SimulationControllerStatus::FastForward { simulation_jump_length } = self.status {
-            // re-use stopping standard stopping mechanism to halt the simulation
-            let previous_simulation_end = self.simulation_stop_time;
-            // jump at least one simulation step, makes for easier ui code
-            self.simulation_stop_time = self.timer.total_simulated_time() + simulation_jump_length.max(self.timer.simulation_delta());
+        self.status = SimulationControllerStatus::FastForward(simulation_jump_length);
 
-            self.start_simulation_frame();
-            {
-                let start_time = Instant::now();
-                while let SimulationControllerStatus::FastForward { .. } = self.status {
-                    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("Encoder: Simulation Step Fast Forward"),
-                    });
+        // re-use stopping standard stopping mechanism to halt the simulation
+        let previous_simulation_end = self.simulation_stop_time;
+        // jump at least one simulation step, makes for easier ui code
+        self.simulation_stop_time = self.timer.total_simulated_time() + simulation_jump_length.max(self.timer.simulation_delta());
 
-                    let mut batch_size = MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE;
-                    {
-                        let mut compute_pass = encoder.begin_compute_pass();
-                        compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
+        self.start_simulation_frame();
+        {
+            let start_time = Instant::now();
+            while let SimulationControllerStatus::FastForward(..) = self.status {
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Encoder: Simulation Step Fast Forward"),
+                });
 
-                        for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
-                            if !self.single_step(scene, &mut compute_pass, pipeline_manager, queue) {
-                                batch_size = i;
-                                break;
-                            }
+                let mut batch_size = MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE;
+                {
+                    let mut compute_pass = encoder.begin_compute_pass();
+                    compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
+
+                    for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
+                        if !self.single_step(scene, &mut compute_pass, pipeline_manager, queue) {
+                            batch_size = i;
+                            break;
                         }
                     }
-                    queue.submit(Some(encoder.finish()));
-                    info!("simulation fast forwarding batch submitted (size {})", batch_size);
-                    device.poll(wgpu::Maintain::Wait); // Seems to be necessary to do the full wait every time to avoid TDR.
                 }
-                self.computation_time_last_fast_forward = start_time.elapsed();
+                queue.submit(Some(encoder.finish()));
+                info!("simulation fast forwarding batch submitted (size {})", batch_size);
+                device.poll(wgpu::Maintain::Wait); // Seems to be necessary to do the full wait every time to avoid TDR.
             }
-            self.timer.on_frame_submitted(1.0);
-
-            self.timer.force_frame_delta(Duration::from_secs(0));
-            self.simulation_stop_time = previous_simulation_end;
-
-            info!(
-                "Fast forward of {:?} took {:?} to compute",
-                simulation_jump_length, self.computation_time_last_fast_forward
-            );
+            self.computation_time_last_fast_forward = start_time.elapsed();
         }
+        self.timer.on_frame_submitted(1.0);
+
+        self.timer.force_frame_delta(Duration::from_secs(0));
+        self.simulation_stop_time = previous_simulation_end;
+
+        info!(
+            "Fast forward of {:?} took {:?} to compute",
+            simulation_jump_length, self.computation_time_last_fast_forward
+        );
     }
 
     pub fn frame_steps(
@@ -155,11 +149,11 @@ impl SimulationController {
     fn start_simulation_frame(&mut self) -> bool {
         match self.status {
             SimulationControllerStatus::Realtime => {}
-            SimulationControllerStatus::Record { frame_length, .. } => {
+            SimulationControllerStatus::RecordingWithFixedFrameLength(frame_length) => {
                 self.timer.force_frame_delta(frame_length);
             }
-            SimulationControllerStatus::FastForward { simulation_jump_length } => {
-                self.timer.force_frame_delta(simulation_jump_length);
+            SimulationControllerStatus::FastForward(frame_length) => {
+                self.timer.force_frame_delta(frame_length);
             }
             SimulationControllerStatus::Paused => {
                 self.timer.skip_simulation_frame();

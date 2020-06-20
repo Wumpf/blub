@@ -168,12 +168,7 @@ impl GUI {
 
                     {
                         if ui.button(im_str!("Reset"), [50.0, DEFAULT_BUTTON_HEIGHT]) {
-                            // Idiot proof way to reset the fluid: Recreate everything.
-                            // Previously, we reset the particles but then previous pressure computation results crept in making the reset more nondeterministic than necessary
-                            // Note that it is NOT deterministic due to some parallel processes reordering floating point operations at random.
-                            event_loop_proxy
-                                .send_event(ApplicationEvent::LoadScene(state.known_scene_files[state.selected_scene_idx].clone()))
-                                .unwrap();
+                            event_loop_proxy.send_event(ApplicationEvent::ResetScene).unwrap();
                         }
                         ui.same_line(0.0);
                         if simulation_controller.status == SimulationControllerStatus::Paused {
@@ -198,38 +193,26 @@ impl GUI {
                             .build();
                         ui.same_line(0.0);
                         if ui.button(im_str!("Fast Forward"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
-                            simulation_controller.status = SimulationControllerStatus::FastForward {
-                                simulation_jump_length: Duration::from_secs_f32(state.fast_forward_length_seconds),
-                            };
+                            event_loop_proxy
+                                .send_event(ApplicationEvent::FastForwardSimulation(Duration::from_secs_f32(
+                                    state.fast_forward_length_seconds,
+                                )))
+                                .unwrap();
                         }
                         ui.same_line(0.0);
                         ui.text_disabled(im_str!("last jump took {:?}", simulation_controller.computation_time_last_fast_forward()));
                     }
-                    if let SimulationControllerStatus::Record { .. } = simulation_controller.status {
+
+                    if let SimulationControllerStatus::RecordingWithFixedFrameLength { .. } = simulation_controller.status {
                         if ui.button(im_str!("End Recording"), [208.0, DEFAULT_BUTTON_HEIGHT]) {
                             simulation_controller.status = SimulationControllerStatus::Paused;
+                            event_loop_proxy.send_event(ApplicationEvent::StopRecording).unwrap();
                         }
                     } else {
                         if ui.button(im_str!("Reset & Record Video"), [208.0, DEFAULT_BUTTON_HEIGHT]) {
-                            // TODO: Make this an applicationEvent!
-
-                            // Idiot proof way to reset the fluid: Recreate everything.
-                            // Previously, we reset the particles but then previous pressure computation results crept in making the reset more nondeterministic than necessary
-                            // Note that it is NOT deterministic due to some parallel processes reordering floating point operations at random.
-                            event_loop_proxy
-                                .send_event(ApplicationEvent::LoadScene(state.known_scene_files[state.selected_scene_idx].clone()))
-                                .unwrap();
-                            for i in 0..usize::MAX {
-                                let output_directory = PathBuf::from(format!("recording{}", i));
-                                if !output_directory.exists() {
-                                    std::fs::create_dir(&output_directory).unwrap();
-                                    simulation_controller.status = SimulationControllerStatus::Record {
-                                        output_directory,
-                                        frame_length: Duration::from_secs_f64(1.0 / state.video_fps as f64),
-                                    };
-                                    break;
-                                }
-                            }
+                            simulation_controller.status =
+                                SimulationControllerStatus::RecordingWithFixedFrameLength(Duration::from_secs_f64(1.0 / state.video_fps as f64));
+                            event_loop_proxy.send_event(ApplicationEvent::ResetAndStartRecording).unwrap();
                         }
                         ui.same_line(0.0);
                         ui.set_next_item_width(40.0);

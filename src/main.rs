@@ -20,7 +20,10 @@ use per_frame_resources::*;
 use renderer::SceneRenderer;
 use screen::*;
 use simulation_controller::SimulationControllerStatus;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use wgpu_utils::{pipelines, shader};
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -32,15 +35,20 @@ use winit::{
 #[derive(Debug, Clone)]
 pub enum ApplicationEvent {
     LoadScene(PathBuf),
-    FastForwardSimulation,
+    ResetScene,
+    FastForwardSimulation(Duration),
+    ResetAndStartRecording,
+    StopRecording,
 }
 
 struct Application {
     window: Window,
     window_surface: wgpu::Surface,
     screen: Screen,
+
     next_screenshot_index: usize,
     scheduled_screenshot: PathBuf,
+    recording_output_dir: PathBuf,
 
     device: wgpu::Device,
     command_queue: wgpu::Queue,
@@ -103,8 +111,10 @@ impl Application {
             window,
             window_surface,
             screen,
+
             next_screenshot_index: 0,
             scheduled_screenshot: PathBuf::default(),
+            recording_output_dir: PathBuf::default(),
 
             device,
             command_queue,
@@ -135,13 +145,10 @@ impl Application {
     }
 
     pub fn load_scene(&mut self, scene_path: &Path) {
-        let mut init_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Load Scene Encoder"),
-        });
         let new_scene = scene::Scene::new(
             scene_path,
             &self.device,
-            &mut init_encoder,
+            &self.command_queue,
             &self.shader_dir,
             &mut self.pipeline_manager,
             self.per_frame_resources.bind_group_layout(),
@@ -151,9 +158,6 @@ impl Application {
             Ok(scene) => {
                 self.scene_renderer.on_new_scene(&self.command_queue, &scene);
                 self.scene = Some(scene);
-                self.command_queue.submit(Some(init_encoder.finish()));
-                self.simulation_controller.restart();
-                self.device.poll(wgpu::Maintain::Wait);
             }
             Err(error) => {
                 error!("Failed to load scene from {:?}: {:?}", scene_path, error);
@@ -173,8 +177,55 @@ impl Application {
                 Event::UserEvent(event) => match event {
                     ApplicationEvent::LoadScene(scene_path) => {
                         self.load_scene(scene_path);
+                        self.simulation_controller.restart();
                     }
-                    ApplicationEvent::FastForwardSimulation => {}
+                    ApplicationEvent::ResetScene => {
+                        if let Some(ref mut scene) = self.scene {
+                            scene.reset(
+                                &self.device,
+                                &self.command_queue,
+                                &self.shader_dir,
+                                &mut self.pipeline_manager,
+                                self.per_frame_resources.bind_group_layout(),
+                            );
+                        }
+                        self.simulation_controller.restart();
+                    }
+                    ApplicationEvent::FastForwardSimulation(simulation_jump_length) => {
+                        if let Some(ref mut scene) = self.scene {
+                            self.simulation_controller.fast_forward_steps(
+                                *simulation_jump_length,
+                                &self.device,
+                                &self.command_queue,
+                                scene,
+                                &self.pipeline_manager,
+                                self.per_frame_resources.bind_group(), // values from last draw are good enough.
+                            );
+                        }
+                    }
+                    ApplicationEvent::ResetAndStartRecording => {
+                        if let Some(ref mut scene) = self.scene {
+                            scene.reset(
+                                &self.device,
+                                &self.command_queue,
+                                &self.shader_dir,
+                                &mut self.pipeline_manager,
+                                self.per_frame_resources.bind_group_layout(),
+                            );
+                        }
+                        self.simulation_controller.restart();
+                        for i in 0..usize::MAX {
+                            let output_directory = PathBuf::from(format!("recording{}", i));
+                            if !output_directory.exists() {
+                                std::fs::create_dir(&output_directory).unwrap();
+                                self.recording_output_dir = output_directory;
+                                break;
+                            }
+                        }
+                    }
+                    ApplicationEvent::StopRecording => {
+                        self.recording_output_dir = PathBuf::new();
+                    }
                 },
                 Event::WindowEvent { event, .. } => {
                     self.camera.on_window_event(&event);
@@ -248,18 +299,14 @@ impl Application {
         }
         self.camera.update(self.simulation_controller.timer());
 
-        if let Some(ref mut scene) = self.scene {
-            self.simulation_controller.fast_forward_steps(
-                &self.device,
-                &self.command_queue,
-                scene,
-                &self.pipeline_manager,
-                self.per_frame_resources.bind_group(), // values from last draw are good enough.
-            );
-        }
-
-        if let simulation_controller::SimulationControllerStatus::Record { output_directory, .. } = &self.simulation_controller.status {
-            self.scheduled_screenshot = output_directory.join(format!("{}.png", self.simulation_controller.timer().num_frames_rendered()));
+        if self.recording_output_dir != PathBuf::default() {
+            if let SimulationControllerStatus::RecordingWithFixedFrameLength(_) = self.simulation_controller.status {
+                self.scheduled_screenshot = self
+                    .recording_output_dir
+                    .join(format!("{}.png", self.simulation_controller.timer().num_frames_rendered()));
+            } else {
+                self.scheduled_screenshot = PathBuf::default();
+            }
         }
     }
 

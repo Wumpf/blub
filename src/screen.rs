@@ -223,7 +223,7 @@ impl Screen {
 
     pub fn take_screenshot(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, path: &Path) {
         if self.unused_screenshot_buffers.len() == 0 {
-            warn!("No more unused screenshot buffers available. Waiting for GPU to catch up and draining screenshot queue...");
+            warn!("No more unused screenshot buffers available. Waiting for GPU/screenshot writer to catch up and draining screenshot queue...");
             while self.unused_screenshot_buffers.len() == 0 {
                 device.poll(wgpu::Maintain::Poll);
                 self.process_pending_screenshots();

@@ -35,7 +35,7 @@ impl Scene {
     pub fn new(
         scene_path: &Path,
         device: &wgpu::Device,
-        init_encoder: &mut wgpu::CommandEncoder,
+        queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
@@ -43,6 +43,23 @@ impl Scene {
         let file = File::open(scene_path)?;
         let reader = BufReader::new(file);
         let config: SceneConfig = serde_json::from_reader(reader)?;
+
+        let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
+
+        Ok(Scene { hybrid_fluid, config })
+    }
+
+    fn create_fluid_from_config(
+        config: &SceneConfig,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        shader_dir: &ShaderDirectory,
+        pipeline_manager: &mut PipelineManager,
+        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> HybridFluid {
+        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("HybridFluid Init Encoder"),
+        });
 
         let mut hybrid_fluid = HybridFluid::new(
             device,
@@ -59,13 +76,24 @@ impl Scene {
 
         hybrid_fluid.add_fluid_cube(
             device,
-            init_encoder,
+            &mut init_encoder,
             cgmath::Point3::new(1.0, 1.0, 1.0),
             cgmath::Point3::new(64.0, 40.0, 64.0),
         );
+        queue.submit(Some(init_encoder.finish()));
         hybrid_fluid.set_gravity_grid(config.gravity / config.fluid.grid_to_world_scale);
+        hybrid_fluid
+    }
 
-        Ok(Scene { hybrid_fluid, config })
+    pub fn reset(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        shader_dir: &ShaderDirectory,
+        pipeline_manager: &mut PipelineManager,
+        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+    ) {
+        self.hybrid_fluid = Self::create_fluid_from_config(&self.config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
     }
 
     pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, queue: &wgpu::Queue) {
