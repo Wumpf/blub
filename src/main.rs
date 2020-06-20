@@ -105,7 +105,7 @@ impl Application {
         .unwrap();
         let simulation_controller = simulation_controller::SimulationController::new();
         let mut scene_renderer = SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
-        scene_renderer.on_new_scene(&device, &mut init_encoder, &scene);
+        scene_renderer.on_new_scene(&command_queue, &scene);
 
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
 
@@ -243,7 +243,7 @@ impl Application {
                 self.per_frame_resources.bind_group_layout(),
             )
             .unwrap();
-            self.scene_renderer.on_new_scene(&self.device, &mut init_encoder, &self.scene);
+            self.scene_renderer.on_new_scene(&self.command_queue, &self.scene);
             self.command_queue.submit(Some(init_encoder.finish()));
             self.device.poll(wgpu::Maintain::Wait);
         }

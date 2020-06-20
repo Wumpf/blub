@@ -84,7 +84,7 @@ impl StaticLineRenderer {
         self.num_lines = 0;
     }
 
-    pub fn add_lines(&mut self, lines: &[LineVertex], device: &wgpu::Device, init_encoder: &mut wgpu::CommandEncoder) {
+    pub fn add_lines(&mut self, lines: &[LineVertex], queue: &wgpu::Queue) {
         if lines.len() + self.num_lines > self.max_num_lines {
             error!(
                 "Buffer too small to add {} lines. Containing {} right now, maximum is {}",
@@ -95,17 +95,7 @@ impl StaticLineRenderer {
             return;
         }
 
-        // TODO: use queue.write_buffer
-        let new_vertices_size = (lines.len() * LINE_VERTEX_SIZE) as u64;
-        let particle_buffer_mapping = device.create_buffer_with_data(bytemuck::cast_slice(lines), wgpu::BufferUsage::COPY_SRC);
-        init_encoder.copy_buffer_to_buffer(
-            &particle_buffer_mapping,
-            0,
-            &self.vertex_buffer,
-            (self.num_lines * LINE_VERTEX_SIZE) as u64,
-            new_vertices_size,
-        );
-
+        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(lines));
         self.num_lines += lines.len();
     }
 

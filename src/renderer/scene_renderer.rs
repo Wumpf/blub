@@ -69,7 +69,7 @@ impl SceneRenderer {
     }
 
     // Needs to be called whenever immutable scene properties change.
-    pub fn on_new_scene(&mut self, device: &wgpu::Device, init_encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
+    pub fn on_new_scene(&mut self, queue: &wgpu::Queue, scene: &Scene) {
         let line_color = cgmath::vec3(0.0, 0.0, 0.0);
         let grid_extent = scene.config.fluid.grid_dimension;
         let min = scene.config.fluid.world_position;
@@ -106,8 +106,7 @@ impl SceneRenderer {
                 LineVertex::new(cgmath::point3(min.x, max.y, min.z), line_color),
                 LineVertex::new(cgmath::point3(min.x, max.y, max.z), line_color),
             ],
-            device,
-            init_encoder,
+            queue,
         );
     }
 
