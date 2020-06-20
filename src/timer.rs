@@ -163,10 +163,6 @@ impl Timer {
         self.num_simulation_steps
     }
 
-    pub fn num_frames_rendered(&self) -> u32 {
-        self.num_frames_rendered
-    }
-
     pub fn fill_global_uniform_buffer(&self) -> FrameTimeUniformBufferContent {
         FrameTimeUniformBufferContent {
             total_passed: self.total_rendered_time.as_secs_f32(),

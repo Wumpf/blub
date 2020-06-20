@@ -12,6 +12,7 @@ mod per_frame_resources;
 mod renderer;
 mod scene;
 mod screen;
+mod screenshot_capture;
 mod screenshot_recorder;
 mod simulation_controller;
 mod timer;
@@ -20,6 +21,7 @@ mod wgpu_utils;
 use per_frame_resources::*;
 use renderer::SceneRenderer;
 use screen::*;
+use screenshot_recorder::ScreenshotRecorder;
 use simulation_controller::SimulationControllerStatus;
 use std::{
     path::{Path, PathBuf},
@@ -45,10 +47,7 @@ struct Application {
     window: Window,
     window_surface: wgpu::Surface,
     screen: Screen,
-
-    next_screenshot_index: usize,
-    scheduled_screenshot: PathBuf,
-    recording_output_dir: PathBuf,
+    screenshot_recorder: ScreenshotRecorder,
 
     device: wgpu::Device,
     command_queue: wgpu::Queue,
@@ -111,10 +110,7 @@ impl Application {
             window,
             window_surface,
             screen,
-
-            next_screenshot_index: 0,
-            scheduled_screenshot: PathBuf::default(),
-            recording_output_dir: PathBuf::default(),
+            screenshot_recorder: ScreenshotRecorder::new(),
 
             device,
             command_queue,
@@ -129,19 +125,6 @@ impl Application {
             camera: camera::Camera::new(),
             per_frame_resources,
         }
-    }
-
-    fn schedule_screenshot(&mut self) {
-        if self.next_screenshot_index == 0 {
-            for i in 1..usize::MAX {
-                if !PathBuf::from(format!("screenshot{}.png", i)).exists() {
-                    self.next_screenshot_index = i;
-                    break;
-                }
-            }
-        }
-        self.scheduled_screenshot = PathBuf::from(format!("screenshot{}.png", self.next_screenshot_index));
-        self.next_screenshot_index += 1;
     }
 
     pub fn load_scene(&mut self, scene_path: &Path) {
@@ -215,14 +198,7 @@ impl Application {
                         }
                         self.simulation_controller.restart();
                         self.simulation_controller.start_recording_with_fixed_frame_length(*recording_fps);
-                        for i in 0..usize::MAX {
-                            let output_directory = PathBuf::from(format!("recording{}", i));
-                            if !output_directory.exists() {
-                                std::fs::create_dir(&output_directory).unwrap();
-                                self.recording_output_dir = output_directory;
-                                break;
-                            }
-                        }
+                        self.screenshot_recorder.start_next_recording();
                     }
                 },
                 Event::WindowEvent { event, .. } => {
@@ -247,7 +223,7 @@ impl Application {
                             ..
                         } => match virtual_keycode {
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                            VirtualKeyCode::Snapshot => self.schedule_screenshot(), // Bug? doesn't seem to receive a winit::event::ElementState::Pressed event.
+                            VirtualKeyCode::Snapshot => self.screenshot_recorder.schedule_next_screenshot(), // Bug? doesn't seem to receive a winit::event::ElementState::Pressed event.
                             VirtualKeyCode::Space => {
                                 if let winit::event::ElementState::Pressed = state {
                                     self.simulation_controller.pause_or_resume();
@@ -293,14 +269,8 @@ impl Application {
         }
         self.camera.update(self.simulation_controller.timer());
 
-        if self.recording_output_dir != PathBuf::default() {
-            if let SimulationControllerStatus::RecordingWithFixedFrameLength(_) = self.simulation_controller.status() {
-                self.scheduled_screenshot = self
-                    .recording_output_dir
-                    .join(format!("{}.png", self.simulation_controller.timer().num_frames_rendered()));
-            } else {
-                self.scheduled_screenshot = PathBuf::default();
-            }
+        if self.simulation_controller.status() == SimulationControllerStatus::Paused {
+            self.screenshot_recorder.stop_recording();
         }
     }
 
@@ -336,10 +306,7 @@ impl Application {
             );
         }
 
-        if self.scheduled_screenshot != PathBuf::default() {
-            self.screen.take_screenshot(&self.scheduled_screenshot, &self.device, &mut encoder);
-            self.scheduled_screenshot = PathBuf::default();
-        }
+        self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
 
         self.gui.draw(
             &self.device,

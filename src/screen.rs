@@ -1,4 +1,4 @@
-use crate::screenshot_recorder::ScreenshotRecorder;
+use crate::screenshot_capture::ScreenshotCapture;
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
@@ -16,7 +16,7 @@ pub struct Screen {
     read_backbuffer_bind_group: wgpu::BindGroup,
     copy_to_swapchain_pipeline: wgpu::RenderPipeline,
 
-    screenshot_recorder: ScreenshotRecorder,
+    screenshot_capture: ScreenshotCapture,
 }
 
 impl Screen {
@@ -115,7 +115,7 @@ impl Screen {
 
             read_backbuffer_bind_group,
             copy_to_swapchain_pipeline,
-            screenshot_recorder: ScreenshotRecorder::new(device, resolution),
+            screenshot_capture: ScreenshotCapture::new(device, resolution),
         }
     }
 
@@ -131,8 +131,8 @@ impl Screen {
         &self.depth_view
     }
 
-    pub fn take_screenshot(&mut self, path: &Path, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
-        self.screenshot_recorder.take_screenshot(path, &self.backbuffer, device, encoder);
+    pub fn capture_screenshot(&mut self, path: &Path, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
+        self.screenshot_capture.capture_screenshot(path, &self.backbuffer, device, encoder);
     }
 
     pub fn start_frame(&mut self) -> wgpu::SwapChainTexture {
@@ -158,10 +158,10 @@ impl Screen {
 
     pub fn end_frame(&mut self, frame: wgpu::SwapChainTexture) {
         std::mem::drop(frame);
-        self.screenshot_recorder.process_pending_screenshots();
+        self.screenshot_capture.process_pending_screenshots();
     }
 
     pub fn wait_for_pending_screenshots(&mut self, device: &wgpu::Device) {
-        self.screenshot_recorder.wait_for_pending_screenshots(device);
+        self.screenshot_capture.wait_for_pending_screenshots(device);
     }
 }
