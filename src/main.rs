@@ -52,7 +52,7 @@ struct Application {
 
 impl Application {
     async fn new(event_loop: &EventLoop<()>) -> Application {
-        let wgpu_instance = wgpu::Instance::new();
+        let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY); //wgpu::BackendBit::DX12);
         let window = WindowBuilder::new()
             .with_title("Blub")
             .with_resizable(true)
@@ -68,7 +68,6 @@ impl Application {
                     compatible_surface: Some(&window_surface),
                 },
                 wgpu::UnsafeExtensions::disallow(),
-                wgpu::BackendBit::PRIMARY, //wgpu::BackendBit::DX12,
             )
             .await
             .unwrap();

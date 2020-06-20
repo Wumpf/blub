@@ -272,7 +272,7 @@ impl Screen {
             }],
             depth_stencil_attachment: None,
         });
-
+        render_pass.push_debug_group("screen - copy to swapchain");
         render_pass.set_pipeline(&self.copy_to_swapchain_pipeline);
         render_pass.set_bind_group(0, &self.read_backbuffer_bind_group, &[]);
         render_pass.draw(0..3, 0..1);

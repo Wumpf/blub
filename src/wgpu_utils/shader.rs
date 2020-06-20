@@ -60,7 +60,7 @@ impl ShaderDirectory {
             }
         };
 
-        let spirv = {
+        let compilation_artifact = {
             let mut compiler = shaderc::Compiler::new().unwrap();
             let mut options = shaderc::CompileOptions::new().unwrap();
             //options.set_hlsl_io_mapping(true);
@@ -96,14 +96,7 @@ impl ShaderDirectory {
                     if compile_result.get_num_warnings() > 0 {
                         warn!("warnings when compiling {:?}:\n{}", path, compile_result.get_warning_messages());
                     }
-
-                    match wgpu::read_spirv(std::io::Cursor::new(&compile_result.as_binary_u8())) {
-                        Ok(spirv) => spirv,
-                        Err(io_error) => {
-                            error!("Compilation succeeded, but wgpu::read_spirv failed: {}", io_error);
-                            return Err(());
-                        }
-                    }
+                    compile_result
                 }
                 Err(compile_error) => {
                     error!("{}", compile_error);
@@ -112,14 +105,6 @@ impl ShaderDirectory {
             }
         };
 
-        // Write out the spirv shader for debugging purposes
-        // {
-        //     use std::io::prelude::*;
-        //     let mut file = std::fs::File::create("last-shader.spv").unwrap();
-        //     let data: &[u8] = unsafe { std::slice::from_raw_parts(spirv.as_ptr() as *const u8, spirv.len() * 4) };
-        //     file.write_all(data).unwrap();
-        // }
-
-        Ok(device.create_shader_module(&spirv))
+        Ok(device.create_shader_module(wgpu::ShaderModuleSource::SpirV(compilation_artifact.as_binary())))
     }
 }

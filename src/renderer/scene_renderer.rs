@@ -154,20 +154,30 @@ impl SceneRenderer {
                 stencil_read_only: true,
             }),
         });
+        rpass.push_debug_group("scene renderer");
 
         rpass.set_bind_group(0, per_frame_bind_group, &[]);
 
+        rpass.push_debug_group("fluid");
         match self.fluid_rendering_mode {
             FluidRenderingMode::None => {}
             FluidRenderingMode::Particles => {
                 self.particle_renderer.draw(&mut rpass, pipeline_manager, &scene.fluid());
             }
         }
+        rpass.pop_debug_group();
+
+        rpass.push_debug_group("volume visualizer");
         self.volume_renderer
             .draw(&mut rpass, pipeline_manager, &scene.fluid(), self.volume_visualization);
+        rpass.pop_debug_group();
 
         if self.enable_box_lines {
+            rpass.push_debug_group("box lines");
             self.bounds_line_renderer.draw(&mut rpass, pipeline_manager);
+            rpass.pop_debug_group();
         }
+
+        rpass.pop_debug_group();
     }
 }

@@ -1,11 +1,18 @@
 // common binding types mapped to glsl type names
 
 pub fn buffer(readonly: bool) -> wgpu::BindingType {
-    wgpu::BindingType::StorageBuffer { dynamic: false, readonly }
+    wgpu::BindingType::StorageBuffer {
+        dynamic: false,
+        min_binding_size: None, // todo?,
+        readonly,
+    }
 }
 
 pub fn uniform() -> wgpu::BindingType {
-    wgpu::BindingType::UniformBuffer { dynamic: false }
+    wgpu::BindingType::UniformBuffer {
+        dynamic: false,
+        min_binding_size: None, // todo?
+    }
 }
 
 pub fn sampler() -> wgpu::BindingType {
@@ -63,7 +70,6 @@ pub fn utexture3D() -> wgpu::BindingType {
 pub fn image2d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         dimension: wgpu::TextureViewDimension::D2,
-        component_type: wgpu::TextureComponentType::Float,
         format: format,
         readonly,
     }
@@ -72,7 +78,6 @@ pub fn image2d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType
 pub fn iimage2d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         dimension: wgpu::TextureViewDimension::D2,
-        component_type: wgpu::TextureComponentType::Sint,
         format: format,
         readonly,
     }
@@ -81,7 +86,6 @@ pub fn iimage2d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingTyp
 pub fn uimage2d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         dimension: wgpu::TextureViewDimension::D2,
-        component_type: wgpu::TextureComponentType::Uint,
         format: format,
         readonly,
     }
@@ -90,7 +94,6 @@ pub fn uimage2d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingTyp
 pub fn image3d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         dimension: wgpu::TextureViewDimension::D3,
-        component_type: wgpu::TextureComponentType::Float,
         format: format,
         readonly,
     }
@@ -99,7 +102,6 @@ pub fn image3d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType
 pub fn iimage3d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         dimension: wgpu::TextureViewDimension::D3,
-        component_type: wgpu::TextureComponentType::Sint,
         format: format,
         readonly,
     }
@@ -108,7 +110,6 @@ pub fn iimage3d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingTyp
 pub fn uimage3d(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         dimension: wgpu::TextureViewDimension::D3,
-        component_type: wgpu::TextureComponentType::Uint,
         format: format,
         readonly,
     }
