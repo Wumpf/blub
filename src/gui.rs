@@ -171,14 +171,15 @@ impl GUI {
                             event_loop_proxy.send_event(ApplicationEvent::ResetScene).unwrap();
                         }
                         ui.same_line(0.0);
-                        if simulation_controller.status() == SimulationControllerStatus::Paused {
-                            if ui.button(im_str!("Continue  (Space)"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
-                                simulation_controller.resume_realtime();
-                            }
-                        } else {
-                            if ui.button(im_str!("Pause  (Space)"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
-                                simulation_controller.pause();
-                            }
+                        if ui.button(
+                            if simulation_controller.status() == SimulationControllerStatus::Paused {
+                                im_str!("Continue  (Space)")
+                            } else {
+                                im_str!("Pause  (Space)")
+                            },
+                            [150.0, DEFAULT_BUTTON_HEIGHT],
+                        ) {
+                            simulation_controller.resume_realtime();
                         }
                     }
                     {
@@ -205,7 +206,7 @@ impl GUI {
 
                     if let SimulationControllerStatus::RecordingWithFixedFrameLength { .. } = simulation_controller.status() {
                         if ui.button(im_str!("End Recording"), [208.0, DEFAULT_BUTTON_HEIGHT]) {
-                            event_loop_proxy.send_event(ApplicationEvent::StopRecording).unwrap();
+                            simulation_controller.pause_or_resume();
                         }
                     } else {
                         if ui.button(im_str!("Reset & Record Video"), [208.0, DEFAULT_BUTTON_HEIGHT]) {

@@ -64,8 +64,12 @@ impl SimulationController {
         self.status
     }
 
-    pub fn pause(&mut self) {
-        self.status = SimulationControllerStatus::Paused;
+    pub fn pause_or_resume(&mut self) {
+        if self.status == SimulationControllerStatus::Paused {
+            self.status = SimulationControllerStatus::Realtime;
+        } else {
+            self.status = SimulationControllerStatus::Paused;
+        }
     }
 
     pub fn resume_realtime(&mut self) {

@@ -37,8 +37,7 @@ pub enum ApplicationEvent {
     LoadScene(PathBuf),
     ResetScene,
     FastForwardSimulation(Duration),
-    ResetAndStartRecording { recording_fps: f64 },
-    StopRecording,
+    ResetAndStartRecording { recording_fps: f64 }, // to stop recording, pause the simulation controller.
 }
 
 struct Application {
@@ -224,10 +223,6 @@ impl Application {
                             }
                         }
                     }
-                    ApplicationEvent::StopRecording => {
-                        self.recording_output_dir = PathBuf::new();
-                        self.simulation_controller.pause();
-                    }
                 },
                 Event::WindowEvent { event, .. } => {
                     self.camera.on_window_event(&event);
@@ -254,11 +249,7 @@ impl Application {
                             VirtualKeyCode::Snapshot => self.schedule_screenshot(), // Bug? doesn't seem to receive a winit::event::ElementState::Pressed event.
                             VirtualKeyCode::Space => {
                                 if let winit::event::ElementState::Pressed = state {
-                                    if self.simulation_controller.status() == SimulationControllerStatus::Paused {
-                                        self.simulation_controller.resume_realtime();
-                                    } else {
-                                        self.simulation_controller.pause();
-                                    }
+                                    self.simulation_controller.pause_or_resume();
                                 }
                             }
                             _ => {}
