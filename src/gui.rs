@@ -171,13 +171,13 @@ impl GUI {
                             event_loop_proxy.send_event(ApplicationEvent::ResetScene).unwrap();
                         }
                         ui.same_line(0.0);
-                        if simulation_controller.status == SimulationControllerStatus::Paused {
+                        if simulation_controller.status() == SimulationControllerStatus::Paused {
                             if ui.button(im_str!("Continue  (Space)"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
-                                simulation_controller.status = SimulationControllerStatus::Realtime;
+                                simulation_controller.resume_realtime();
                             }
                         } else {
                             if ui.button(im_str!("Pause  (Space)"), [150.0, DEFAULT_BUTTON_HEIGHT]) {
-                                simulation_controller.status = SimulationControllerStatus::Paused;
+                                simulation_controller.pause();
                             }
                         }
                     }
@@ -203,16 +203,17 @@ impl GUI {
                         ui.text_disabled(im_str!("last jump took {:?}", simulation_controller.computation_time_last_fast_forward()));
                     }
 
-                    if let SimulationControllerStatus::RecordingWithFixedFrameLength { .. } = simulation_controller.status {
+                    if let SimulationControllerStatus::RecordingWithFixedFrameLength { .. } = simulation_controller.status() {
                         if ui.button(im_str!("End Recording"), [208.0, DEFAULT_BUTTON_HEIGHT]) {
-                            simulation_controller.status = SimulationControllerStatus::Paused;
                             event_loop_proxy.send_event(ApplicationEvent::StopRecording).unwrap();
                         }
                     } else {
                         if ui.button(im_str!("Reset & Record Video"), [208.0, DEFAULT_BUTTON_HEIGHT]) {
-                            simulation_controller.status =
-                                SimulationControllerStatus::RecordingWithFixedFrameLength(Duration::from_secs_f64(1.0 / state.video_fps as f64));
-                            event_loop_proxy.send_event(ApplicationEvent::ResetAndStartRecording).unwrap();
+                            event_loop_proxy
+                                .send_event(ApplicationEvent::ResetAndStartRecording {
+                                    recording_fps: state.video_fps as f64,
+                                })
+                                .unwrap();
                         }
                         ui.same_line(0.0);
                         ui.set_next_item_width(40.0);

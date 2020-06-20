@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 // The simulation controller orchestrates simulation steps.
 // It holds the central timer and as such is responsible for glueing rendering frames and simulation together.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum SimulationControllerStatus {
     Realtime,
     RecordingWithFixedFrameLength(Duration),
@@ -19,7 +19,7 @@ pub struct SimulationController {
     timer: Timer,
     computation_time_last_fast_forward: Duration,
     simulation_steps_per_second: u64,
-    pub status: SimulationControllerStatus,
+    status: SimulationControllerStatus,
     pub simulation_stop_time: Duration,
     pub time_scale: f32,
 }
@@ -60,6 +60,22 @@ impl SimulationController {
         self.simulation_steps_per_second
     }
 
+    pub fn status(&self) -> SimulationControllerStatus {
+        self.status
+    }
+
+    pub fn pause(&mut self) {
+        self.status = SimulationControllerStatus::Paused;
+    }
+
+    pub fn resume_realtime(&mut self) {
+        self.status = SimulationControllerStatus::Realtime;
+    }
+
+    pub fn start_recording_with_fixed_frame_length(&mut self, frames_per_second: f64) {
+        self.status = SimulationControllerStatus::RecordingWithFixedFrameLength(Duration::from_secs_f64(1.0 / frames_per_second));
+    }
+
     pub fn set_simulation_steps_per_second(&mut self, simulation_steps_per_second: u64) {
         self.simulation_steps_per_second = simulation_steps_per_second;
         self.timer
@@ -68,6 +84,7 @@ impl SimulationController {
 
     pub fn restart(&mut self) {
         self.timer = Timer::new(delta_from_steps_per_second(self.simulation_steps_per_second));
+        self.resume_realtime();
     }
 
     // A single fast forward operation is technically just a "very long frame".

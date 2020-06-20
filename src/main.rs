@@ -37,7 +37,7 @@ pub enum ApplicationEvent {
     LoadScene(PathBuf),
     ResetScene,
     FastForwardSimulation(Duration),
-    ResetAndStartRecording,
+    ResetAndStartRecording { recording_fps: f64 },
     StopRecording,
 }
 
@@ -203,7 +203,7 @@ impl Application {
                             );
                         }
                     }
-                    ApplicationEvent::ResetAndStartRecording => {
+                    ApplicationEvent::ResetAndStartRecording { recording_fps } => {
                         if let Some(ref mut scene) = self.scene {
                             scene.reset(
                                 &self.device,
@@ -214,6 +214,7 @@ impl Application {
                             );
                         }
                         self.simulation_controller.restart();
+                        self.simulation_controller.start_recording_with_fixed_frame_length(*recording_fps);
                         for i in 0..usize::MAX {
                             let output_directory = PathBuf::from(format!("recording{}", i));
                             if !output_directory.exists() {
@@ -225,6 +226,7 @@ impl Application {
                     }
                     ApplicationEvent::StopRecording => {
                         self.recording_output_dir = PathBuf::new();
+                        self.simulation_controller.pause();
                     }
                 },
                 Event::WindowEvent { event, .. } => {
@@ -252,10 +254,10 @@ impl Application {
                             VirtualKeyCode::Snapshot => self.schedule_screenshot(), // Bug? doesn't seem to receive a winit::event::ElementState::Pressed event.
                             VirtualKeyCode::Space => {
                                 if let winit::event::ElementState::Pressed = state {
-                                    self.simulation_controller.status = if self.simulation_controller.status == SimulationControllerStatus::Paused {
-                                        SimulationControllerStatus::Realtime
+                                    if self.simulation_controller.status() == SimulationControllerStatus::Paused {
+                                        self.simulation_controller.resume_realtime();
                                     } else {
-                                        SimulationControllerStatus::Paused
+                                        self.simulation_controller.pause();
                                     }
                                 }
                             }
@@ -300,7 +302,7 @@ impl Application {
         self.camera.update(self.simulation_controller.timer());
 
         if self.recording_output_dir != PathBuf::default() {
-            if let SimulationControllerStatus::RecordingWithFixedFrameLength(_) = self.simulation_controller.status {
+            if let SimulationControllerStatus::RecordingWithFixedFrameLength(_) = self.simulation_controller.status() {
                 self.scheduled_screenshot = self
                     .recording_output_dir
                     .join(format!("{}.png", self.simulation_controller.timer().num_frames_rendered()));
