@@ -77,7 +77,6 @@ pub struct Screen {
 }
 
 // This seems like an excessively high number, but it allows us to stream out video even if the picture format is heavier
-// (e.g. png. TODO: Consider high(er) quality jpeg which should be faster and smaller but still good enough)
 const NUM_SCREENSHOT_BUFFERS: usize = 10;
 
 impl Screen {

@@ -484,7 +484,6 @@ impl HybridFluid {
         self.grid_dimension
     }
 
-    // todo: timing
     pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, queue: &wgpu::Queue) {
         if self.simulation_properties_dirty.get() {
             self.simulation_properties_uniformbuffer.update_content(queue, self.simulation_properties);

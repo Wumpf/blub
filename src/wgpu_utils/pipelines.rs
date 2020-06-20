@@ -48,13 +48,13 @@ pub struct RenderPipelineCreationDesc {
     pub primitive_topology: wgpu::PrimitiveTopology,
 
     /// The effect of draw calls on the color aspect of the output target.
-    pub color_states: Vec<wgpu::ColorStateDescriptor>, // TODO? Is Vec overkill for this allocation-wise? max color states is 4
+    pub color_states: Vec<wgpu::ColorStateDescriptor>,
 
     /// The effect of draw calls on the depth and stencil aspects of the output target, if any.
     pub depth_stencil_state: Option<wgpu::DepthStencilStateDescriptor>,
 
     /// The vertex input state for this pipeline.
-    pub vertex_state: wgpu::VertexStateDescriptor<'static>, // TODO? Is static lifetime asking too much?
+    pub vertex_state: wgpu::VertexStateDescriptor<'static>,
 
     /// The number of samples calculated per pixel (for MSAA).
     pub sample_count: u32,

@@ -3,7 +3,7 @@
 pub fn buffer(readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageBuffer {
         dynamic: false,
-        min_binding_size: None, // todo?,
+        min_binding_size: None,
         readonly,
     }
 }
@@ -11,7 +11,7 @@ pub fn buffer(readonly: bool) -> wgpu::BindingType {
 pub fn uniform() -> wgpu::BindingType {
     wgpu::BindingType::UniformBuffer {
         dynamic: false,
-        min_binding_size: None, // todo?
+        min_binding_size: None,
     }
 }
 
