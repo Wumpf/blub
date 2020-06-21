@@ -69,6 +69,8 @@ struct Particle {
     velocity_matrix_1: cgmath::Vector4<f32>,
     velocity_matrix_2: cgmath::Vector4<f32>,
 }
+unsafe impl bytemuck::Pod for Particle {}
+unsafe impl bytemuck::Zeroable for Particle {}
 
 impl HybridFluid {
     // particles are distributed 2x2x2 within a single gridcell
@@ -366,13 +368,7 @@ impl HybridFluid {
     }
 
     // Adds a cube of fluid. Coordinates are in grid space! Very slow operation!
-    pub fn add_fluid_cube(
-        &mut self,
-        device: &wgpu::Device,
-        init_encoder: &mut wgpu::CommandEncoder,
-        min_grid: cgmath::Point3<f32>,
-        max_grid: cgmath::Point3<f32>,
-    ) {
+    pub fn add_fluid_cube(&mut self, queue: &wgpu::Queue, min_grid: cgmath::Point3<f32>, max_grid: cgmath::Point3<f32>) {
         // align to whole cells for simplicity.
         let min_grid = self.clamp_to_grid(min_grid);
         let max_grid = self.clamp_to_grid(max_grid);
@@ -388,65 +384,48 @@ impl HybridFluid {
         }
         info!("Adding {} new particles", num_new_particles);
 
-        // Not using queue write operation since this is a large one-off write
-        let particle_size = std::mem::size_of::<Particle>() as u64;
-        let mapped_particle_update_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Buffer: Particle Update"),
-            size: num_new_particles as u64 * particle_size,
-            usage: wgpu::BufferUsage::COPY_SRC,
-            mapped_at_creation: true,
-        });
+        // Fill buffer with particle data
+        let mut rng: rand::rngs::SmallRng = rand::SeedableRng::seed_from_u64((self.simulation_properties.num_particles + num_new_particles) as u64);
+        let mut new_particles = Vec::new();
+        new_particles.resize(
+            num_new_particles as usize,
+            Particle {
+                position: cgmath::point3(0.0, 0.0, 0.0),
+                linked_list_next: 0xFFFFFFFF,
+                velocity_matrix_0: cgmath::Zero::zero(),
+                velocity_matrix_1: cgmath::Zero::zero(),
+                velocity_matrix_2: cgmath::Zero::zero(),
+            },
+        );
+        for (i, particle) in new_particles.iter_mut().enumerate() {
+            let cell = cgmath::point3(
+                (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
+                (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
+                (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
+            );
 
-        {
-            let mapped_particle_update_buffer_slice = mapped_particle_update_buffer.slice(..);
-            let mut particle_buffer_mapping = mapped_particle_update_buffer_slice.get_mapped_range_mut();
+            let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
 
-            // Fill buffer with particle data
-            let mut rng: rand::rngs::SmallRng = rand::SeedableRng::seed_from_u64(num_new_particles as u64);
-            let new_particles =
-                unsafe { std::slice::from_raw_parts_mut(particle_buffer_mapping.as_mut_ptr() as *mut Particle, num_new_particles as usize) };
-            for (i, particle) in new_particles.iter_mut().enumerate() {
-                let cell = cgmath::point3(
-                    (min_grid.x + i as u32 / Self::PARTICLES_PER_GRID_CELL % extent_cell.x) as f32,
-                    (min_grid.y + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x % extent_cell.y) as f32,
-                    (min_grid.z + i as u32 / Self::PARTICLES_PER_GRID_CELL / extent_cell.x / extent_cell.y) as f32,
-                );
+            // pure random
+            // let offset = rng.gen::<cgmath::Vector3<f32>>();
+            // pure regular
+            // let offset = cgmath::vec3(
+            //     (sample_idx % 2) as f32 + 0.5,
+            //     (sample_idx / 2 % 2) as f32 + 0.5,
+            //     (sample_idx / 4 % 2) as f32 + 0.5,
+            // ) * 0.5;
+            // stratified
+            let offset = cgmath::vec3((sample_idx % 2) as f32, (sample_idx / 2 % 2) as f32, (sample_idx / 4 % 2) as f32) * 0.5
+                + rng.gen::<cgmath::Vector3<f32>>() * 0.5;
 
-                let sample_idx = i as u32 % Self::PARTICLES_PER_GRID_CELL;
-
-                // pure random
-                // let offset = rng.gen::<cgmath::Vector3<f32>>();
-
-                // pure regular
-                // let offset = cgmath::vec3(
-                //     (sample_idx % 2) as f32 + 0.5,
-                //     (sample_idx / 2 % 2) as f32 + 0.5,
-                //     (sample_idx / 4 % 2) as f32 + 0.5,
-                // ) * 0.5;
-
-                // stratified
-                let offset = cgmath::vec3((sample_idx % 2) as f32, (sample_idx / 2 % 2) as f32, (sample_idx / 4 % 2) as f32) * 0.5
-                    + rng.gen::<cgmath::Vector3<f32>>() * 0.5;
-
-                let position = cell + offset;
-
-                *particle = Particle {
-                    position,
-                    linked_list_next: 0xFFFFFFFF,
-                    velocity_matrix_0: cgmath::Zero::zero(),
-                    velocity_matrix_1: cgmath::Zero::zero(),
-                    velocity_matrix_2: cgmath::Zero::zero(),
-                };
-            }
+            particle.position = cell + offset;
         }
 
-        mapped_particle_update_buffer.unmap();
-        init_encoder.copy_buffer_to_buffer(
-            &mapped_particle_update_buffer,
-            0,
+        let particle_size = std::mem::size_of::<Particle>() as u64;
+        queue.write_buffer(
             &self.particles,
             self.simulation_properties.num_particles as u64 * particle_size,
-            num_new_particles as u64 * particle_size,
+            bytemuck::cast_slice(&new_particles),
         );
         self.simulation_properties.num_particles += num_new_particles;
         self.simulation_properties_dirty.set(true);

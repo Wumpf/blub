@@ -64,10 +64,6 @@ impl Scene {
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> HybridFluid {
-        let mut init_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("HybridFluid Init Encoder"),
-        });
-
         let mut hybrid_fluid = HybridFluid::new(
             device,
             wgpu::Extent3d {
@@ -83,14 +79,15 @@ impl Scene {
 
         for cube in config.fluid.fluid_cubes.iter() {
             hybrid_fluid.add_fluid_cube(
-                device,
-                &mut init_encoder,
+                queue,
                 cube.min / config.fluid.grid_to_world_scale,
                 cube.max / config.fluid.grid_to_world_scale,
             );
         }
-        queue.submit(Some(init_encoder.finish()));
         hybrid_fluid.set_gravity_grid(config.gravity / config.fluid.grid_to_world_scale);
+
+        // Creating the fluid is quite heavy, make sure we're done with all the buffer book-keeping before we move on.
+        device.poll(wgpu::Maintain::Wait);
         hybrid_fluid
     }
 
