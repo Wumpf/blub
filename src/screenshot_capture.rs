@@ -126,11 +126,16 @@ impl ScreenshotCapture {
 
     pub fn capture_screenshot(&mut self, path: &Path, backbuffer: &wgpu::Texture, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
         if self.unused_screenshot_buffers.len() == 0 {
-            warn!("No more unused screenshot buffers available. Waiting for GPU/screenshot writer to catch up and draining screenshot queue...");
-            while self.unused_screenshot_buffers.len() == 0 {
-                device.poll(wgpu::Maintain::Poll);
-                self.process_pending_screenshots();
-                std::thread::yield_now();
+            device.poll(wgpu::Maintain::Poll);
+            self.process_pending_screenshots();
+
+            if self.unused_screenshot_buffers.len() == 0 {
+                warn!("No more unused screenshot buffers available. Waiting for GPU/writer to catch up and draining screenshot queue...");
+                while self.unused_screenshot_buffers.len() == 0 {
+                    std::thread::yield_now();
+                    device.poll(wgpu::Maintain::Poll);
+                    self.process_pending_screenshots();
+                }
             }
         }
         let buffer = self.unused_screenshot_buffers.pop().unwrap();
