@@ -8,6 +8,12 @@ use std::{
     path::Path,
 };
 
+#[derive(Deserialize)]
+pub struct Box {
+    pub min: cgmath::Point3<f32>,
+    pub max: cgmath::Point3<f32>,
+}
+
 // Data describing a fluid in the scene.
 #[derive(Deserialize)]
 pub struct FluidConfig {
@@ -15,6 +21,7 @@ pub struct FluidConfig {
     pub grid_to_world_scale: f32,
     pub grid_dimension: cgmath::Point3<u32>,
     pub max_num_particles: u32,
+    pub fluid_cubes: Vec<Box>,
 }
 
 // Data describing a scene.
@@ -74,12 +81,14 @@ impl Scene {
             per_frame_bind_group_layout,
         );
 
-        hybrid_fluid.add_fluid_cube(
-            device,
-            &mut init_encoder,
-            cgmath::Point3::new(1.0, 1.0, 1.0),
-            cgmath::Point3::new(64.0, 40.0, 64.0),
-        );
+        for cube in config.fluid.fluid_cubes.iter() {
+            hybrid_fluid.add_fluid_cube(
+                device,
+                &mut init_encoder,
+                cube.min / config.fluid.grid_to_world_scale,
+                cube.max / config.fluid.grid_to_world_scale,
+            );
+        }
         queue.submit(Some(init_encoder.finish()));
         hybrid_fluid.set_gravity_grid(config.gravity / config.fluid.grid_to_world_scale);
         hybrid_fluid

@@ -357,10 +357,11 @@ impl HybridFluid {
     }
 
     fn clamp_to_grid(&self, grid_cor: cgmath::Point3<f32>) -> cgmath::Point3<u32> {
+        // Due to the design of the grid, the 0-1 range is reserved by solid cells and can't be filled.
         cgmath::Point3::new(
-            self.grid_dimension.width.min(grid_cor.x as u32),
-            self.grid_dimension.height.min(grid_cor.y as u32),
-            self.grid_dimension.depth.min(grid_cor.z as u32),
+            self.grid_dimension.width.min(grid_cor.x as u32).max(1),
+            self.grid_dimension.height.min(grid_cor.y as u32).max(1),
+            self.grid_dimension.depth.min(grid_cor.z as u32).max(1),
         )
     }
 

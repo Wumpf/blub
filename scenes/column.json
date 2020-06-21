@@ -1,0 +1,35 @@
+{
+    "gravity": {
+        "x": 0.0,
+        "y": -9.81,
+        "z": 0.0
+    },
+    "fluid": {
+        "world_position": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+        },
+        "max_num_particles": 3244032,
+        "grid_to_world_scale": 0.01,
+        "grid_dimension": {
+            "x": 256,
+            "y": 128,
+            "z": 256
+        },
+        "fluid_cubes": [
+            {
+                "min": {
+                    "x": 0.96,
+                    "y": 0.0,
+                    "z": 0.96
+                },
+                "max": {
+                    "x": 1.6,
+                    "y": 1.0,
+                    "z": 1.6
+                }
+            }
+        ]
+    }
+}
