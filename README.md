@@ -5,11 +5,41 @@ Focusing primarily on hybrid approaches lagrangian/eularian approaches here (PIC
 
 For SPH (pure lagrangian) fluid simulation, check out my simple 2D DFSPH fluid simulator, [YASPH2D](https://github.com/Wumpf/yasph2d).
 
-## Details (at this point random assortment thereof)
+## Application / Framework
+
+### Build & Run
+
+`cargo run`
+Should work on Linux/Mac/Windows. (I'm developing on Windows, so things might break at random for the others)
+Doing release mode (`cargo run --release`) gives quite a performance boost since I have shader optimizations turned off in non-optimized builds.
+
+### Shaders
+
+GLSL, compiled to SPIR-V at runtime. Shaders are hot reloaded on change, have fun!  
+(on failure it will use the previously loaded shader)
+
+### "Scenes"
+
+Simple json format where I dump various properties that I think are either too hard/annoying to set via UI at all or I'd like to have saved.
+Can be reloaded at runtime and will pick up any change
+
+### Major Dependencies
+
+* [WebGPU-rs](https://github.com/gfx-rs/wgpu)
+  * [webgpu](https://gpuweb.github.io/gpuweb/) but in Rust!
+  * as of writing all this is still in heavy development, so I'm using some master version, updated in irregular intervals
+* [DearImGUI](https://github.com/ocornut/imgui)
+  * or rather, its [Rust binding](https://github.com/Gekkio/imgui-rs)
+  * I'm maintaining a fork of the webgpu-rs binding layer [here](https://github.com/Wumpf/imgui-wgpu-rs/tree/use-wgpu-master) to be able to use newest version
+* various other amazing crates, check [cargo.toml](https://github.com/Wumpf/blub/blob/master/Cargo.toml) file
+
+## Simulation
 
 To learn more about fluid simulation in general, check out [my Gist on CFD](https://gist.github.com/Wumpf/b3e953984de8b0efdf2c65e827a1ccc3) where I gathered a lot of resources on the topic.
 
 Implements currently APIC, [SIGGRAPH 2015, Jiang et al., The Affine Particle-In-Cell Method](https://www.math.ucla.edu/%7Ejteran/papers/JSSTS15.pdf).
+
+Noted down a few interesting bits here.
 
 ### Particle to Grid Transfer
 
@@ -29,7 +59,6 @@ I eventually settled with three different grids, processing a single velocity co
 
 Note that _by far_ the biggest bottleneck in this approach is walking the particle linked list. Doing a shared memory optimization yielded >4x performance speed up:
 Every thread walks only a single linked list, stores the result to shared memory and then reads the remaining seven neighbor linked lists from shared memory. 👌
-
 
 ### Velocity Extrapolation
 
@@ -51,7 +80,14 @@ Extrapolation in Blub:
     * it's a bit more complex than normal extrapolation schemes since in order to get around double buffering velocities/markers we do everything in a single pass.
 * don't use anything fancy that needs velocity elsewhere 🙂
 
-## Name
+## Rendering
 
+TODO!
+
+Particle visualization with quads. Put a ridiculous amount of effort into to make the quads display perspective correct spheres. Enjoy!
+
+## Trivia
+
+### Name
 From German *[blubbern](https://en.wiktionary.org/wiki/blubbern)*, to bubble.  
 Found out later that there was a [water park in Berlin](https://en.wikipedia.org/wiki/Blub_(water_park)) with that name, but it closed down in 2002.
