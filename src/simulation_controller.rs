@@ -88,7 +88,6 @@ impl SimulationController {
 
     pub fn restart(&mut self) {
         self.timer = Timer::new(delta_from_steps_per_second(self.simulation_steps_per_second));
-        self.resume_realtime();
     }
 
     // A single fast forward operation is technically just a "very long frame".

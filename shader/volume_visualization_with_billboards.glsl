@@ -23,12 +23,12 @@ void main() {
     if (marker != CELL_FLUID)
         divergence = 0.0;
 
-    float scale = clamp(divergence * 10.0, -1.0, 1.0);
+    float scale = clamp(divergence * 10.0 * Rendering.FluidGridToWorldScale, -1.0, 1.0);
     out_Tint = colormapCoolToWarm(scale);
     scale = abs(scale);
 #elif defined(VISUALIZE_PRESSURE)
     float pressure = marker == CELL_FLUID ? texelFetch(PressureVolume, volumeCoordinate, 0).x : 0.0;
-    float scale = saturate(pressure * pressure * 0.05);
+    float scale = saturate(pressure * pressure * Rendering.FluidGridToWorldScale * 0.01);
     out_Tint = colormapHeat(scale).grb;
 #elif defined(VISUALIZE_MARKER)
     float scale = marker == CELL_AIR ? 0.0 : 1.0;
