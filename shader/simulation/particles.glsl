@@ -2,14 +2,15 @@
 // Otherwise this is the value for an invalid linked list ptr.
 #define INVALID_LINKED_LIST_PTR 0xFFFFFFFF
 
-struct Particle {
+struct ParticlePositionLl {
     // Particle positions are in grid space to simplify shader computation
     // (no scaling/translation needed until we're rendering or interacting with other objects!)
     // Grid coordinates are non-fractional.
     vec3 Position;
     uint LinkedListNext;
-
-    // 3x3 Velocity jacobi matrix (APIC) + velocity vector (column 4)
-    // We want a mat4x3 with row major storage. This works with special layout attributes but assignment is still weird, so let's play this safe!
-    vec4 VelocityMatrix[3];
 };
+
+// Every particle also has 3x float4 to store the affine velocity matrix (APIC!)
+// Experiments have shown that this split up is considerably faster for transfer_build_linkedlist and update_particles (and slightly slower for
+// transfer_gather).
+// (Speedup of transfer_build_linkedlist makes a lot of sense but speedup of update_particles is unclear!)

@@ -5,11 +5,14 @@
 #include "hybrid_fluid.glsl"
 #include "particles.glsl"
 
-layout(set = 2, binding = 0) buffer restrict ParticleBuffer { Particle Particles[]; };
-layout(set = 2, binding = 1) uniform texture3D VelocityVolumeX;
-layout(set = 2, binding = 2) uniform texture3D VelocityVolumeY;
-layout(set = 2, binding = 3) uniform texture3D VelocityVolumeZ;
-layout(set = 2, binding = 4) uniform utexture3D MarkerVolume;
+layout(set = 2, binding = 0) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
+layout(set = 2, binding = 1) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
+layout(set = 2, binding = 2) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
+layout(set = 2, binding = 3) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
+layout(set = 2, binding = 4) uniform texture3D VelocityVolumeX;
+layout(set = 2, binding = 5) uniform texture3D VelocityVolumeY;
+layout(set = 2, binding = 6) uniform texture3D VelocityVolumeZ;
+layout(set = 2, binding = 7) uniform utexture3D MarkerVolume;
 
 COMPUTE_PASS_PARTICLES
 
@@ -107,9 +110,9 @@ void main() {
 
     // Write out particle.
     Particles[particleIndex].Position = newPosition;
-    Particles[particleIndex].VelocityMatrix[0] = vec4(cx, newVelocity.x);
-    Particles[particleIndex].VelocityMatrix[1] = vec4(cy, newVelocity.y);
-    Particles[particleIndex].VelocityMatrix[2] = vec4(cz, newVelocity.z);
+    ParticleBufferVelocityX[particleIndex] = vec4(cx, newVelocity.x);
+    ParticleBufferVelocityY[particleIndex] = vec4(cy, newVelocity.y);
+    ParticleBufferVelocityZ[particleIndex] = vec4(cz, newVelocity.z);
     // PIC only
     // Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
     // Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);

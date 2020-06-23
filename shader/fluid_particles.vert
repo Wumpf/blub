@@ -14,8 +14,8 @@ layout(location = 3) out float out_Radius;
 
 void main() {
     out_Radius = 0.25 * Rendering.FluidGridToWorldScale;
-    vec3 velocity = vec3(Particles[gl_InstanceIndex].VelocityMatrix[0].w, Particles[gl_InstanceIndex].VelocityMatrix[1].w,
-                         Particles[gl_InstanceIndex].VelocityMatrix[2].w);
+    vec3 velocity =
+        vec3(ParticleBufferVelocityX[gl_InstanceIndex].w, ParticleBufferVelocityY[gl_InstanceIndex].w, ParticleBufferVelocityZ[gl_InstanceIndex].w);
     out_Tint = colormapHeat(length(velocity) * Rendering.VelocityVisualizationScale);
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
     out_WorldPosition = spanParticle(out_ParticleWorldPosition, out_Radius);

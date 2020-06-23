@@ -26,7 +26,7 @@ unsafe impl bytemuck::Zeroable for TransferVelocityToGridUniformBufferContent {}
 pub struct HybridFluid {
     grid_dimension: wgpu::Extent3d,
 
-    particles: wgpu::Buffer,
+    particles_position_llindex: wgpu::Buffer,
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
     simulation_properties: SimulationPropertiesUniformBufferContent,
     simulation_properties_dirty: Cell<bool>,
@@ -56,25 +56,20 @@ pub struct HybridFluid {
 
 static mut GROUP_LAYOUT_RENDERER: Option<BindGroupLayoutWithDesc> = None;
 
-// todo: probably want to split this up into several buffers
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Particle {
+struct ParticlePositionLl {
     // Particle positions are in grid space to simplify shader computation
     // (no scaling/translation needed until we're rendering or interacting with other objects!)
     position: cgmath::Point3<f32>,
     linked_list_next: u32,
-
-    velocity_matrix_0: cgmath::Vector4<f32>,
-    velocity_matrix_1: cgmath::Vector4<f32>,
-    velocity_matrix_2: cgmath::Vector4<f32>,
 }
-unsafe impl bytemuck::Pod for Particle {}
-unsafe impl bytemuck::Zeroable for Particle {}
+unsafe impl bytemuck::Pod for ParticlePositionLl {}
+unsafe impl bytemuck::Zeroable for ParticlePositionLl {}
 
 impl HybridFluid {
     // particles are distributed 2x2x2 within a single gridcell
-    // (seems to be widely accepted as the default)
+    // (seems to be widely accepted as the default. Houdini seems to have this configurable from 4-16, maybe worth experimenting with it! (todo))
     const PARTICLES_PER_GRID_CELL: u32 = 8;
 
     pub fn new(
@@ -90,14 +85,18 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: HybridFluid Uniform");
         let group_layout_transfer_velocity = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::buffer(false)) // particles
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
+            .next_binding_compute(binding_glsl::buffer(true)) // particles, velocity component
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R8Uint, false)) // marker volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocity component
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
         let group_layout_write_particles_volume = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::buffer(false)) // particles
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityX
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityY
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityZ
@@ -105,7 +104,10 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture2D()) // pressure
             .create(device, "BindGroupLayout: Update Particles and/or Velocity Grid");
         let group_layout_write_particles = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::buffer(false)) // particles
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
             .next_binding_compute(binding_glsl::texture3D()) // velocityX
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
@@ -123,13 +125,31 @@ impl HybridFluid {
 
         // Resources
         let simulation_properties_uniformbuffer = UniformBuffer::new(device);
-        let particle_buffer_size = max_num_particles as u64 * std::mem::size_of::<Particle>() as u64;
-        let particles = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Buffer: ParticleBuffer"),
-            size: particle_buffer_size,
+        let particles_position_llindex = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Buffer: Particles position & llindex"),
+            size: max_num_particles as u64 * std::mem::size_of::<ParticlePositionLl>() as u64,
             usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
             mapped_at_creation: false,
         });
+        let particles_velocity_x = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Buffer: Particles velocity X"),
+            size: max_num_particles as u64 * std::mem::size_of::<cgmath::Vector4<f32>>() as u64,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let particles_velocity_y = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Buffer: Particles velocity Y"),
+            size: max_num_particles as u64 * std::mem::size_of::<cgmath::Vector4<f32>>() as u64,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let particles_velocity_z = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Buffer: Particles velocity Z"),
+            size: max_num_particles as u64 * std::mem::size_of::<cgmath::Vector4<f32>>() as u64,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let create_volume_texture_descriptor = |label: &'static str, format: wgpu::TextureFormat| -> wgpu::TextureDescriptor {
             wgpu::TextureDescriptor {
                 label: Some(label),
@@ -172,21 +192,24 @@ impl HybridFluid {
 
         let bind_group_transfer_velocity = [
             BindGroupBuilder::new(&group_layout_transfer_velocity)
-                .buffer(particles.slice(..))
+                .buffer(particles_position_llindex.slice(..))
+                .buffer(particles_velocity_x.slice(..))
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_x)
                 .resource(ubo_transfer_velocity[0].binding_resource())
                 .create(device, "BindGroup: Transfer velocity to volume X"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
-                .buffer(particles.slice(..))
+                .buffer(particles_position_llindex.slice(..))
+                .buffer(particles_velocity_y.slice(..))
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_y)
                 .resource(ubo_transfer_velocity[1].binding_resource())
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
-                .buffer(particles.slice(..))
+                .buffer(particles_position_llindex.slice(..))
+                .buffer(particles_velocity_z.slice(..))
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_z)
@@ -195,7 +218,10 @@ impl HybridFluid {
         ];
 
         let bind_group_write_particles_volume = BindGroupBuilder::new(&group_layout_write_particles_volume)
-            .buffer(particles.slice(..))
+            .buffer(particles_position_llindex.slice(..))
+            .buffer(particles_velocity_x.slice(..))
+            .buffer(particles_velocity_y.slice(..))
+            .buffer(particles_velocity_z.slice(..))
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
@@ -203,7 +229,10 @@ impl HybridFluid {
             .texture(&volume_pressure0_view)
             .create(device, "BindGroup: Update Particles and/or Velocity Grid");
         let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
-            .buffer(particles.slice(..))
+            .buffer(particles_position_llindex.slice(..))
+            .buffer(particles_velocity_x.slice(..))
+            .buffer(particles_velocity_y.slice(..))
+            .buffer(particles_velocity_z.slice(..))
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
@@ -240,7 +269,10 @@ impl HybridFluid {
         ];
 
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
-            .buffer(particles.slice(..))
+            .buffer(particles_position_llindex.slice(..))
+            .buffer(particles_velocity_x.slice(..))
+            .buffer(particles_velocity_y.slice(..))
+            .buffer(particles_velocity_z.slice(..))
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
@@ -328,7 +360,7 @@ impl HybridFluid {
         HybridFluid {
             grid_dimension,
 
-            particles,
+            particles_position_llindex,
             simulation_properties_uniformbuffer,
             simulation_properties: SimulationPropertiesUniformBufferContent {
                 num_particles: 0,
@@ -389,12 +421,9 @@ impl HybridFluid {
         let mut new_particles = Vec::new();
         new_particles.resize(
             num_new_particles as usize,
-            Particle {
+            ParticlePositionLl {
                 position: cgmath::point3(0.0, 0.0, 0.0),
                 linked_list_next: 0xFFFFFFFF,
-                velocity_matrix_0: cgmath::Zero::zero(),
-                velocity_matrix_1: cgmath::Zero::zero(),
-                velocity_matrix_2: cgmath::Zero::zero(),
             },
         );
         for (i, particle) in new_particles.iter_mut().enumerate() {
@@ -421,9 +450,9 @@ impl HybridFluid {
             particle.position = cell + offset;
         }
 
-        let particle_size = std::mem::size_of::<Particle>() as u64;
+        let particle_size = std::mem::size_of::<ParticlePositionLl>() as u64;
         queue.write_buffer(
-            &self.particles,
+            &self.particles_position_llindex,
             self.simulation_properties.num_particles as u64 * particle_size,
             bytemuck::cast_slice(&new_particles),
         );
@@ -444,7 +473,10 @@ impl HybridFluid {
         unsafe {
             GROUP_LAYOUT_RENDERER.get_or_insert_with(|| {
                 BindGroupLayoutBuilder::new()
-                    .next_binding_vertex(binding_glsl::buffer(true)) // particles
+                    .next_binding_vertex(binding_glsl::buffer(true)) // particles, position llindex
+                    .next_binding_vertex(binding_glsl::buffer(true)) // particles, velocityX
+                    .next_binding_vertex(binding_glsl::buffer(true)) // particles, velocityY
+                    .next_binding_vertex(binding_glsl::buffer(true)) // particles, velocityZ
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityX
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityY
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityZ
