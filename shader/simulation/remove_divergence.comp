@@ -4,14 +4,14 @@
 #version 450
 
 #include "../utilities.glsl"
-#include "bindings_write_particles_volume.glsl"
+#include "bindings_write_volume.glsl"
 
 COMPUTE_PASS_VOLUME
 
 float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, float currentCellStaggeredVelocity, const uint component) {
     coord[component] += 1;
 
-    uint neighborType = imageLoad(MarkerVolume, coord).x;
+    uint neighborType = texelFetch(MarkerVolume, coord, 0).x;
     float neighborPressure = neighborType == CELL_FLUID ? texelFetch(PressureVolume, coord, 0).x : 0.0;
 
     [[flatten]] if (neighborType == CELL_SOLID) {
@@ -30,7 +30,7 @@ void main() {
     vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
-    uint cellType = imageLoad(MarkerVolume, gridCoord).x;
+    uint cellType = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (cellType != CELL_FLUID)
         return;
 
