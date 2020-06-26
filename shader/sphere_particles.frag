@@ -9,10 +9,13 @@ layout(location = 2) in vec3 in_Tint;
 layout(location = 3) in float in_Radius;
 layout(location = 0) out vec4 out_Color;
 
+// Note that we promise to only lessen the depth value, so gpu can still do some hi-z/early depth culling
+layout(depth_less) out float gl_FragDepth;
+
 void main() {
     const vec3 lightdir = normalize(vec3(1.0, 2.0, 1.0));
 
-    // Sphere intersect raycast. Given how obscure our vertex positions are, this is the easiest!
+    // Sphere intersect raycast.
     // (uses equation based intersect: rayOrigin + t * rayDir, ||sphereOrigin-pointOnSphere||= r*r, [...])
     vec3 rayDir = normalize(in_WorldPosition - Camera.Position);
     vec3 particleCenterToCamera = Camera.Position - in_ParticleWorldPosition; // (often denoted as oc == OriginCenter)
@@ -25,6 +28,10 @@ void main() {
 
     vec3 sphereWorldPos = Camera.Position + cameraDistance * rayDir;
     vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / in_Radius;
+
+    // Adjust depth buffer value.
+    vec2 projected_zw = (Camera.ViewProjection * vec4(sphereWorldPos, 1.0)).zw; // (trusting optimizer to pick the right thing ;-))
+    gl_FragDepth = projected_zw.x / projected_zw.y;
 
     // via https://www.iquilezles.org/www/articles/outdoorslighting/outdoorslighting.htm
     float sun = saturate(dot(lightdir, normal));
