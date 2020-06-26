@@ -1,4 +1,5 @@
 #include "simulation/particles.glsl"
+#include "utilities.glsl"
 
 layout(set = 1, binding = 0) buffer restrict readonly ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
 layout(set = 1, binding = 1) buffer restrict readonly ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };

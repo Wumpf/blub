@@ -33,26 +33,26 @@ impl VolumeRenderer {
 
         let mut velocity_render_pipeline_desc = RenderPipelineCreationDesc::new(
             layout.clone(),
-            Path::new("volume_visualization_velocity.vert"),
+            Path::new("volume_visualization/velocity.vert"),
             Some(Path::new("vertex_color.frag")),
         );
         velocity_render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
 
         let divergence_render_pipeline_desc = RenderPipelineCreationDesc::new(
             layout.clone(),
-            Path::new("volume_visualization_divergence.vert"),
+            Path::new("volume_visualization/divergence.vert"),
             Some(Path::new("sphere_particles.frag")),
         );
 
         let pressure_render_pipeline_desc = RenderPipelineCreationDesc::new(
             layout.clone(),
-            Path::new("volume_visualization_pressure.vert"),
+            Path::new("volume_visualization/pressure.vert"),
             Some(Path::new("sphere_particles.frag")),
         );
 
         let marker_render_pipeline_desc = RenderPipelineCreationDesc::new(
             layout.clone(),
-            Path::new("volume_visualization_marker.vert"),
+            Path::new("volume_visualization/marker.vert"),
             Some(Path::new("sphere_particles.frag")),
         );
 

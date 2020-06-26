@@ -1,8 +1,8 @@
+#include "fluid_render_info.glsl"
 #include "per_frame_resources.glsl"
 #include "simulation/hybrid_fluid.glsl"
 #include "sphere_particles.glsl"
 #include "utilities.glsl"
-#include "visualization.glsl"
 
 out gl_PerVertex { vec4 gl_Position; };
 
