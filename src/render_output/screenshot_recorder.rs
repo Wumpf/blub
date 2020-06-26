@@ -1,4 +1,4 @@
-use crate::screen::Screen;
+use super::screen::Screen;
 use std::path::{Path, PathBuf};
 
 pub struct ScreenshotRecorder {

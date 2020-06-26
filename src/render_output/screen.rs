@@ -1,4 +1,4 @@
-use crate::screenshot_capture::ScreenshotCapture;
+use super::screenshot_capture::ScreenshotCapture;
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
@@ -6,7 +6,7 @@ use pipelines::*;
 use std::path::Path;
 
 pub struct Screen {
-    pub resolution: winit::dpi::PhysicalSize<u32>,
+    resolution: winit::dpi::PhysicalSize<u32>,
     swap_chain: wgpu::SwapChain,
 
     backbuffer: wgpu::Texture,
@@ -56,7 +56,7 @@ impl Screen {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::FORMAT_BACKBUFFER,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::COPY_SRC | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
         });
         let backbuffer_view = backbuffer.create_default_view();
 
@@ -123,6 +123,10 @@ impl Screen {
         self.resolution.width as f32 / self.resolution.height as f32
     }
 
+    pub fn resolution(&self) -> winit::dpi::PhysicalSize<u32> {
+        self.resolution
+    }
+
     pub fn backbuffer(&self) -> &wgpu::TextureView {
         &self.backbuffer_view
     }
@@ -140,6 +144,7 @@ impl Screen {
     }
 
     pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder) {
+        // TODO: Avoid this copy when not taking a screenshot?
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &output.view,

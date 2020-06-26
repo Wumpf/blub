@@ -1,5 +1,5 @@
 use super::shader::{ShaderDirectory, SHADER_ENTRY_POINT_NAME};
-use crate::screen::Screen;
+use crate::render_output::screen::Screen;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 

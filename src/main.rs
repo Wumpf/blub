@@ -9,19 +9,16 @@ mod camera;
 mod gui;
 mod hybrid_fluid;
 mod per_frame_resources;
+mod render_output;
 mod renderer;
 mod scene;
-mod screen;
-mod screenshot_capture;
-mod screenshot_recorder;
 mod simulation_controller;
 mod timer;
 mod wgpu_utils;
 
 use per_frame_resources::*;
+use render_output::{screen::Screen, screenshot_recorder::ScreenshotRecorder};
 use renderer::SceneRenderer;
-use screen::*;
-use screenshot_recorder::ScreenshotRecorder;
 use simulation_controller::SimulationControllerStatus;
 use std::{
     path::{Path, PathBuf},
@@ -257,7 +254,7 @@ impl Application {
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         // occasionally window size drops to zero which causes crashes along the way
-        if self.screen.resolution != size && size.width != 0 && size.height != 0 {
+        if self.screen.resolution() != size && size.width != 0 && size.height != 0 {
             self.screen = Screen::new(&self.device, &self.window_surface, size, &self.shader_dir);
         }
     }
