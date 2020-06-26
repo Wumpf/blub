@@ -17,7 +17,7 @@ mod timer;
 mod wgpu_utils;
 
 use per_frame_resources::*;
-use render_output::{screen::Screen, screenshot_recorder::ScreenshotRecorder};
+use render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen, screenshot_recorder::ScreenshotRecorder};
 use renderer::SceneRenderer;
 use simulation_controller::SimulationControllerStatus;
 use std::{
@@ -44,6 +44,7 @@ struct Application {
     window: Window,
     window_surface: wgpu::Surface,
     screen: Screen,
+    hdr_backbuffer: HdrBackbuffer,
     screenshot_recorder: ScreenshotRecorder,
 
     device: wgpu::Device,
@@ -98,6 +99,7 @@ impl Application {
         let mut pipeline_manager = pipelines::PipelineManager::new();
 
         let screen = Screen::new(&device, &window_surface, window.inner_size(), &shader_dir);
+        let hdr_backbuffer = HdrBackbuffer::new(&device, &screen, &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
         let simulation_controller = simulation_controller::SimulationController::new();
         let scene_renderer = SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
@@ -107,6 +109,7 @@ impl Application {
             window,
             window_surface,
             screen,
+            hdr_backbuffer,
             screenshot_recorder: ScreenshotRecorder::new(),
 
             device,
@@ -256,6 +259,7 @@ impl Application {
         // occasionally window size drops to zero which causes crashes along the way
         if self.screen.resolution() != size && size.width != 0 && size.height != 0 {
             self.screen = Screen::new(&self.device, &self.window_surface, size, &self.shader_dir);
+            self.hdr_backbuffer = HdrBackbuffer::new(&self.device, &self.screen, &self.shader_dir);
         }
     }
 
@@ -297,11 +301,13 @@ impl Application {
                 scene,
                 &mut encoder,
                 &self.pipeline_manager,
-                self.screen.backbuffer(),
+                self.hdr_backbuffer.texture_view(),
                 self.screen.depthbuffer(),
                 self.per_frame_resources.bind_group(),
             );
         }
+
+        self.hdr_backbuffer.tonemap(&self.screen.backbuffer(), &mut encoder);
 
         self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
 

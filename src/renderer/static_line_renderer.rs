@@ -1,5 +1,8 @@
 use crate::wgpu_utils::pipelines::*;
-use crate::wgpu_utils::shader::*;
+use crate::{
+    render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen},
+    wgpu_utils::shader::*,
+};
 use std::{path::Path, rc::Rc};
 
 #[repr(C)]
@@ -41,6 +44,8 @@ impl StaticLineRenderer {
             })),
             Path::new("lines.vert"),
             Some(Path::new("vertex_color.frag")),
+            HdrBackbuffer::FORMAT,
+            Some(Screen::FORMAT_DEPTH),
         );
         render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
         render_pipeline_desc.vertex_state = wgpu::VertexStateDescriptor {

@@ -21,7 +21,7 @@ pub struct Screen {
 
 impl Screen {
     pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-    pub const FORMAT_SWAPCHAIN: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
+    const FORMAT_SWAPCHAIN: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
     pub const FORMAT_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn new(
@@ -56,7 +56,7 @@ impl Screen {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::FORMAT_BACKBUFFER,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_SRC,
         });
         let backbuffer_view = backbuffer.create_default_view();
 
@@ -144,7 +144,13 @@ impl Screen {
     }
 
     pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder) {
-        // TODO: Avoid this copy when not taking a screenshot?
+        // why this extra copy?
+        // Webgpu doesn't allow us to do anything with the swapchain target but read from it!
+        // That means that we can never take a screenshot.
+        //
+        // The only thing that could be done better here is to avoid this copy for frames that don't take screenshots.
+        // However, this would require that backbuffer() gives out a different texture depending on whether this is a frame with or without screenshot.
+        // Right now this is not possible since they have different formats. Could fix that, but all it safes us is this copy here (can't remove the buffer either)
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &output.view,

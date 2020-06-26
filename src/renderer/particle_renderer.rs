@@ -1,6 +1,9 @@
 use crate::hybrid_fluid::*;
 use crate::wgpu_utils::pipelines::*;
-use crate::wgpu_utils::shader::*;
+use crate::{
+    render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen},
+    wgpu_utils::shader::*,
+};
 use std::{path::Path, rc::Rc};
 
 pub struct ParticleRenderer {
@@ -24,6 +27,8 @@ impl ParticleRenderer {
                 })),
                 Path::new("fluid_particles.vert"),
                 Some(Path::new("sphere_particles.frag")),
+                HdrBackbuffer::FORMAT,
+                Some(Screen::FORMAT_DEPTH),
             ),
         );
         ParticleRenderer { render_pipeline }

@@ -1,6 +1,9 @@
 use crate::hybrid_fluid::HybridFluid;
 use crate::shader::ShaderDirectory;
-use crate::wgpu_utils::pipelines::*;
+use crate::{
+    render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen},
+    wgpu_utils::pipelines::*,
+};
 use std::{path::Path, rc::Rc};
 
 #[derive(Clone, Copy, Debug, EnumIter)]
@@ -35,6 +38,8 @@ impl VolumeRenderer {
             layout.clone(),
             Path::new("volume_visualization/velocity.vert"),
             Some(Path::new("vertex_color.frag")),
+            HdrBackbuffer::FORMAT,
+            Some(Screen::FORMAT_DEPTH),
         );
         velocity_render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
 
@@ -42,18 +47,24 @@ impl VolumeRenderer {
             layout.clone(),
             Path::new("volume_visualization/divergence.vert"),
             Some(Path::new("sphere_particles.frag")),
+            HdrBackbuffer::FORMAT,
+            Some(Screen::FORMAT_DEPTH),
         );
 
         let pressure_render_pipeline_desc = RenderPipelineCreationDesc::new(
             layout.clone(),
             Path::new("volume_visualization/pressure.vert"),
             Some(Path::new("sphere_particles.frag")),
+            HdrBackbuffer::FORMAT,
+            Some(Screen::FORMAT_DEPTH),
         );
 
         let marker_render_pipeline_desc = RenderPipelineCreationDesc::new(
             layout.clone(),
             Path::new("volume_visualization/marker.vert"),
             Some(Path::new("sphere_particles.frag")),
+            HdrBackbuffer::FORMAT,
+            Some(Screen::FORMAT_DEPTH),
         );
 
         VolumeRenderer {

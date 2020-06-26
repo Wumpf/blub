@@ -1,5 +1,4 @@
 use super::shader::{ShaderDirectory, SHADER_ENTRY_POINT_NAME};
-use crate::render_output::screen::Screen;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
@@ -71,7 +70,13 @@ pub struct RenderPipelineCreationDesc {
 }
 
 impl RenderPipelineCreationDesc {
-    pub fn new(layout: Rc<wgpu::PipelineLayout>, vertex_shader_relative_path: &Path, fragment_shader_relative_path: Option<&Path>) -> Self {
+    pub fn new(
+        layout: Rc<wgpu::PipelineLayout>,
+        vertex_shader_relative_path: &Path,
+        fragment_shader_relative_path: Option<&Path>,
+        output_format: wgpu::TextureFormat,
+        depth_format: Option<wgpu::TextureFormat>,
+    ) -> Self {
         RenderPipelineCreationDesc {
             layout: layout,
             vertex_shader_relative_path: PathBuf::from(vertex_shader_relative_path),
@@ -81,8 +86,11 @@ impl RenderPipelineCreationDesc {
             },
             rasterization_state: Some(rasterization_state::culling_none()), // culling none is a curious default...
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-            color_states: vec![color_state::write_all(Screen::FORMAT_BACKBUFFER)],
-            depth_stencil_state: Some(depth_state::default_read_write(Screen::FORMAT_DEPTH)),
+            color_states: vec![color_state::write_all(output_format)],
+            depth_stencil_state: match depth_format {
+                Some(depth_format) => Some(depth_state::default_read_write(depth_format)),
+                None => None,
+            },
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
                 vertex_buffers: &[],
