@@ -1,8 +1,9 @@
+use crate::wgpu_utils;
 use crate::wgpu_utils::binding_builder::*;
+use crate::wgpu_utils::binding_glsl;
 use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::uniformbuffer::*;
-use crate::wgpu_utils::*;
 use rand::prelude::*;
 use std::{cell::Cell, path::Path, rc::Rc};
 
@@ -500,13 +501,8 @@ impl HybridFluid {
         };
         const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
 
-        let grid_work_groups = wgpu::Extent3d {
-            width: self.grid_dimension.width / COMPUTE_LOCAL_SIZE_FLUID.width,
-            height: self.grid_dimension.height / COMPUTE_LOCAL_SIZE_FLUID.height,
-            depth: self.grid_dimension.depth / COMPUTE_LOCAL_SIZE_FLUID.depth,
-        };
-        let particle_work_groups =
-            (self.simulation_properties.num_particles as u32 + COMPUTE_LOCAL_SIZE_PARTICLES - 1) / COMPUTE_LOCAL_SIZE_PARTICLES;
+        let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, COMPUTE_LOCAL_SIZE_FLUID);
+        let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, COMPUTE_LOCAL_SIZE_PARTICLES);
 
         cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
 
