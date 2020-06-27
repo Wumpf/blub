@@ -32,6 +32,7 @@ struct GUIState {
     video_fps: i32,
     selected_scene_idx: usize,
     known_scene_files: Vec<PathBuf>,
+    wait_for_vblank: bool,
 }
 pub struct GUI {
     imgui_context: imgui::Context,
@@ -74,6 +75,7 @@ impl GUI {
                 video_fps: 60,
                 selected_scene_idx: std::usize::MAX,
                 known_scene_files: list_scene_files(),
+                wait_for_vblank: Screen::DEFAULT_PRESENT_MODE == wgpu::PresentMode::Fifo,
             },
         }
     }
@@ -113,6 +115,13 @@ impl GUI {
                     .scale_min(0.0)
                     .graph_size([300.0, 40.0])
                     .build();
+                    if ui.checkbox(im_str!("wait for vsync"), &mut state.wait_for_vblank) {
+                        let present_mode = match state.wait_for_vblank {
+                            true => wgpu::PresentMode::Fifo,
+                            false => wgpu::PresentMode::Mailbox,
+                        };
+                        event_loop_proxy.send_event(ApplicationEvent::ChangePresentMode(present_mode)).unwrap();
+                    }
                     ui.separator();
                     ui.text(im_str!(
                         "num simulation steps current frame: {}",

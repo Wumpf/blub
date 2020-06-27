@@ -38,6 +38,7 @@ pub enum ApplicationEvent {
     ResetScene,
     FastForwardSimulation(Duration),
     ResetAndStartRecording { recording_fps: f64 }, // to stop recording, pause the simulation controller.
+    ChangePresentMode(wgpu::PresentMode),
 }
 
 struct Application {
@@ -98,7 +99,7 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let mut pipeline_manager = pipelines::PipelineManager::new();
 
-        let screen = Screen::new(&device, &window_surface, window.inner_size(), &shader_dir);
+        let screen = Screen::new(&device, &window_surface, Screen::DEFAULT_PRESENT_MODE, window.inner_size(), &shader_dir);
         let hdr_backbuffer = HdrBackbuffer::new(&device, &screen, &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
         let simulation_controller = simulation_controller::SimulationController::new();
@@ -200,6 +201,15 @@ impl Application {
                         self.simulation_controller.start_recording_with_fixed_frame_length(*recording_fps);
                         self.screenshot_recorder.start_next_recording();
                     }
+                    ApplicationEvent::ChangePresentMode(&present_mode) => {
+                        self.screen = Screen::new(
+                            &self.device,
+                            &self.window_surface,
+                            present_mode,
+                            self.screen.resolution(),
+                            &self.shader_dir,
+                        );
+                    }
                 },
                 Event::WindowEvent { event, .. } => {
                     self.camera.on_window_event(&event);
@@ -258,7 +268,7 @@ impl Application {
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         // occasionally window size drops to zero which causes crashes along the way
         if self.screen.resolution() != size && size.width != 0 && size.height != 0 {
-            self.screen = Screen::new(&self.device, &self.window_surface, size, &self.shader_dir);
+            self.screen = Screen::new(&self.device, &self.window_surface, self.screen.present_mode(), size, &self.shader_dir);
             self.hdr_backbuffer = HdrBackbuffer::new(&self.device, &self.screen, &self.shader_dir);
         }
     }

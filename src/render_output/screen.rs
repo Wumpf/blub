@@ -8,6 +8,7 @@ use std::path::Path;
 pub struct Screen {
     resolution: winit::dpi::PhysicalSize<u32>,
     swap_chain: wgpu::SwapChain,
+    present_mode: wgpu::PresentMode,
 
     backbuffer: wgpu::Texture,
     backbuffer_view: wgpu::TextureView,
@@ -23,10 +24,12 @@ impl Screen {
     pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
     const FORMAT_SWAPCHAIN: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
     pub const FORMAT_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    pub const DEFAULT_PRESENT_MODE: wgpu::PresentMode = wgpu::PresentMode::Fifo;
 
     pub fn new(
         device: &wgpu::Device,
         window_surface: &wgpu::Surface,
+        present_mode: wgpu::PresentMode,
         resolution: winit::dpi::PhysicalSize<u32>,
         shader_dir: &ShaderDirectory,
     ) -> Self {
@@ -39,7 +42,7 @@ impl Screen {
                 format: Screen::FORMAT_SWAPCHAIN,
                 width: resolution.width,
                 height: resolution.height,
-                present_mode: wgpu::PresentMode::Mailbox,
+                present_mode,
             },
         );
 
@@ -109,6 +112,7 @@ impl Screen {
         Screen {
             resolution,
             swap_chain,
+            present_mode,
             backbuffer,
             backbuffer_view,
             depth_view: depth_texture.create_default_view(),
@@ -133,6 +137,10 @@ impl Screen {
 
     pub fn depthbuffer(&self) -> &wgpu::TextureView {
         &self.depth_view
+    }
+
+    pub fn present_mode(&self) -> wgpu::PresentMode {
+        self.present_mode
     }
 
     pub fn capture_screenshot(&mut self, path: &Path, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
