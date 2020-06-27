@@ -30,4 +30,17 @@ vec3 colormapHeat(float t) { return saturate(vec3(t * 3, t * 3 - 1, t * 3 - 2));
 // t = [-1; 1]
 vec3 colormapCoolToWarm(float t) { return t < 0.0 ? mix(vec3(1.0), vec3(0.0, 0.0, 1.0), -t) : mix(vec3(1.0), vec3(1.0, 0.0, 0.0), t); }
 
+bool sphereIntersect(vec3 spherePosition, float radius, vec3 rayOrigin, vec3 rayDir, out float sphereDistance) {
+    // Sphere intersect raycast.
+    // (uses equation based intersect: rayOrigin + t * rayDir, ||sphereOrigin-pointOnSphere||= r*r, [...])
+    vec3 particleCenterToCamera = rayOrigin - spherePosition; // (often denoted as oc == OriginCenter)
+    float b = dot(particleCenterToCamera, rayDir);
+    float c = dot(particleCenterToCamera, particleCenterToCamera) - radius * radius;
+    float discr = b * b - c;
+    if (discr < 0.0)
+        return false;
+    sphereDistance = -b - sqrt(discr);
+    return true;
+}
+
 #endif // INCLUDE_UTILITIES

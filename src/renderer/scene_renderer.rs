@@ -142,7 +142,7 @@ impl SceneRenderer {
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
         backbuffer: &wgpu::TextureView,
-        depth: &wgpu::TextureView,
+        depthbuffer: &wgpu::TextureView,
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
         // Opaque
@@ -162,7 +162,7 @@ impl SceneRenderer {
                     },
                 }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: depth,
+                    attachment: depthbuffer,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true,
@@ -204,7 +204,7 @@ impl SceneRenderer {
         {
             if let FluidRenderingMode::ScreenSpaceFluid = self.fluid_rendering_mode {
                 self.screenspace_fluid
-                    .draw(encoder, pipeline_manager, per_frame_bind_group, &scene.fluid());
+                    .draw(encoder, pipeline_manager, depthbuffer, per_frame_bind_group, &scene.fluid());
             }
         }
     }
