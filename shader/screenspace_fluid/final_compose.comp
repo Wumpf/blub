@@ -1,0 +1,14 @@
+#version 460
+
+#include "../fluid_render_info.glsl"
+#include "../per_frame_resources.glsl"
+#include "../utilities.glsl"
+
+layout(set = 2, binding = 0, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image2D Backbuffer;
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+void main() {
+    vec4 previousColor = imageLoad(Backbuffer, ivec2(gl_GlobalInvocationID.xy));
+    imageStore(Backbuffer, ivec2(gl_GlobalInvocationID.xy), previousColor * vec4(1, 1, 1, 1));
+}

@@ -104,7 +104,13 @@ impl Application {
         let hdr_backbuffer = HdrBackbuffer::new(&device, &screen, &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
         let simulation_controller = simulation_controller::SimulationController::new();
-        let scene_renderer = SceneRenderer::new(&device, &shader_dir, &mut pipeline_manager, per_frame_resources.bind_group_layout());
+        let scene_renderer = SceneRenderer::new(
+            &device,
+            &shader_dir,
+            &mut pipeline_manager,
+            per_frame_resources.bind_group_layout(),
+            &hdr_backbuffer,
+        );
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
 
         Application {
@@ -271,6 +277,7 @@ impl Application {
         if self.screen.resolution() != size && size.width != 0 && size.height != 0 {
             self.screen = Screen::new(&self.device, &self.window_surface, self.screen.present_mode(), size, &self.shader_dir);
             self.hdr_backbuffer = HdrBackbuffer::new(&self.device, &self.screen, &self.shader_dir);
+            self.scene_renderer.on_window_resize(&self.device, &self.hdr_backbuffer);
         }
     }
 
