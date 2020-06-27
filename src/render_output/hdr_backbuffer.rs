@@ -97,9 +97,10 @@ impl HdrBackbuffer {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &target,
                 resolve_target: None,
-                load_op: wgpu::LoadOp::Clear,
-                store_op: wgpu::StoreOp::Store,
-                clear_color: wgpu::Color::TRANSPARENT,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: true,
+                },
             }],
             depth_stencil_attachment: None,
         });

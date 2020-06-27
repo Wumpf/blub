@@ -79,7 +79,7 @@ impl Application {
                     power_preference: wgpu::PowerPreference::HighPerformance,
                     compatible_surface: Some(&window_surface),
                 },
-                wgpu::UnsafeExtensions::disallow(),
+                wgpu::UnsafeFeatures::disallow(),
             )
             .await
             .unwrap();
@@ -87,7 +87,7 @@ impl Application {
         let (device, mut command_queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    extensions: wgpu::Extensions::empty(),
+                    features: wgpu::Features::empty(),
                     limits: wgpu::Limits::default(),
                     shader_validation: false, // Disabled shader validation for now since we use too many things that it doesn't know about.
                 },
@@ -201,11 +201,11 @@ impl Application {
                         self.simulation_controller.start_recording_with_fixed_frame_length(*recording_fps);
                         self.screenshot_recorder.start_next_recording();
                     }
-                    ApplicationEvent::ChangePresentMode(&present_mode) => {
+                    ApplicationEvent::ChangePresentMode(present_mode) => {
                         self.screen = Screen::new(
                             &self.device,
                             &self.window_surface,
-                            present_mode,
+                            *present_mode,
                             self.screen.resolution(),
                             &self.shader_dir,
                         );
