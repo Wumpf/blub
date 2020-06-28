@@ -6,7 +6,7 @@
 
 layout(set = 2, binding = 0) uniform texture2D ParticleDepth;
 layout(set = 2, binding = 1) uniform texture2D ParticleThickness;
-layout(set = 2, binding = 2, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image2D Backbuffer;
+layout(set = 2, binding = 2, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image2D BackbufferImage;
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
@@ -15,15 +15,9 @@ const float RefractionIndex_Water = 1.33;
 const float RefractionIndex_Air = 1.00029;
 const float RefractionAirToWater = RefractionIndex_Air / RefractionIndex_Water;
 
-void main() {
-    float particleThickness = texelFetch(ParticleThickness, ivec2(gl_GlobalInvocationID.xy), 0).r;
-    if (particleThickness == 0.0)
-        return;
-    float particleDepth = texelFetch(ParticleDepth, ivec2(gl_GlobalInvocationID.xy), 0).r;
-    vec4 previousColor = imageLoad(Backbuffer, ivec2(gl_GlobalInvocationID.xy));
-
+vec3 computeRefractionColor(float particleThickness) {
     // TODO: Compute refaction
-    vec3 refractionRayResult = imageLoad(Backbuffer, ivec2(gl_GlobalInvocationID.xy)).xyz;
+    vec3 refractionRayResult = imageLoad(BackbufferImage, ivec2(gl_GlobalInvocationID.xy)).xyz;
 
     // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector goes through more water than this.
     float waterRefractionDepth = particleThickness * 100;
@@ -44,8 +38,53 @@ void main() {
     vec3 normalLightingColor = vec3(1.0); // GlobalDirLightColor * nDotL + GlobalAmbient;
     vec3 waterColor = mix(refractionRayResult, SurfaceColor * normalLightingColor, saturate(waterRefractionDepth * Opaqueness));
 
-    vec3 refractionColor = mix(vec3(0.0), waterColor, colorExtinction);
+    return mix(vec3(0.0), waterColor, colorExtinction);
+}
 
-    vec4 outputColor = vec4(refractionColor, 0.0);
-    imageStore(Backbuffer, ivec2(gl_GlobalInvocationID.xy), outputColor);
+// Computes world space position from standard depth buffer depth.
+// (using "classic depth buffer", as defined in with our global camera matrices)
+vec3 reconstructWorldPositionFromDepthbufferDepth(vec2 screenUv, float depth) {
+    float x = screenUv.x * 2.0f - 1.0f;
+    float y = (1.0 - screenUv.y) * 2.0f - 1.0f;
+    vec4 projectedPosition = vec4(x, y, depth, 1.0f);
+    vec4 worldPosition = Camera.InverseViewProjection * projectedPosition;
+    return worldPosition.xyz / worldPosition.w;
+}
+
+vec3 reconstructNormalFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize) {
+    // Use a better method as described here?
+    // https://wickedengine.net/2019/09/22/improved-normal-reconstruction-from-depth/
+    // (Improved normal reconstruction from depth, Turanszkij, September 2019)
+    // Btw. here is an even more thorough and expensive one: https://atyuwen.github.io/posts/normal-reconstruction/#fn:2
+
+    ivec2 coord0 = screenCoord;
+    ivec2 coord1 = screenCoord + ivec2(0, 1);
+    ivec2 coord2 = screenCoord + ivec2(1, 0);
+
+    float depth0 = texelFetch(ParticleDepth, coord0, 0).r;
+    float depth1 = texelFetch(ParticleDepth, coord1, 0).r;
+    float depth2 = texelFetch(ParticleDepth, coord2, 0).r;
+
+    vec3 p0 = reconstructWorldPositionFromDepthbufferDepth(coord0 * screenPixelSize, depth0);
+    vec3 p1 = reconstructWorldPositionFromDepthbufferDepth(coord1 * screenPixelSize, depth1);
+    vec3 p2 = reconstructWorldPositionFromDepthbufferDepth(coord2 * screenPixelSize, depth2);
+
+    return normalize(cross(p2 - p0, p1 - p0));
+}
+
+void main() {
+    ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
+    float particleThickness = texelFetch(ParticleThickness, screenCoord, 0).r;
+    if (particleThickness == 0.0)
+        return;
+
+    vec2 screenPixelSize = vec2(1.0) / textureSize(ParticleDepth, 0).xy;
+
+    vec3 waterSurfaceNormal = reconstructNormalFromDepthbuffer(screenCoord, screenPixelSize);
+
+    vec4 previousColor = imageLoad(BackbufferImage, screenCoord);
+
+    vec3 refractionColor = computeRefractionColor(particleThickness);
+    vec4 outputColor = vec4(waterSurfaceNormal, 0.0);
+    imageStore(BackbufferImage, screenCoord, outputColor);
 }

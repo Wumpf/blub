@@ -3,10 +3,17 @@
 
 struct CameraData {
     mat4 ViewProjection;
+    mat4 InverseViewProjection;
     vec3 Position;
     vec3 Right;
     vec3 Up;
-    vec4 Direction;
+    vec3 Direction;
+
+    // vectors spanning the screen in view space.
+    // i.e. the NDC position (-1,1) is at the view space position ProjectedRight * (-1) + ProjectedUp * 1 + ProjectedDirection
+    // vec3 ProjectedRight;
+    // vec3 ProjectedUp;
+    // vec3 ProjectedDirection;
 };
 
 // All timings in seconds.

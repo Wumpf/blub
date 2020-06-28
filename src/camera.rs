@@ -131,8 +131,12 @@ impl Camera {
         let right = self.direction.cross(self.rotational_up).normalize();
         let up = right.cross(self.direction).normalize();
 
+        let view_projection = self.view_projection(aspect_ratio);
+        let inverse_view_projection = view_projection.invert().unwrap();
+
         CameraUniformBufferContent {
-            view_projection: self.view_projection(aspect_ratio),
+            view_projection,
+            inverse_view_projection,
             position: self.position.into(),
             right: right.into(),
             up: up.into(),
@@ -145,6 +149,7 @@ impl Camera {
 #[derive(Clone, Copy)]
 pub struct CameraUniformBufferContent {
     view_projection: cgmath::Matrix4<f32>,
+    inverse_view_projection: cgmath::Matrix4<f32>,
     position: PaddedPoint3,
     right: PaddedVector3,
     up: PaddedVector3,

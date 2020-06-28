@@ -19,7 +19,8 @@ void main() {
     if (!sphereIntersect(in_ParticleWorldPosition, in_Radius, Camera.Position, rayDir, cameraDistance))
         discard;
 
-    vec3 sphereWorldPos = Camera.Position + cameraDistance * rayDir;
+    vec3 cameraPosToSpherePos = cameraDistance * rayDir;
+    vec3 sphereWorldPos = Camera.Position + cameraPosToSpherePos;
     vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / in_Radius;
 
     // Adjust depth buffer value.
@@ -27,8 +28,8 @@ void main() {
     vec2 projected_zw = (Camera.ViewProjection * vec4(sphereWorldPos, 1.0)).zw; // (trusting optimizer to pick the right thing ;-))
     gl_FragDepth = projected_zw.x / projected_zw.y;
 
-    // TODO: What kind of depth
-    out_Depth = cameraDistance;
+    // There's more clever ways to store depth for this particular purpose here, but going with the standard one is simply less confusing.
+    out_Depth = gl_FragDepth;
     // TODO: Fade this out, want gaussian/quadratic splats
     out_Thickness = in_Radius;
 }
