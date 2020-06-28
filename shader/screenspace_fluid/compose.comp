@@ -10,11 +10,42 @@ layout(set = 2, binding = 2, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
+// TODO: Will certainly come in handy.
+const float RefractionIndex_Water = 1.33;
+const float RefractionIndex_Air = 1.00029;
+const float RefractionAirToWater = RefractionIndex_Air / RefractionIndex_Water;
+
 void main() {
-    float particleDepth = texelFetch(ParticleDepth, ivec2(gl_GlobalInvocationID.xy), 0).r;
     float particleThickness = texelFetch(ParticleThickness, ivec2(gl_GlobalInvocationID.xy), 0).r;
+    if (particleThickness == 0.0)
+        return;
+    float particleDepth = texelFetch(ParticleDepth, ivec2(gl_GlobalInvocationID.xy), 0).r;
     vec4 previousColor = imageLoad(Backbuffer, ivec2(gl_GlobalInvocationID.xy));
 
-    vec4 outputColor = vec4(particleThickness * 0.01);
+    // TODO: Compute refaction
+    vec3 refractionRayResult = imageLoad(Backbuffer, ivec2(gl_GlobalInvocationID.xy)).xyz;
+
+    // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector goes through more water than this.
+    float waterRefractionDepth = particleThickness * 100;
+
+    // Water color
+    // This otherwise quite convincing reference assumes linear extinction, I'll go with exponential-
+    // http://www.gamedev.net/page/reference/index.html/_/technical/graphics-programming-and-theory/rendering-water-as-a-post-process-effect-r2642
+    // This leaves the questions: What are convining Extinction coefficients?
+    // For that I solved the equations exp(-4.5 * R) = exp(-75 * G) = exp(-300 * B) = 0.001 (depths are from link above)
+    // .. which is.. convincing pseudo physical! :)
+    // In reality water color depends on a lot of factors: https://en.wikipedia.org/wiki/Color_of_water
+    const vec3 ColorExtinctionCoefficient = vec3(1.53506, 0.0921034, 0.0230259);
+    const vec3 SurfaceColor = vec3(0.003, 0.179, 0.270);
+    const vec3 BigDepthColor = vec3(0.002, 0.001, 0.072);
+    const float Opaqueness = 0.1;
+
+    vec3 colorExtinction = saturate(exp(-waterRefractionDepth * ColorExtinctionCoefficient));
+    vec3 normalLightingColor = vec3(1.0); // GlobalDirLightColor * nDotL + GlobalAmbient;
+    vec3 waterColor = mix(refractionRayResult, SurfaceColor * normalLightingColor, saturate(waterRefractionDepth * Opaqueness));
+
+    vec3 refractionColor = mix(vec3(0.0), waterColor, colorExtinction);
+
+    vec4 outputColor = vec4(refractionColor, 0.0);
     imageStore(Backbuffer, ivec2(gl_GlobalInvocationID.xy), outputColor);
 }

@@ -29,5 +29,6 @@ void main() {
 
     // TODO: What kind of depth
     out_Depth = cameraDistance;
+    // TODO: Fade this out, want gaussian/quadratic splats
     out_Thickness = in_Radius;
 }
