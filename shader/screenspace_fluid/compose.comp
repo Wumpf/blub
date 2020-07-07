@@ -61,6 +61,7 @@ vec3 reconstructNormalFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize) {
     ivec2 coord1 = screenCoord + ivec2(0, 1);
     ivec2 coord2 = screenCoord + ivec2(1, 0);
 
+    // TODO: Shared memory?
     float depth0 = texelFetch(ParticleDepth, coord0, 0).r;
     float depth1 = texelFetch(ParticleDepth, coord1, 0).r;
     float depth2 = texelFetch(ParticleDepth, coord2, 0).r;

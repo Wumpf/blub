@@ -95,9 +95,31 @@ for a while but shied away from implementing such a complex solver at the moment
 
 ## Rendering
 
-TODO!
-
 Particle visualization with quads. Put a ridiculous amount of effort into to make the quads display perspective correct spheres. Enjoy!
+
+
+Decided for a screen space / particle based visualization. Here's some of the literature that I glimpsed over which inspired me:
+* Screen space splatting of fluid particles, described well in these [GDC 2010 slides](http://developer.download.nvidia.com/presentations/2010/gdc/Direct3D_Effects.pdf),
+* some improvements & paper here: [Screen space fluid rendering with curvature flow](https://www.win.tue.nl/~wstahw/edu/2IV05/andrei/particle_rendering/provided/p91-van_der_laan.pdf)
+* and even more improvements [A Layered Particle-Based Fluid Model for Real-Time Rendering of Water, Bagar et al 2010](https://www.cg.tuwien.ac.at/research/publications/2010/bagar2010/) adding handling of a foam layer.
+* [Screen Space Foam Rendering, Akinci et al. 2013](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.373.2121&rep=rep1&type=pdf)
+* [Real-Time Screen-Space Liquid Rendering with Complex Refractions, Imai et al. 2016](http://kanamori.cs.tsukuba.ac.jp/projects/screen_space_liquids/)
+* [A Narrow-Range Filter for SCreen-Space Fluid Rendering, Truong et al. 2018](http://www.cemyuksel.com/research/papers/narrowrangefilter.pdf) 
+
+What Blub implements right now resembles mostly TODO.
+I have a few interesting twists though which I haven't seen anywhere else yet:
+
+TODO Idea: Separate layers?
+* render depth, backsides of border cubes to Df0
+* render depth, backsides of border cubes to Db0, but only where values are smaller than Df0
+* render depth, backsides of border cubes to Df1, but only where values are value smaller than Df1
+* render depth, backsides of the volume confines (we're cutting off any layers in between) to Db1
+Now we have layer one between D0 and D1 and layer two between D2 and D3!
+To render the first layer we discard any particle in front of Db0
+To render the second layer we discard any particle behind Db1
+
+Can we use the DbX textures to estimate depth? Probably no, since to blocky
+
 
 ## Trivia
 
