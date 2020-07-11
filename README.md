@@ -46,6 +46,7 @@ Noted down a few interesting bits here.
 Transferring the particle's velocity to the grid is tricky/costly to do in parallel!
 Either, velocities are scattered by doing 8 atomic adds for every particle to surrounding grid cells, or grid cells traverse all neighboring cells. (times 3 for staggered grid!)
 There's some good ideas on how to do efficient scattering in [Ming et al 2018, GPU Optimization of Material Point Methods](http://www.cs.utah.edu/~kwu/GPU_MPM/GPU_MPM.pdf).
+Note though that today atomic floats addition is pretty much only available in CUDA and OpenGL (using an NV extension)!
 
 In Blub I tried something new (to my knowledge):
 Particles form a linked list by putting their index with a atomic exchange operation in a "linked list head pointer grid" which is a grid dual to the main velocity volume.
@@ -79,6 +80,16 @@ Extrapolation in Blub:
   * do a single pass extrapolation
     * it's a bit more complex than normal extrapolation schemes since in order to get around double buffering velocities/markers we do everything in a single pass.
 * don't use anything fancy that needs velocity elsewhere 🙂
+
+### Solver
+
+Pressure poisson equation (PPE) currently solved with Jacobi iterations - very easy to implement, but inaccurate and slow (many iterations necessary).
+WIP: Using Preconditioned Conjugate Gradient solver.
+
+
+Looked into [A Multigrid Fluid Pressure SolverHandling Separating Solid Boundary Conditions, Chentanez et al. 2011](https://matthias-research.github.io/pages/publications/separatingBoundaries.pdf)
+for a while but shied away from implementing such a complex solver without any reference code and with too little personal experience in the field.
+
 
 ## Rendering
 

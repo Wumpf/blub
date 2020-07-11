@@ -1,0 +1,24 @@
+// Applies preconditioner to the residual, yielding the auxilary vector usually denoted as z.
+
+#version 460
+
+#include "../per_frame_resources.glsl"
+#include "../utilities.glsl"
+#include "hybrid_fluid.glsl"
+
+// layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
+// layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
+// layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
+// layout(set = 2, binding = 3) uniform utexture3D MarkerVolume;
+
+layout(set = 3, binding = 0) uniform texture3D Residual;
+// layout(set = 3, binding = 1) uniform texture3D Read1;
+layout(set = 3, binding = 2, r32f) uniform restrict image3D Auxilary;
+
+COMPUTE_PASS_VOLUME
+
+// TODO: This is a diagonal jacobi preconditioner. Easy to start off, but want to try Incomplete Poisson preconditioner instead!
+// see https://software.intel.com/content/www/us/en/develop/articles/parallelized-incomplete-poisson-preconditioner-in-cloth-simulation.html
+// and also https://github.com/tunabrain/gpu-fluid
+// as well as https://github.com/austinEng/WebGL-PIC-FLIP-Fluid#pressure-solve
+void main() {}

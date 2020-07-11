@@ -1,6 +1,8 @@
 // Computes velocity divergence of VelocityVolumes
+// This is the b in the Ax=b equation we're solving.
+// Since x (the pressure p!) starts out with zero it also doubles as initial residual of the (preconditioned) conjugate gradient solver!
 
-#version 450
+#version 460
 
 #include "hybrid_fluid.glsl"
 #include "per_frame_resources.glsl"
@@ -10,9 +12,10 @@ layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
 layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
 layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
 layout(set = 2, binding = 3) uniform utexture3D MarkerVolume;
-// layout(set = 2, binding = 4) uniform texture3D DivergenceVolume;
-// layout(set = 2, binding = 5) uniform texture3D PressureVolumeRead;
-layout(set = 2, binding = 6, r32f) uniform restrict image3D DivergenceVolume;
+
+// layout(set = 3, binding = 0) uniform texture3D Read0;
+// layout(set = 3, binding = 1) uniform texture3D Read1;
+layout(set = 3, binding = 2, r32f) uniform restrict image3D DivergenceVolume;
 
 COMPUTE_PASS_VOLUME
 
