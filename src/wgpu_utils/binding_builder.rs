@@ -1,24 +1,24 @@
 pub struct BindGroupLayoutWithDesc {
     pub layout: wgpu::BindGroupLayout,
-    pub bindings: Vec<wgpu::BindGroupLayoutEntry>,
+    pub entries: Vec<wgpu::BindGroupLayoutEntry>,
 }
 
 pub struct BindGroupLayoutBuilder {
-    bindings: Vec<wgpu::BindGroupLayoutEntry>,
+    entries: Vec<wgpu::BindGroupLayoutEntry>,
     next_binding_index: u32,
 }
 
 impl BindGroupLayoutBuilder {
     pub fn new() -> Self {
         BindGroupLayoutBuilder {
-            bindings: Vec::new(),
+            entries: Vec::new(),
             next_binding_index: 0,
         }
     }
 
     pub fn binding(mut self, binding: wgpu::BindGroupLayoutEntry) -> Self {
         self.next_binding_index = binding.binding + 1;
-        self.bindings.push(binding);
+        self.entries.push(binding);
         self
     }
 
@@ -50,10 +50,10 @@ impl BindGroupLayoutBuilder {
     pub fn create(self, device: &wgpu::Device, label: &str) -> BindGroupLayoutWithDesc {
         BindGroupLayoutWithDesc {
             layout: device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                bindings: &self.bindings,
+                entries: &self.entries,
                 label: Some(label),
             }),
-            bindings: self.bindings,
+            entries: self.entries,
         }
     }
 }
@@ -62,22 +62,22 @@ impl BindGroupLayoutBuilder {
 // Makes life simpler by assuming that order of elements in the bind group is equal to order of elements in the bind group layout.
 pub struct BindGroupBuilder<'a> {
     layout_with_desc: &'a BindGroupLayoutWithDesc,
-    bindings: Vec<wgpu::Binding<'a>>,
+    entries: Vec<wgpu::BindGroupEntry<'a>>,
 }
 
 impl<'a> BindGroupBuilder<'a> {
     pub fn new(layout_with_desc: &'a BindGroupLayoutWithDesc) -> Self {
         BindGroupBuilder {
             layout_with_desc,
-            bindings: Vec::new(),
+            entries: Vec::new(),
         }
     }
 
     // Uses same binding index as binding group layout at the same ordering
     pub fn resource(mut self, resource: wgpu::BindingResource<'a>) -> Self {
-        assert_lt!(self.bindings.len(), self.layout_with_desc.bindings.len());
-        self.bindings.push(wgpu::Binding {
-            binding: self.layout_with_desc.bindings[self.bindings.len()].binding,
+        assert_lt!(self.entries.len(), self.layout_with_desc.entries.len());
+        self.entries.push(wgpu::BindGroupEntry {
+            binding: self.layout_with_desc.entries[self.entries.len()].binding,
             resource,
         });
         self
@@ -93,10 +93,10 @@ impl<'a> BindGroupBuilder<'a> {
     }
 
     pub fn create(&self, device: &wgpu::Device, label: &str) -> wgpu::BindGroup {
-        assert_eq!(self.bindings.len(), self.layout_with_desc.bindings.len());
+        assert_eq!(self.entries.len(), self.layout_with_desc.entries.len());
         let descriptor = wgpu::BindGroupDescriptor {
             layout: &self.layout_with_desc.layout,
-            bindings: &self.bindings,
+            entries: &self.entries,
             label: Some(label),
         };
         device.create_bind_group(&descriptor)

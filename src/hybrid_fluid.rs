@@ -293,6 +293,7 @@ impl HybridFluid {
                 &group_layout_uniform.layout,
                 &group_layout_transfer_velocity.layout,
             ],
+            push_constant_ranges: &[],
         }));
         let layout_write_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -300,6 +301,7 @@ impl HybridFluid {
                 &group_layout_uniform.layout,
                 &group_layout_write_velocity.layout,
             ],
+            push_constant_ranges: &[],
         }));
         let layout_pressure_solve = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -308,6 +310,7 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_solve.layout,
             ],
+            push_constant_ranges: &[],
         }));
         let layout_write_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -315,6 +318,7 @@ impl HybridFluid {
                 &group_layout_uniform.layout,
                 &group_layout_write_particles.layout,
             ],
+            push_constant_ranges: &[],
         }));
 
         let pipeline_transfer_clear_linkedlist = pipeline_manager.create_compute_pipeline(

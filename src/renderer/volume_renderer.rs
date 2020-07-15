@@ -32,6 +32,7 @@ impl VolumeRenderer {
     ) -> Self {
         let layout = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
+            push_constant_ranges: &[],
         }));
 
         let mut velocity_render_pipeline_desc = RenderPipelineCreationDesc::new(

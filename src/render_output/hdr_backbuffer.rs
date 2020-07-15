@@ -42,6 +42,7 @@ impl HdrBackbuffer {
             .create(device, "BindGroupLayout: Screen, Read Texture");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout.layout],
+            push_constant_ranges: &[],
         });
         let read_backbuffer_bind_group = BindGroupBuilder::new(&bind_group_layout)
             .texture(&hdr_backbuffer_view)

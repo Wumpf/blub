@@ -41,6 +41,7 @@ impl StaticLineRenderer {
         let mut render_pipeline_desc = RenderPipelineCreationDesc::new(
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 bind_group_layouts: &[&per_frame_bind_group_layout],
+                push_constant_ranges: &[],
             })),
             Path::new("lines.vert"),
             Some(Path::new("vertex_color.frag")),

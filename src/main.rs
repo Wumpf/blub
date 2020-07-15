@@ -74,13 +74,10 @@ impl Application {
 
         let window_surface = unsafe { wgpu_instance.create_surface(&window) };
         let adapter = wgpu_instance
-            .request_adapter(
-                &wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::HighPerformance,
-                    compatible_surface: Some(&window_surface),
-                },
-                wgpu::UnsafeFeatures::disallow(),
-            )
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&window_surface),
+            })
             .await
             .unwrap();
 
@@ -88,7 +85,10 @@ impl Application {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
+                    limits: wgpu::Limits {
+                        max_storage_textures_per_shader_stage: 16, // Doesn't need to be as many https://github.com/gfx-rs/wgpu/pull/798
+                        ..Default::default()
+                    },
                     shader_validation: false, // Disabled shader validation for now since we use too many things that it doesn't know about.
                 },
                 None,
