@@ -84,9 +84,10 @@ impl Application {
         let (device, mut command_queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
+                    features: wgpu::Features::PUSH_CONSTANTS,
                     limits: wgpu::Limits {
                         max_storage_textures_per_shader_stage: 16, // Doesn't need to be as many https://github.com/gfx-rs/wgpu/pull/798
+                        max_push_constant_size: 8,
                         ..Default::default()
                     },
                     shader_validation: false, // Disabled shader validation for now since we use too many things that it doesn't know about.
@@ -304,8 +305,8 @@ impl Application {
                 scene,
                 &mut encoder,
                 &self.pipeline_manager,
-                self.per_frame_resources.bind_group(),
                 &self.command_queue,
+                self.per_frame_resources.bind_group(),
             );
             self.scene_renderer.draw(
                 scene,

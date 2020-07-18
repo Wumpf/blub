@@ -102,8 +102,14 @@ impl Scene {
         self.hybrid_fluid = Self::create_fluid_from_config(&self.config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
     }
 
-    pub fn step<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, queue: &wgpu::Queue) {
-        self.hybrid_fluid.step(cpass, pipeline_manager, queue);
+    pub fn step(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline_manager: &PipelineManager,
+        queue: &wgpu::Queue,
+        per_frame_bind_group: &wgpu::BindGroup,
+    ) {
+        self.hybrid_fluid.step(encoder, pipeline_manager, queue, per_frame_bind_group);
     }
 
     pub fn fluid(&self) -> &HybridFluid {

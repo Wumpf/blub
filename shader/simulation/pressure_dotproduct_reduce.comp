@@ -1,0 +1,125 @@
+// Summing up step of a dot product between two vectors (as volumes)
+//
+// This is a parallel reduce step similar (but more portable) to the one detailed here
+// https://on-demand.gputechconf.com/gtc/2010/presentations/S12312-DirectCompute-Pre-Conference-Tutorial.pdf
+
+#version 460
+
+#include "pressure.glsl"
+
+#define LOCAL_SIZE 1024
+
+layout(set = 3, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
+layout(set = 3, binding = 1) buffer restrict DotProductDest_ { float DotProductDest[]; };
+
+layout(push_constant) uniform PushConstants_ {
+    uint SourceBufferSize;
+    uint ResultMode;
+}
+PushConstants;
+
+// Result mode:
+const uint DOTPRODUCT_RESULTMODE_REDUCE = 0;
+const uint DOTPRODUCT_RESULTMODE_INIT = 1;
+const uint DOTPRODUCT_RESULTMODE_ALPHA = 2;
+const uint DOTPRODUCT_RESULTMODE_BETA = 3;
+
+layout(local_size_x = LOCAL_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+shared float sharedBuffer[LOCAL_SIZE];
+
+void main() {
+    // TODO: Multiple fetches per thread
+    if (gl_GlobalInvocationID.x < PushConstants.SourceBufferSize)
+        sharedBuffer[gl_LocalInvocationID.x] = DotProductSource[gl_GlobalInvocationID.x];
+    else
+        sharedBuffer[gl_LocalInvocationID.x] = 0.0;
+    barrier();
+
+    // Reduce
+    // TODO: Unlike the Nvidia slides we can't just unroll the last 32 additions and leave out that barriers since some gpus have quite small
+    // subgroups (Intel can have 8). But we could just assume a minimal subgroup size and unroll that bit.
+    [[unroll]] for (uint i = LOCAL_SIZE / 2; i > 1; i /= 2) {
+        if (gl_LocalInvocationID.x < i) {
+            sharedBuffer[gl_LocalInvocationID.x] += sharedBuffer[gl_LocalInvocationID.x + i];
+        }
+        barrier();
+    }
+
+    if (gl_LocalInvocationID.x == 0) {
+        float dotProductResult = sharedBuffer[0] + sharedBuffer[1];
+
+        switch (PushConstants.ResultMode) {
+        case DOTPRODUCT_RESULTMODE_REDUCE:
+            DotProductDest[gl_WorkGroupID.x] = dotProductResult;
+            break;
+
+        case DOTPRODUCT_RESULTMODE_INIT:
+            DotProductDest[0] = 0.0;
+            DotProductDest[1] = dotProductResult;
+            break;
+
+        case DOTPRODUCT_RESULTMODE_ALPHA:
+            DotProductDest[0] = DotProductDest[1] / dotProductResult;
+            break;
+
+        default: // case DOTPRODUCT_RESULTMODE_BETA:
+            DotProductDest[0] = dotProductResult / DotProductDest[1];
+            DotProductDest[1] = dotProductResult;
+            break;
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------------------------
+// Alternative, much easier version using subgroup ops
+// Inspired by https://cachemiss.xyz/blog/parallel-reduce-and-scan-on-the-GPU
+// Note that contrary to the blog post this impl here also handles smaller subgroups (intel)
+//
+// HAS NOT BEEN TESTED!
+//
+// Why? Requires Vulkan 1.1 and we can't enable this with webgpu!
+// (See https://github.com/gfx-rs/gfx/issues/3302)
+// According to blog at least it's only slightly faster than a good shared memory optimized version.
+// ------------------------------------------------------------------------------------------------------
+/*
+
+// We assume that gl_SubgroupSize is at least 8 (intel, depending on operation mode)
+shared float subgroupResults[LOCAL_SIZE / 8];
+
+void main() {
+    // This is almost certainly the same as just gl_LocalInvocationID.x
+    // BUT the partition of groups into subgroups is implementation defined, so better safe than sorry!
+    uint groupTid = gl_SubgroupInvocationID * gl_SubgroupID + gl_SubgroupInvocationID;
+
+    // Load relevant global address.
+    // We could just pass a constant buffer, telling us in which step of the reduce operation we are,
+    // but setting this up has a bit of programming effort, so we just guess from gl_NumWorkGroups & total buffer size!
+    uvec3 volumeSize = uvec3(textureSize(Read0, 0).xyz);
+    uint totalBufferSize = volumeSize.x * volumeSize.y * volumeSize.z;
+    uint globalAddressOffset = totalBufferSize / (gl_NumWorkGroups.x * LOCAL_SIZE);
+    uint globalAddress = gl_GlobalInvocationID.x * globalAddressOffset; // Assuming totalBufferSize is a multiple of LOCAL_SIZE, this is safe.
+    // TODO: Multiple fetches per thread?
+    float value = DotProductBuffer[globalAddress];
+
+    // Initial reduce step, all threads active.
+    value = subgroupAdd(value);
+
+    // For gl_SubgroupSize >= 32 (very common!) this loop is only executed once :)
+    for (uint numRemainingValuesInGroup = LOCAL_SIZE / gl_SubgroupSize; numRemainingValuesInGroup > 1; numRemainingValuesInGroup /=
+gl_SubgroupSize) { if (subgroupElect()) { subgroupResults[gl_SubgroupID] = value;
+        }
+        barrier(); // (newer GLSL specifications clarify that this is ALSO a memoryBarrierShared)
+
+        // Note that numRemainingValuesInGroup may be smaller than gl_SubgroupSize now even for common cases:
+        // E.g. LOCAL_SIZE==1024, gl_SubgroupSize==64 -> numRemainingValuesInGroup==32
+        if (groupTid < numRemainingValuesInGroup) {
+            value = subgroupAdd(subgroupResults[groupTid]);
+        }
+    }
+
+    if (groupTid == 0) {
+        DotProductBuffer[globalAddress] = value;
+    }
+}
+*/

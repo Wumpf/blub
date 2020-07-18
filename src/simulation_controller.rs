@@ -122,11 +122,8 @@ impl SimulationController {
 
                 let mut batch_size = MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE;
                 {
-                    let mut compute_pass = encoder.begin_compute_pass();
-                    compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
-
                     for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
-                        if !self.single_step(scene, &mut compute_pass, pipeline_manager, queue) {
+                        if !self.single_step(scene, &mut encoder, pipeline_manager, queue, per_frame_bind_group) {
                             batch_size = i;
                             break;
                         }
@@ -154,16 +151,14 @@ impl SimulationController {
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
-        per_frame_bind_group: &wgpu::BindGroup,
         queue: &wgpu::Queue,
+        per_frame_bind_group: &wgpu::BindGroup,
     ) {
         if !self.start_simulation_frame() {
             return;
         }
 
-        let mut compute_pass = encoder.begin_compute_pass();
-        compute_pass.set_bind_group(0, per_frame_bind_group, &[]);
-        while self.single_step(scene, &mut compute_pass, pipeline_manager, queue) {}
+        while self.single_step(scene, encoder, pipeline_manager, queue, per_frame_bind_group) {}
     }
 
     fn start_simulation_frame(&mut self) -> bool {
@@ -186,9 +181,10 @@ impl SimulationController {
     fn single_step<'a>(
         &mut self,
         scene: &'a Scene,
-        compute_pass: &mut wgpu::ComputePass<'a>,
+        encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &'a PipelineManager,
         queue: &wgpu::Queue,
+        per_frame_bind_group: &wgpu::BindGroup,
     ) -> bool {
         // frame drops are only relevant in realtime mode.
         let max_total_step_per_frame = if self.status == SimulationControllerStatus::Realtime {
@@ -203,7 +199,7 @@ impl SimulationController {
         }
 
         if self.timer.simulation_frame_loop(max_total_step_per_frame) == SimulationStepResult::PerformStepAndCallAgain {
-            scene.step(compute_pass, pipeline_manager, queue);
+            scene.step(encoder, pipeline_manager, queue, per_frame_bind_group);
             return true;
         }
         return false;

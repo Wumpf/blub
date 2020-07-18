@@ -1,0 +1,18 @@
+// Initializes search vector to zero. Todo: Merge with other passes.
+
+#version 460
+
+#include "pressure.glsl"
+
+layout(set = 3, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
+layout(set = 3, binding = 1) uniform texture3D AuxillaryVector;
+// layout(set = 3, binding = 2) uniform texture3D Read1;
+layout(set = 3, binding = 3, r32f) uniform restrict writeonly image3D SearchVector;
+
+COMPUTE_PASS_VOLUME
+
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    vec4 aux = texelFetch(AuxillaryVector, gridCoord, 0);
+    imageStore(SearchVector, gridCoord, aux);
+}

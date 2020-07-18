@@ -6,14 +6,10 @@
 #include "../utilities.glsl"
 #include "hybrid_fluid.glsl"
 
-// layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
-// layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
-// layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
-// layout(set = 2, binding = 3) uniform utexture3D MarkerVolume;
-
-layout(set = 3, binding = 0) uniform texture3D Residual;
-// layout(set = 3, binding = 1) uniform texture3D Read1;
-layout(set = 3, binding = 2, r32f) uniform restrict image3D Auxilary;
+// layout(set = 3, binding = 0) buffer restrict PcgScalars_ { PcgScalars Scalars; };
+layout(set = 3, binding = 1) uniform texture3D Residual;
+// layout(set = 3, binding = 2) uniform texture3D Read1;
+layout(set = 3, binding = 3, r32f) uniform restrict image3D Auxilary;
 
 COMPUTE_PASS_VOLUME
 
@@ -21,4 +17,7 @@ COMPUTE_PASS_VOLUME
 // see https://software.intel.com/content/www/us/en/develop/articles/parallelized-incomplete-poisson-preconditioner-in-cloth-simulation.html
 // and also https://github.com/tunabrain/gpu-fluid
 // as well as https://github.com/austinEng/WebGL-PIC-FLIP-Fluid#pressure-solve
-void main() {}
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    imageStore(Auxilary, gridCoord, vec4(1.0));
+}

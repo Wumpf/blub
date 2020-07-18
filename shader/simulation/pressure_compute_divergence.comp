@@ -4,18 +4,12 @@
 
 #version 460
 
-#include "hybrid_fluid.glsl"
-#include "per_frame_resources.glsl"
-#include "utilities.glsl"
+#include "pressure.glsl"
 
-layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
-layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
-layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
-layout(set = 2, binding = 3) uniform utexture3D MarkerVolume;
-
-// layout(set = 3, binding = 0) uniform texture3D Read0;
-// layout(set = 3, binding = 1) uniform texture3D Read1;
-layout(set = 3, binding = 2, r32f) uniform restrict image3D DivergenceVolume;
+// layout(set = 3, binding = 0) buffer restrict PcgScalars_ { PcgScalars Scalars; };
+// layout(set = 3, binding = 1) uniform texture3D Read0;
+// layout(set = 3, binding = 2) uniform texture3D Read1;
+layout(set = 3, binding = 3, r32f) uniform restrict image3D DivergenceVolume;
 
 COMPUTE_PASS_VOLUME
 
@@ -38,12 +32,12 @@ void main() {
     // Don't compute divergence if there's no fluid
     // Divergence tells us how much fluid is going in/out. If we're at a air/solid cell then that's clearly zero as there's no fluid in the first
     // place!
-    if (texelFetch(MarkerVolume, gridCoord, 0).x != CELL_FLUID)
-        return; // Clear? Nah, just means we need to be careful with debug viz!
-
-    float divergence = computeDivergenceForDirection(gridCoord, VelocityVolumeX, 0);
-    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeY, 1);
-    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeZ, 2);
+    float divergence = 0.0;
+    if (texelFetch(MarkerVolume, gridCoord, 0).x == CELL_FLUID) {
+        divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeX, 0);
+        divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeY, 1);
+        divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeZ, 2);
+    }
 
     imageStore(DivergenceVolume, gridCoord, divergence.xxxx);
 }

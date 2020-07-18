@@ -1,0 +1,25 @@
+// Computes dot product between two vectors (as volumes)
+// TODO: Do initial reduction in here?
+
+#version 460
+
+#include "pressure.glsl"
+
+layout(set = 3, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
+layout(set = 3, binding = 1) uniform texture3D SourceA;
+layout(set = 3, binding = 2) uniform texture3D SourceB;
+// layout(set = 3, binding = 3, r32f) uniform restrict image3D Dest;
+
+COMPUTE_PASS_VOLUME
+
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    float a = texelFetch(SourceA, gridCoord, 0).x;
+    float b = texelFetch(SourceB, gridCoord, 0).x;
+
+    // TODO: Not a great write pattern
+    uvec3 dispatchSize = gl_WorkGroupSize * gl_NumWorkGroups;
+    uint globalLinearTid =
+        gl_GlobalInvocationID.z * dispatchSize.x * dispatchSize.y + gl_GlobalInvocationID.y * dispatchSize.x + gl_GlobalInvocationID.x;
+    DotProductBuffer[globalLinearTid] = 1.0; // a * b;
+}
