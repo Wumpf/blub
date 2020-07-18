@@ -62,9 +62,6 @@ pub struct HybridFluid {
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_update_particles: ComputePipelineHandle,
 
-    push_constants_dotproduct_reduce: Vec<[u32; 2]>,
-    push_constants_dotproduct_final: Vec<[u32; 2]>,
-
     max_num_particles: u32,
 }
 
@@ -338,19 +335,6 @@ impl HybridFluid {
                 .buffer(dotproduct_reduce_result_buffer.slice(..))
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
         ];
-        let mut push_constants_dotproduct_reduce = Vec::new();
-        let mut push_constants_dotproduct_final = Vec::new();
-        {
-            let mut num_cells = (grid_dimension.width * grid_dimension.height * grid_dimension.depth) as u32;
-            while num_cells > Self::DOTPRODUCT_REDUCE_REDUCTION {
-                push_constants_dotproduct_reduce.push([num_cells, Self::DOTPRODUCT_RESULTMODE_REDUCE]);
-                num_cells /= Self::DOTPRODUCT_REDUCE_REDUCTION;
-            }
-            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_REDUCE]); // unused, just there for nice access.
-            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_INIT]);
-            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_ALPHA]);
-            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_BETA]);
-        }
 
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(particles_position_llindex.slice(..))
@@ -503,9 +487,6 @@ impl HybridFluid {
             pipeline_update_particles,
 
             max_num_particles,
-
-            push_constants_dotproduct_reduce,
-            push_constants_dotproduct_final,
         }
     }
 
@@ -637,31 +618,31 @@ impl HybridFluid {
         result_mode: u32,
     ) {
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
-
         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_start));
         cpass.set_bind_group(3, target_bind_group, &[]);
         cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+
         {
             // reduce.
             let mut source_buffer_index = 0;
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_reduce_and_final));
-            let mut num_entires_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
-            for constants in self.push_constants_dotproduct_reduce.iter() {
+            let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
+            while num_entries_remaining > Self::DOTPRODUCT_REDUCE_REDUCTION {
                 cpass.set_bind_group(3, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
-                cpass.set_push_constants(0, constants);
+                cpass.set_push_constants(0, &[num_entries_remaining, Self::DOTPRODUCT_RESULTMODE_REDUCE]);
                 cpass.dispatch(
-                    wgpu_utils::compute_group_size_1d(num_entires_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+                    wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
                     1,
                     1,
                 );
                 source_buffer_index = 1 - source_buffer_index;
-                num_entires_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION;
+                num_entries_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION;
             }
             // final
             cpass.set_bind_group(3, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
-            cpass.set_push_constants(0, &self.push_constants_dotproduct_final[result_mode as usize]);
+            cpass.set_push_constants(0, &[num_entries_remaining, result_mode]);
             cpass.dispatch(
-                wgpu_utils::compute_group_size_1d(num_entires_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+                wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
                 1,
                 1,
             );
