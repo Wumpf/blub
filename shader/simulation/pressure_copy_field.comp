@@ -1,0 +1,15 @@
+// Copies from one image3d to another. Used for search field init.
+
+#version 460
+
+#include "pressure.glsl"
+
+layout(set = 3, binding = 0, r32f) uniform restrict image3D Source;
+layout(set = 3, binding = 1, r32f) uniform restrict image3D Destination;
+
+COMPUTE_PASS_VOLUME
+
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    imageStore(Destination, gridCoord, imageLoad(Source, gridCoord));
+}

@@ -1,4 +1,4 @@
-// Computes velocity divergence of VelocityVolumes
+// Computes velocity divergence of VelocityVolumes and sets pressure volume to 0
 // This is the b in the Ax=b equation we're solving.
 // Since x (the pressure p!) starts out with zero it also doubles as initial residual of the (preconditioned) conjugate gradient solver!
 
@@ -6,10 +6,8 @@
 
 #include "pressure.glsl"
 
-// layout(set = 3, binding = 0) buffer restrict PcgScalars_ { PcgScalars Scalars; };
-// layout(set = 3, binding = 1) uniform texture3D Read0;
-// layout(set = 3, binding = 2) uniform texture3D Read1;
-layout(set = 3, binding = 3, r32f) uniform restrict image3D DivergenceVolume;
+layout(set = 3, binding = 0, r32f) uniform restrict image3D DivergenceVolume; // This is the initial ResidualField!
+layout(set = 3, binding = 1, r32f) uniform restrict image3D PressureVolume;
 
 COMPUTE_PASS_VOLUME
 
@@ -40,4 +38,5 @@ void main() {
     }
 
     imageStore(DivergenceVolume, gridCoord, divergence.xxxx);
+    imageStore(PressureVolume, gridCoord, vec4(0.0));
 }
