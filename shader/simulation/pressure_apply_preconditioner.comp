@@ -2,14 +2,12 @@
 
 #version 460
 
-#include "../per_frame_resources.glsl"
-#include "../utilities.glsl"
-#include "hybrid_fluid.glsl"
+#include "pressure.glsl"
 
 // layout(set = 3, binding = 0) buffer restrict PcgScalars_ { PcgScalars Scalars; };
 layout(set = 3, binding = 1) uniform texture3D Residual;
 // layout(set = 3, binding = 2) uniform texture3D Read1;
-layout(set = 3, binding = 3, r32f) uniform restrict image3D Auxilary;
+layout(set = 3, binding = 3, r32f) uniform restrict writeonly image3D Auxilary;
 
 COMPUTE_PASS_VOLUME
 
@@ -19,5 +17,25 @@ COMPUTE_PASS_VOLUME
 // as well as https://github.com/austinEng/WebGL-PIC-FLIP-Fluid#pressure-solve
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    imageStore(Auxilary, gridCoord, vec4(1.0));
+    float result = texelFetch(Residual, gridCoord, 0).x; // todo: early out if there's nothing to do here
+
+    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+
+    // This is the diagonal value of matrix A!
+    float numNonSolid = 0.0;
+    numNonSolid += float(markerX0 != CELL_SOLID);
+    numNonSolid += float(markerX1 != CELL_SOLID);
+    numNonSolid += float(markerY0 != CELL_SOLID);
+    numNonSolid += float(markerY1 != CELL_SOLID);
+    numNonSolid += float(markerZ0 != CELL_SOLID);
+    numNonSolid += float(markerZ1 != CELL_SOLID);
+    if (numNonSolid > 0.0)
+        result /= numNonSolid;
+
+    imageStore(Auxilary, gridCoord, result.xxxx);
 }
