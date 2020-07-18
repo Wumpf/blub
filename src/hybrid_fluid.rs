@@ -62,6 +62,9 @@ pub struct HybridFluid {
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_update_particles: ComputePipelineHandle,
 
+    push_constants_dotproduct_reduce: Vec<[u32; 2]>,
+    push_constants_dotproduct_final: Vec<[u32; 2]>,
+
     max_num_particles: u32,
 }
 
@@ -335,6 +338,19 @@ impl HybridFluid {
                 .buffer(dotproduct_reduce_result_buffer.slice(..))
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
         ];
+        let mut push_constants_dotproduct_reduce = Vec::new();
+        let mut push_constants_dotproduct_final = Vec::new();
+        {
+            let mut num_cells = (grid_dimension.width * grid_dimension.height * grid_dimension.depth) as u32;
+            while num_cells > Self::DOTPRODUCT_REDUCE_REDUCTION {
+                push_constants_dotproduct_reduce.push([num_cells, Self::DOTPRODUCT_RESULTMODE_REDUCE]);
+                num_cells /= Self::DOTPRODUCT_REDUCE_REDUCTION;
+            }
+            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_REDUCE]); // unused, just there for nice access.
+            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_INIT]);
+            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_ALPHA]);
+            push_constants_dotproduct_final.push([num_cells, Self::DOTPRODUCT_RESULTMODE_BETA]);
+        }
 
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(particles_position_llindex.slice(..))
@@ -487,6 +503,9 @@ impl HybridFluid {
             pipeline_update_particles,
 
             max_num_particles,
+
+            push_constants_dotproduct_reduce,
+            push_constants_dotproduct_final,
         }
     }
 
@@ -596,6 +615,59 @@ impl HybridFluid {
         self.grid_dimension
     }
 
+    const COMPUTE_LOCAL_SIZE_FLUID: wgpu::Extent3d = wgpu::Extent3d {
+        width: 8,
+        height: 8,
+        depth: 8,
+    };
+    const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
+    const COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE: u32 = 1024;
+
+    const DOTPRODUCT_REDUCE_REDUCTION: u32 = Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE;
+    const DOTPRODUCT_RESULTMODE_REDUCE: u32 = 0;
+    const DOTPRODUCT_RESULTMODE_INIT: u32 = 1;
+    const DOTPRODUCT_RESULTMODE_ALPHA: u32 = 2;
+    const DOTPRODUCT_RESULTMODE_BETA: u32 = 3;
+
+    fn compute_dotproduct<'a, 'b: 'a>(
+        &'b self,
+        cpass: &mut wgpu::ComputePass<'a>,
+        pipeline_manager: &'a PipelineManager,
+        target_bind_group: &'b wgpu::BindGroup,
+        result_mode: u32,
+    ) {
+        let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
+
+        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_start));
+        cpass.set_bind_group(3, target_bind_group, &[]);
+        cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+        {
+            // reduce.
+            let mut source_buffer_index = 0;
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_reduce_and_final));
+            let mut num_entires_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
+            for constants in self.push_constants_dotproduct_reduce.iter() {
+                cpass.set_bind_group(3, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
+                cpass.set_push_constants(0, constants);
+                cpass.dispatch(
+                    wgpu_utils::compute_group_size_1d(num_entires_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+                    1,
+                    1,
+                );
+                source_buffer_index = 1 - source_buffer_index;
+                num_entires_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION;
+            }
+            // final
+            cpass.set_bind_group(3, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
+            cpass.set_push_constants(0, &self.push_constants_dotproduct_final[result_mode as usize]);
+            cpass.dispatch(
+                wgpu_utils::compute_group_size_1d(num_entires_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+                1,
+                1,
+            );
+        }
+    }
+
     pub fn step(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -608,36 +680,8 @@ impl HybridFluid {
             self.simulation_properties_dirty.set(false);
         }
 
-        const COMPUTE_LOCAL_SIZE_FLUID: wgpu::Extent3d = wgpu::Extent3d {
-            width: 8,
-            height: 8,
-            depth: 8,
-        };
-        const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
-        const COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE: u32 = 1024;
-
-        const DOTPRODUCT_REDUCE_REDUCTION: u32 = COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE;
-        const DOTPRODUCT_RESULTMODE_REDUCE: u32 = 0;
-        const DOTPRODUCT_RESULTMODE_INIT: u32 = 1;
-        const DOTPRODUCT_RESULTMODE_ALPHA: u32 = 2;
-        const DOTPRODUCT_RESULTMODE_BETA: u32 = 3;
-
-        let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, COMPUTE_LOCAL_SIZE_FLUID);
-        let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, COMPUTE_LOCAL_SIZE_PARTICLES);
-
-        let mut push_constants_dotproduct_reduce = Vec::new();
-        let mut push_constants_dotproduct_final = Vec::new();
-        {
-            let mut num_cells = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
-            while num_cells > DOTPRODUCT_REDUCE_REDUCTION {
-                push_constants_dotproduct_reduce.push([num_cells, DOTPRODUCT_RESULTMODE_REDUCE]);
-                num_cells /= DOTPRODUCT_REDUCE_REDUCTION;
-            }
-            push_constants_dotproduct_final.push([num_cells, DOTPRODUCT_RESULTMODE_REDUCE]); // unused, just there for nice access.
-            push_constants_dotproduct_final.push([num_cells, DOTPRODUCT_RESULTMODE_INIT]);
-            push_constants_dotproduct_final.push([num_cells, DOTPRODUCT_RESULTMODE_ALPHA]);
-            push_constants_dotproduct_final.push([num_cells, DOTPRODUCT_RESULTMODE_BETA]);
-        }
+        let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
+        let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, Self::COMPUTE_LOCAL_SIZE_PARTICLES);
 
         let mut cpass = encoder.begin_compute_pass();
         cpass.set_bind_group(0, &per_frame_bind_group, &[]);
@@ -667,7 +711,7 @@ impl HybridFluid {
         {
             cpass.set_bind_group(2, &self.bind_group_read_mac_grid, &[]);
 
-            // Compute divergence, this is also the initial residual vector (r) since we start with p = 0
+            // Compute divergence, this is also the initial residual field (r) since we start with p = 0
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_compute_divergence));
             cpass.set_bind_group(3, &self.bind_group_pressure_compute_divergence, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
@@ -677,36 +721,53 @@ impl HybridFluid {
             cpass.set_bind_group(3, &self.bind_group_pressure_preconditioner, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
-            // Init search vector (z) to preconditioner result
+            // Init search field (z) to preconditioner result
+            // TODO
 
-            // Init sigma to dotproduct of search vector (z) and residual vector (r)
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_start));
-            cpass.set_bind_group(3, &self.bind_group_pressure_dotproduct_zr, &[]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-            {
-                // reduce.
-                let mut source_buffer_index = 0;
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_reduce_and_final));
-                let mut num_entires_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
-                for constants in push_constants_dotproduct_reduce.iter() {
-                    cpass.set_bind_group(3, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
-                    cpass.set_push_constants(0, constants);
-                    cpass.dispatch(
-                        wgpu_utils::compute_group_size_1d(num_entires_remaining, COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
-                        1,
-                        1,
-                    );
-                    source_buffer_index = 1 - source_buffer_index;
-                    num_entires_remaining /= DOTPRODUCT_REDUCE_REDUCTION;
-                }
-                // final
-                cpass.set_bind_group(3, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
-                cpass.set_push_constants(0, &push_constants_dotproduct_final[DOTPRODUCT_RESULTMODE_INIT as usize]);
-                cpass.dispatch(
-                    wgpu_utils::compute_group_size_1d(num_entires_remaining, COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
-                    1,
-                    1,
+            // Init sigma to dotproduct of auxiliary field (z) and residual field (r)
+            self.compute_dotproduct(
+                &mut cpass,
+                pipeline_manager,
+                &self.bind_group_pressure_dotproduct_zr,
+                Self::DOTPRODUCT_RESULTMODE_INIT,
+            );
+
+            // Solver iterations ...
+            const NUM_ITERATIONS: u32 = 32;
+            let mut i = 0;
+            loop {
+                // Apply cell relationships to preconditioned vector (i.e. multiply z with A)
+                // TODO
+
+                // dotproduct of auxiliary field (z) and search field (s)
+                self.compute_dotproduct(
+                    &mut cpass,
+                    pipeline_manager,
+                    &self.bind_group_pressure_dotproduct_zs,
+                    Self::DOTPRODUCT_RESULTMODE_ALPHA,
                 );
+
+                // update pressure field (p)
+                // TODO
+                if i >= NUM_ITERATIONS {
+                    break;
+                }
+
+                // update residual field (r)
+                // TODO
+
+                // dotproduct of auxiliary field (z) and residual field (r)
+                self.compute_dotproduct(
+                    &mut cpass,
+                    pipeline_manager,
+                    &self.bind_group_pressure_dotproduct_zs,
+                    Self::DOTPRODUCT_RESULTMODE_BETA,
+                );
+
+                // Update search vector
+                // TODO
+
+                i += 1;
             }
         }
         {
@@ -722,7 +783,7 @@ impl HybridFluid {
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
-        // TODO: WHY DID THIS BREAK?
+        // TODO: WHY DOES THIS BREAK VULKAN VALIDATION NOW?
         // {
         //     cpass.set_bind_group(2, &self.bind_group_write_particles, &[]);
 
