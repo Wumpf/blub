@@ -9,8 +9,8 @@
 
 #define LOCAL_SIZE 1024
 
-layout(set = 3, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
-layout(set = 3, binding = 1) buffer restrict DotProductDest_ { float DotProductDest[]; };
+layout(set = 2, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
+layout(set = 2, binding = 1) buffer restrict DotProductDest_ { float DotProductDest[]; };
 
 layout(push_constant) uniform PushConstants_ {
     uint SourceBufferSize;

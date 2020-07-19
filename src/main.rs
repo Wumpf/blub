@@ -92,7 +92,7 @@ impl Application {
                     },
                     shader_validation: false, // Disabled shader validation for now since we use too many things that it doesn't know about.
                 },
-                None,
+                None, //Some(Path::new("C:/dev/blub/trace")),
             )
             .await
             .unwrap();

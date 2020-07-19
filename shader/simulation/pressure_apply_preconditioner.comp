@@ -4,10 +4,10 @@
 
 #include "pressure.glsl"
 
-// layout(set = 3, binding = 0) buffer restrict PcgScalars_ { PcgScalars Scalars; };
-layout(set = 3, binding = 1) uniform texture3D Residual;
-// layout(set = 3, binding = 2) uniform texture3D Read1;
-layout(set = 3, binding = 3, r32f) uniform restrict writeonly image3D Auxilary;
+// layout(set = 2, binding = 0) buffer restrict PcgScalars_ { PcgScalars Scalars; };
+layout(set = 2, binding = 1) uniform texture3D Residual;
+// layout(set = 2, binding = 2) uniform texture3D Read1;
+layout(set = 2, binding = 3, r32f) uniform restrict writeonly image3D Auxilary;
 
 COMPUTE_PASS_VOLUME
 
@@ -27,15 +27,15 @@ void main() {
     uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
     // This is the diagonal value of matrix A!
-    float numNonSolid = 0.0;
-    numNonSolid += float(markerX0 != CELL_SOLID);
-    numNonSolid += float(markerX1 != CELL_SOLID);
-    numNonSolid += float(markerY0 != CELL_SOLID);
-    numNonSolid += float(markerY1 != CELL_SOLID);
-    numNonSolid += float(markerZ0 != CELL_SOLID);
-    numNonSolid += float(markerZ1 != CELL_SOLID);
-    if (numNonSolid > 0.0)
-        result /= numNonSolid;
+    float numNonSolidNeighbors = 0.0;
+    numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
+    if (numNonSolidNeighbors > 0.0)
+        result /= numNonSolidNeighbors;
 
     imageStore(Auxilary, gridCoord, result.xxxx);
 }

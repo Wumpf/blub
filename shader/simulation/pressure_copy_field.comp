@@ -4,8 +4,8 @@
 
 #include "pressure.glsl"
 
-layout(set = 3, binding = 0, r32f) uniform restrict image3D Source;
-layout(set = 3, binding = 1, r32f) uniform restrict image3D Destination;
+layout(set = 2, binding = 0, r32f) uniform restrict image3D Source;
+layout(set = 2, binding = 1, r32f) uniform restrict writeonly image3D Destination;
 
 COMPUTE_PASS_VOLUME
 

@@ -27,5 +27,5 @@ serde_json = "1.0"
 shaderc = "0.6" 
 strum = "0.18" 
 strum_macros = "0.18" 
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "8e4d0015862507027f3a6bd68056c64568d11366"} 
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "8e4d0015862507027f3a6bd68056c64568d11366"}#, features = ["trace"]}  
 winit = "0.21" # Can't upgrade to 0.2.2 because of imgui-winit-support

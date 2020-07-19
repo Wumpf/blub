@@ -4,10 +4,10 @@
 
 #include "pressure.glsl"
 
-layout(set = 3, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
-// layout(set = 3, binding = 1) uniform texture3D Residual;
-// layout(set = 3, binding = 2) uniform texture3D Read1;
-layout(set = 3, binding = 3, r32f) uniform restrict writeonly image3D Pressure;
+layout(set = 2, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
+// layout(set = 2, binding = 1) uniform texture3D Residual;
+// layout(set = 2, binding = 2) uniform texture3D Read1;
+layout(set = 2, binding = 3, r32f) uniform restrict writeonly image3D Pressure;
 
 COMPUTE_PASS_VOLUME
 

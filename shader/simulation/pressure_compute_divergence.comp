@@ -6,8 +6,8 @@
 
 #include "pressure.glsl"
 
-layout(set = 3, binding = 0, r32f) uniform restrict image3D DivergenceVolume; // This is the initial ResidualField!
-layout(set = 3, binding = 1, r32f) uniform restrict image3D PressureVolume;
+layout(set = 2, binding = 0, r32f) uniform restrict image3D DivergenceVolume; // This is the initial ResidualField!
+layout(set = 2, binding = 1, r32f) uniform restrict image3D PressureVolume;
 
 COMPUTE_PASS_VOLUME
 
