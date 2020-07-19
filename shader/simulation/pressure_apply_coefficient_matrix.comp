@@ -4,6 +4,7 @@
 
 #include "pressure.glsl"
 
+layout(set = 2, binding = 0) buffer readonly restrict PcgScalars_ { PcgScalars Scalars; };
 layout(set = 2, binding = 0, r32f) uniform restrict image3D SearchVector;
 layout(set = 2, binding = 1, r32f) uniform restrict writeonly image3D AuxilaryVector;
 

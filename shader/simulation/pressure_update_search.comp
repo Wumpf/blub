@@ -1,0 +1,21 @@
+// Copies from one image3d to another. Used for search field init.
+
+#version 460
+
+#include "pressure.glsl"
+
+layout(set = 2, binding = 0, r32f) uniform restrict image3D Search;
+layout(set = 2, binding = 1) uniform texture3D Auxillary;
+layout(set = 2, binding = 2) buffer readonly restrict PcgScalars_ { PcgScalars Scalars; };
+
+COMPUTE_PASS_VOLUME
+
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    float beta = Scalars.AlphaBeta;
+    {
+        float searchBefore = imageLoad(Search, gridCoord).x;
+        float auxiliary = texelFetch(Auxillary, gridCoord, 0).x;
+        imageStore(Search, gridCoord, (auxiliary + beta * searchBefore).xxxx);
+    }
+}
