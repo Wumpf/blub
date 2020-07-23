@@ -336,12 +336,12 @@ impl HybridFluid {
         let bind_group_pressure_dotproduct_zr = BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_init)
             .buffer(dotproduct_reduce_step_buffers[0].slice(..))
             .texture(&volume_pcg_auxiliary_view)
-            .texture(&volume_pcg_search_view)
+            .texture(&volume_pcg_residual_view)
             .create(device, "BindGroup: Pressure Solve, Start z,r");
         let bind_group_pressure_dotproduct_zs = BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_init)
             .buffer(dotproduct_reduce_step_buffers[0].slice(..))
             .texture(&volume_pcg_auxiliary_view)
-            .texture(&volume_pcg_residual_view)
+            .texture(&volume_pcg_search_view)
             .create(device, "BindGroup: Pressure Solve, Start z,s");
         let bind_group_pressure_dotproduct_reduce = [
             BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_reduce)
@@ -753,7 +753,7 @@ impl HybridFluid {
                 num_entries_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION;
             }
             // final
-            cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
+            cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_final[source_buffer_index], &[]);
             cpass.set_push_constants(0, &[num_entries_remaining, result_mode]);
             cpass.dispatch(
                 wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
@@ -862,11 +862,20 @@ impl HybridFluid {
                     break;
                 }
 
+                // Apply preconditioner
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
+                /////////////////////////// TODO Workaround for https://github.com/gfx-rs/wgpu-rs/issues/451
+                cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
+                cpass.set_bind_group(1, &self.bind_group_read_mac_grid, &[]);
+                ///////////////////////////
+                cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner, &[]);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+
                 // dotproduct of auxiliary field (z) and residual field (r)
                 self.compute_dotproduct(
                     &mut cpass,
                     pipeline_manager,
-                    &self.bind_group_pressure_dotproduct_zs,
+                    &self.bind_group_pressure_dotproduct_zr,
                     Self::DOTPRODUCT_RESULTMODE_BETA,
                 );
 

@@ -22,7 +22,7 @@ float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, 
         return min(0.0, currentCellStaggeredVelocity);
     }
     else {
-        return currentCellStaggeredVelocity - (neighborPressure - pressureAtCenter);
+        return currentCellStaggeredVelocity - (pressureAtCenter - neighborPressure);
     }
 }
 

@@ -19,23 +19,26 @@ void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     float result = texelFetch(Residual, gridCoord, 0).x; // todo: early out if there's nothing to do here
 
-    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+    if (marker == CELL_FLUID) {
+        uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+        uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+        uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+        uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+        uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+        uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
-    // This is the diagonal value of matrix A!
-    float numNonSolidNeighbors = 0.0;
-    numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
-    if (numNonSolidNeighbors > 0.0)
-        result /= numNonSolidNeighbors;
+        // This is the diagonal value of matrix A!
+        float numNonSolidNeighbors = 0.0;
+        numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
+        if (numNonSolidNeighbors > 0.0)
+            result /= numNonSolidNeighbors;
+    }
 
     imageStore(Auxilary, gridCoord, result.xxxx);
 }

@@ -15,29 +15,29 @@ void main() {
     float result = 0.0;
 
     uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
-    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
-
-    // This is the diagonal value of matrix A!
-    float numNonSolidNeighbors = 0.0;
-    numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
-
-    // apply diagonal of A
-    if (numNonSolidNeighbors > 0.0) {
-        result += numNonSolidNeighbors * imageLoad(SearchVector, gridCoord).x;
-    }
-
-    // apply other coefficients of A
     if (marker == CELL_FLUID) {
+        uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+        uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+        uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+        uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+        uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+        uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+
+        // This is the diagonal value of matrix A!
+        float numNonSolidNeighbors = 0.0;
+        numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
+        numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
+
+        // apply diagonal of A
+        if (numNonSolidNeighbors > 0.0) {
+            result += numNonSolidNeighbors * imageLoad(SearchVector, gridCoord).x;
+        }
+
+        // apply other coefficients of A
         if (markerX0 == CELL_FLUID) {
             result -= imageLoad(SearchVector, gridCoord - ivec3(1, 0, 0)).x;
         }
