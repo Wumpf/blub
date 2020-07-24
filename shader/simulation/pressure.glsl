@@ -14,3 +14,9 @@ struct PcgScalars {
     float Sigma;     // the dot product between auxilary (preconditioned residual) and residual
     vec2 _Dummy;
 };
+
+layout(push_constant) uniform PushConstants_ {
+    uint Mode;             // Used to make adjustments to the shader invocation (which don't justify another shader instance)
+    uint SourceBufferSize; // The size of the source buffer
+}
+PushConstants;

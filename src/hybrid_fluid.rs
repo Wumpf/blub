@@ -74,6 +74,8 @@ pub struct HybridFluid {
     pipeline_update_particles: ComputePipelineHandle,
 
     max_num_particles: u32,
+
+    is_first_step: Cell<bool>,
 }
 
 static mut GROUP_LAYOUT_RENDERER: Option<BindGroupLayoutWithDesc> = None;
@@ -325,16 +327,16 @@ impl HybridFluid {
         let bind_group_pressure_compute_divergence = BindGroupBuilder::new(&group_layout_pressure_solve_init)
             .texture(&volume_pcg_residual_view)
             .texture(&volume_pressure_view)
-            .create(device, "BindGroup: Compute divergence and clear pressure");
+            .create(device, "BindGroup: Compute initial residual");
         let bind_group_pressure_init_search_vector = BindGroupBuilder::new(&group_layout_pressure_solve_init)
             .texture(&volume_pcg_auxiliary_view)
             .texture(&volume_pcg_search_view)
             .create(device, "BindGroup: Copy auxiliary vector to search vector");
         let bind_group_pressure_preconditioner = BindGroupBuilder::new(&group_layout_pressure_solve)
             .buffer(dotproduct_reduce_result_buffer.slice(..))
-            .texture(&volume_pcg_residual_view) // Read0
-            .texture(&volume_pressure_view) // Read1 UNUSED
-            .texture(&volume_pcg_auxiliary_view) // Write0
+            .texture(&volume_pcg_residual_view)
+            .texture(&volume_pressure_view)
+            .texture(&volume_pcg_auxiliary_view)
             .create(device, "BindGroup: Preconditioner");
         let bind_group_pressure_dotproduct_zr = BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_init)
             .buffer(dotproduct_reduce_step_buffers[0].slice(..))
@@ -420,7 +422,10 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_solve.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStage::COMPUTE,
+                range: 0..8,
+            }],
         }));
         let layout_pressure_solve_init = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -428,7 +433,10 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_solve_init.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStage::COMPUTE,
+                range: 0..8,
+            }],
         }));
         let layout_pressure_solve_dotproduct_init = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -436,7 +444,10 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_solve_dotproduct_init.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStage::COMPUTE,
+                range: 0..8,
+            }],
         }));
         let layout_pressure_solve_dotproduct_reduce = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -456,7 +467,10 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_update_pressure_and_residual.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStage::COMPUTE,
+                range: 0..8,
+            }],
         }));
         let layout_pressure_update_search = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -464,7 +478,10 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_update_search.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStage::COMPUTE,
+                range: 0..8,
+            }],
         }));
 
         let layout_write_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -607,6 +624,7 @@ impl HybridFluid {
             pipeline_update_particles,
 
             max_num_particles,
+            is_first_step: Cell::new(true),
         }
     }
 
@@ -679,7 +697,6 @@ impl HybridFluid {
 
         // Clear velocities:
         // wgpu-rs doesn't zero initialize yet (bug/missing feature impl)
-        // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
         // https://github.com/gfx-rs/wgpu/issues/563
         let offset_velocity_buffer = self.simulation_properties.num_particles as u64 * std::mem::size_of::<cgmath::Vector4<f32>>() as u64;
         let zero_velocity = vec![0 as u8; num_new_particles as usize * std::mem::size_of::<cgmath::Vector4<f32>>()];
@@ -760,7 +777,7 @@ impl HybridFluid {
             let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
             while num_entries_remaining > Self::DOTPRODUCT_REDUCE_REDUCTION {
                 cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
-                cpass.set_push_constants(0, &[num_entries_remaining, Self::DOTPRODUCT_RESULTMODE_REDUCE]);
+                cpass.set_push_constants(0, &[Self::DOTPRODUCT_RESULTMODE_REDUCE, num_entries_remaining]);
                 cpass.dispatch(
                     wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
                     1,
@@ -771,7 +788,7 @@ impl HybridFluid {
             }
             // final
             cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_final[source_buffer_index], &[]);
-            cpass.set_push_constants(0, &[num_entries_remaining, result_mode]);
+            cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
             cpass.dispatch(
                 wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
                 1,
@@ -823,9 +840,22 @@ impl HybridFluid {
         {
             cpass.set_bind_group(1, &self.bind_group_read_mac_grid, &[]);
 
-            // Compute divergence (this is also the initial residual field (r) since we start with p = 0)
-            // and set initial pressure field to zero.
+            // Compute divergence (b) and the initial residual field (r)
+            // We use pressure from last frame, but set explicitly set all pressure values to zero wherever there is not fluid right now.
+            // This is done in order to prevent having results from many frames ago influence results for upcoming frames.
+            // In first step overall we instruct to use a fresh pressure buffer.
+            const DIVERGENCE_FIRST_STEP: u32 = 0;
+            const DIVERGENCE_NOT_FIRST_STEP: u32 = 1;
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_compute_divergence));
+            // Clear pressures on first step.
+            // wgpu-rs doesn't zero initialize yet (bug/missing feature impl)
+            // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
+            // https://github.com/gfx-rs/wgpu/issues/563
+            if self.is_first_step.get() {
+                cpass.set_push_constants(0, &[DIVERGENCE_FIRST_STEP, 0]);
+            } else {
+                cpass.set_push_constants(0, &[DIVERGENCE_NOT_FIRST_STEP, 0]);
+            }
             cpass.set_bind_group(2, &self.bind_group_pressure_compute_divergence, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
@@ -848,7 +878,7 @@ impl HybridFluid {
             );
 
             // Solver iterations ...
-            const NUM_ITERATIONS: u32 = 32;
+            const NUM_ITERATIONS: u32 = 16;
             let mut i = 0;
             loop {
                 // Apply cell relationships to preconditioned vector (i.e. multiply z with A)
@@ -930,5 +960,6 @@ impl HybridFluid {
             ///////////////////////////
             cpass.dispatch(particle_work_groups, 1, 1);
         }
+        self.is_first_step.set(false);
     }
 }
