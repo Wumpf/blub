@@ -884,12 +884,6 @@ impl HybridFluid {
             loop {
                 // Apply cell relationships to preconditioned vector (i.e. multiply z with A)
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_coefficient_matrix));
-                /////////////////////////// TODO Workaround for https://github.com/gfx-rs/wgpu-rs/issues/451
-                cpass.set_bind_group(0, &self.bind_group_uniform, &[]);
-                cpass.set_bind_group(0, &per_frame_bind_group, &[]);
-                cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
-                cpass.set_bind_group(1, &self.bind_group_read_mac_grid, &[]);
-                ///////////////////////////
                 cpass.set_bind_group(2, &self.bind_group_pressure_apply_coefficient_matrix, &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
@@ -913,10 +907,6 @@ impl HybridFluid {
                 // Apply preconditioner
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
                 cpass.set_push_constants(0, &[PRECONDITIONER_STEP_NOTINIT]);
-                /////////////////////////// TODO Workaround for https://github.com/gfx-rs/wgpu-rs/issues/451
-                cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
-                cpass.set_bind_group(1, &self.bind_group_read_mac_grid, &[]);
-                ///////////////////////////
                 cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner, &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
