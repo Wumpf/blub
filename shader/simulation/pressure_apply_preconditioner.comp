@@ -4,24 +4,30 @@
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0) uniform texture3D Residual;
-layout(set = 2, binding = 1, r32f) uniform restrict writeonly image3D Auxiliary;
+layout(set = 2, binding = 0, r32f) uniform restrict writeonly image3D Auxiliary;
+layout(set = 2, binding = 1) uniform texture3D Residual;
 // layout(set = 2, binding = 2) uniform PcgScalars_ { PcgScalars Scalars; };
 
 COMPUTE_PASS_VOLUME
 
-#define PRECONDITIONER_STEP_INIT 0
+#define PRECONDITIONER_SET_UNUSED_TO_ZERO 1
 
-// TODO: This is a diagonal jacobi preconditioner. Easy to start off, but want to try Incomplete Poisson preconditioner instead!
+// Incomplete Poisson preconditioner
 // see https://software.intel.com/content/www/us/en/develop/articles/parallelized-incomplete-poisson-preconditioner-in-cloth-simulation.html
 // and also https://github.com/tunabrain/gpu-fluid
 // as well as https://github.com/austinEng/WebGL-PIC-FLIP-Fluid#pressure-solve
+
+// Steps:
+// * ztemp[i] = r[i] - r * L[i, :] * 1/d
+// * z[i] = ztemp[i] - ztemp * L[i, :] * 1/d
+// -> Same shader with slightly different inputs
+
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
         // Set to zero during init of the Auxiliary, so we don't need to special case dot products
-        if (PushConstants.Mode == PRECONDITIONER_STEP_INIT) {
+        if (PushConstants.Mode == PRECONDITIONER_SET_UNUSED_TO_ZERO) {
             imageStore(Auxiliary, gridCoord, vec4(0.0));
         }
         return;
@@ -36,7 +42,16 @@ void main() {
     uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
     uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
-    // This is the diagonal value of matrix A!
+    if (markerX0 == CELL_FLUID) {
+        result -= texelFetch(Residual, gridCoord - ivec3(1, 0, 0), 1).x;
+    }
+    if (markerY0 == CELL_FLUID) {
+        result -= texelFetch(Residual, gridCoord - ivec3(0, 1, 0), 1).x;
+    }
+    if (markerZ0 == CELL_FLUID) {
+        result -= texelFetch(Residual, gridCoord - ivec3(0, 0, 1), 1).x;
+    }
+
     float numNonSolidNeighbors = 0.0;
     numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
     numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
