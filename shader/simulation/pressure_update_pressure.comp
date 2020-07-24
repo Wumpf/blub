@@ -6,7 +6,7 @@
 
 layout(set = 2, binding = 0, r32f) uniform restrict image3D Pressure;
 layout(set = 2, binding = 1) uniform texture3D Search;
-layout(set = 2, binding = 2) buffer readonly restrict PcgScalars_ { PcgScalars Scalars; };
+layout(set = 2, binding = 2) uniform PcgScalars_ { PcgScalars Scalars; };
 
 COMPUTE_PASS_VOLUME
 

@@ -179,7 +179,7 @@ impl HybridFluid {
         let dotproduct_reduce_result_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Buffer: DotProduct Result"),
             size: 4 * std::mem::size_of::<f32>() as u64,
-            usage: wgpu::BufferUsage::STORAGE,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::UNIFORM,
             mapped_at_creation: false,
         });
 
@@ -238,12 +238,6 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::utexture3D()) // marker volume
             .create(device, "BindGroupLayout: Read MAC Grid");
 
-        let group_layout_pressure_solve = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::buffer(false)) // Buffer r/w
-            .next_binding_compute(binding_glsl::texture3D()) // Read0
-            .next_binding_compute(binding_glsl::texture3D()) // Read1
-            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // Write0
-            .create(device, "BindGroupLayout: Pressure solver");
         let group_layout_pressure_solve_init = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
@@ -260,8 +254,8 @@ impl HybridFluid {
         let group_layout_pressure_update_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // Pressure/Residual/Search
             .next_binding_compute(binding_glsl::texture3D()) // Search/Auxillary
-            .next_binding_compute(binding_glsl::buffer(true)) // scalars
-            .create(device, "BindGroupLayout: Pressure update pressure/residual/search");
+            .next_binding_compute(binding_glsl::uniform()) // scalars
+            .create(device, "BindGroupLayout: Generic volume update");
 
         // Bind groups.
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
@@ -327,11 +321,10 @@ impl HybridFluid {
             .texture(&volume_pcg_auxiliary_view)
             .texture(&volume_pcg_search_view)
             .create(device, "BindGroup: Copy auxiliary vector to search vector");
-        let bind_group_pressure_preconditioner = BindGroupBuilder::new(&group_layout_pressure_solve)
-            .buffer(dotproduct_reduce_result_buffer.slice(..))
+        let bind_group_pressure_preconditioner = BindGroupBuilder::new(&group_layout_pressure_update_volume)
             .texture(&volume_pcg_residual_view)
-            .texture(&volume_pressure_view)
             .texture(&volume_pcg_auxiliary_view)
+            .buffer(dotproduct_reduce_result_buffer.slice(..))
             .create(device, "BindGroup: Preconditioner");
         let bind_group_pressure_dotproduct_zr = BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_init)
             .buffer(dotproduct_reduce_step_buffers[0].slice(..))
@@ -417,7 +410,7 @@ impl HybridFluid {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
-                &group_layout_pressure_solve.layout,
+                &group_layout_pressure_update_volume.layout,
             ],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStage::COMPUTE,
