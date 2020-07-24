@@ -11,7 +11,7 @@ layout(set = 1, binding = 3) uniform utexture3D MarkerVolume;
 
 struct PcgScalars {
     float AlphaBeta; // after every product this is set to (sigma / dotProductResult)
-    float Sigma;     // the dot product between auxilary (preconditioned residual) and residual
+    float Sigma;     // the dot product between auxiliary (preconditioned residual) and residual
     vec2 _Dummy;
 };
 

@@ -6,57 +6,58 @@
 
 layout(set = 2, binding = 0) buffer readonly restrict PcgScalars_ { PcgScalars Scalars; };
 layout(set = 2, binding = 0, r32f) uniform restrict image3D SearchVector;
-layout(set = 2, binding = 1, r32f) uniform restrict writeonly image3D AuxilaryVector;
+layout(set = 2, binding = 1, r32f) uniform restrict writeonly image3D Auxiliary;
 
 COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    float result = 0.0;
-
     uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
-    if (marker == CELL_FLUID) {
-        uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-        uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-        uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-        uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-        uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-        uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
-
-        // This is the diagonal value of matrix A!
-        float numNonSolidNeighbors = 0.0;
-        numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
-
-        // apply diagonal of A
-        if (numNonSolidNeighbors > 0.0) {
-            result += numNonSolidNeighbors * imageLoad(SearchVector, gridCoord).x;
-        }
-
-        // apply other coefficients of A
-        if (markerX0 == CELL_FLUID) {
-            result -= imageLoad(SearchVector, gridCoord - ivec3(1, 0, 0)).x;
-        }
-        if (markerX1 == CELL_FLUID) {
-            result -= imageLoad(SearchVector, gridCoord + ivec3(1, 0, 0)).x;
-        }
-        if (markerY0 == CELL_FLUID) {
-            result -= imageLoad(SearchVector, gridCoord - ivec3(0, 1, 0)).x;
-        }
-        if (markerY1 == CELL_FLUID) {
-            result -= imageLoad(SearchVector, gridCoord + ivec3(0, 1, 0)).x;
-        }
-        if (markerZ0 == CELL_FLUID) {
-            result -= imageLoad(SearchVector, gridCoord - ivec3(0, 0, 1)).x;
-        }
-        if (markerZ1 == CELL_FLUID) {
-            result -= imageLoad(SearchVector, gridCoord + ivec3(0, 0, 1)).x;
-        }
+    if (marker != CELL_FLUID) {
+        return;
     }
 
-    imageStore(AuxilaryVector, gridCoord, result.xxxx);
+    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+
+    // This is the diagonal value of matrix A!
+    float numNonSolidNeighbors = 0.0;
+    numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
+
+    // apply diagonal of A
+    float result = 0.0;
+    if (numNonSolidNeighbors > 0.0) {
+        result += numNonSolidNeighbors * imageLoad(SearchVector, gridCoord).x;
+    }
+
+    // apply other coefficients of A
+    if (markerX0 == CELL_FLUID) {
+        result -= imageLoad(SearchVector, gridCoord - ivec3(1, 0, 0)).x;
+    }
+    if (markerX1 == CELL_FLUID) {
+        result -= imageLoad(SearchVector, gridCoord + ivec3(1, 0, 0)).x;
+    }
+    if (markerY0 == CELL_FLUID) {
+        result -= imageLoad(SearchVector, gridCoord - ivec3(0, 1, 0)).x;
+    }
+    if (markerY1 == CELL_FLUID) {
+        result -= imageLoad(SearchVector, gridCoord + ivec3(0, 1, 0)).x;
+    }
+    if (markerZ0 == CELL_FLUID) {
+        result -= imageLoad(SearchVector, gridCoord - ivec3(0, 0, 1)).x;
+    }
+    if (markerZ1 == CELL_FLUID) {
+        result -= imageLoad(SearchVector, gridCoord + ivec3(0, 0, 1)).x;
+    }
+
+    imageStore(Auxiliary, gridCoord, result.xxxx);
 }

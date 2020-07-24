@@ -1,4 +1,4 @@
-// Applies preconditioner to the residual, yielding the auxilary vector usually denoted as z.
+// Applies preconditioner to the residual, yielding the auxiliary vector usually denoted as z.
 
 #version 460
 
@@ -7,9 +7,11 @@
 // layout(set = 2, binding = 0) buffer restrict PcgScalars_ { PcgScalars Scalars; };
 layout(set = 2, binding = 1) uniform texture3D Residual;
 // layout(set = 2, binding = 2) uniform texture3D Read1;
-layout(set = 2, binding = 3, r32f) uniform restrict writeonly image3D Auxilary;
+layout(set = 2, binding = 3, r32f) uniform restrict writeonly image3D Auxiliary;
 
 COMPUTE_PASS_VOLUME
+
+#define PRECONDITIONER_STEP_INIT 0
 
 // TODO: This is a diagonal jacobi preconditioner. Easy to start off, but want to try Incomplete Poisson preconditioner instead!
 // see https://software.intel.com/content/www/us/en/develop/articles/parallelized-incomplete-poisson-preconditioner-in-cloth-simulation.html
@@ -17,28 +19,34 @@ COMPUTE_PASS_VOLUME
 // as well as https://github.com/austinEng/WebGL-PIC-FLIP-Fluid#pressure-solve
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    float result = texelFetch(Residual, gridCoord, 0).x; // todo: early out if there's nothing to do here
-
     uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
-    if (marker == CELL_FLUID) {
-        uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-        uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-        uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-        uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-        uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-        uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
-
-        // This is the diagonal value of matrix A!
-        float numNonSolidNeighbors = 0.0;
-        numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
-        if (numNonSolidNeighbors > 0.0)
-            result /= numNonSolidNeighbors;
+    if (marker != CELL_FLUID) {
+        // Set to zero during init of the Auxiliary, so we don't need to special case dot products
+        if (PushConstants.Mode == PRECONDITIONER_STEP_INIT) {
+            imageStore(Auxiliary, gridCoord, vec4(0.0));
+        }
+        return;
     }
 
-    imageStore(Auxilary, gridCoord, result.xxxx);
+    float result = texelFetch(Residual, gridCoord, 0).x;
+
+    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+
+    // This is the diagonal value of matrix A!
+    float numNonSolidNeighbors = 0.0;
+    numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
+    numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
+    if (numNonSolidNeighbors > 0.0)
+        result /= numNonSolidNeighbors;
+
+    imageStore(Auxiliary, gridCoord, result.xxxx);
 }

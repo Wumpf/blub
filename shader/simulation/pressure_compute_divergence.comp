@@ -35,7 +35,6 @@ void main() {
     // (otherwise results from early steps influence much later ones which can lead to odd artifacts)
     uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
-        imageStore(Residual, gridCoord, vec4(0.0)); // TODO: Should be unnecessary!
         imageStore(InitialPressureGuess, gridCoord, vec4(0.0));
         return;
     }

@@ -850,15 +850,18 @@ impl HybridFluid {
             // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
             // https://github.com/gfx-rs/wgpu/issues/563
             if self.is_first_step.get() {
-                cpass.set_push_constants(0, &[DIVERGENCE_FIRST_STEP, 0]);
+                cpass.set_push_constants(0, &[DIVERGENCE_FIRST_STEP]);
             } else {
-                cpass.set_push_constants(0, &[DIVERGENCE_NOT_FIRST_STEP, 0]);
+                cpass.set_push_constants(0, &[DIVERGENCE_NOT_FIRST_STEP]);
             }
             cpass.set_bind_group(2, &self.bind_group_pressure_compute_divergence, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Apply preconditioner
+            const PRECONDITIONER_STEP_INIT: u32 = 0;
+            const PRECONDITIONER_STEP_NOTINIT: u32 = 1;
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
+            cpass.set_push_constants(0, &[PRECONDITIONER_STEP_INIT]);
             cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
@@ -909,6 +912,7 @@ impl HybridFluid {
 
                 // Apply preconditioner
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
+                cpass.set_push_constants(0, &[PRECONDITIONER_STEP_NOTINIT]);
                 /////////////////////////// TODO Workaround for https://github.com/gfx-rs/wgpu-rs/issues/451
                 cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
                 cpass.set_bind_group(1, &self.bind_group_read_mac_grid, &[]);
