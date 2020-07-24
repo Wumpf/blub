@@ -395,7 +395,6 @@ impl HybridFluid {
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
-            .texture(&volume_pcg_residual_view) // TODO: This is still interpreted as divergence but it's not!
             .texture(&volume_pressure_view)
             .create(device, "BindGroup: Fluid Renderers");
 
@@ -729,7 +728,6 @@ impl HybridFluid {
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityY
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityZ
                     .next_binding_vertex(binding_glsl::utexture3D()) // marker
-                    .next_binding_vertex(binding_glsl::texture3D()) // divergence
                     .next_binding_vertex(binding_glsl::texture3D()) // pressure
                     .create(device, "BindGroupLayout: ParticleRenderer")
             })

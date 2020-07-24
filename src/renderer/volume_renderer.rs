@@ -10,7 +10,7 @@ use std::{path::Path, rc::Rc};
 pub enum VolumeVisualizationMode {
     None,
     Velocity,
-    DivergenceUncorrected,
+    DivergenceError,
     PseudoPressure,
     Marker,
 }
@@ -94,7 +94,7 @@ impl VolumeRenderer {
                 rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
                 rpass.draw(0..2, 0..Self::num_grid_cells(fluid.grid_dimension()) * 3);
             }
-            VolumeVisualizationMode::DivergenceUncorrected => {
+            VolumeVisualizationMode::DivergenceError => {
                 rpass.set_pipeline(pipeline_manager.get_render(&self.divergence_render_pipeline_desc));
                 rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
                 rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));
