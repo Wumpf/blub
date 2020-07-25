@@ -1,20 +1,29 @@
-// Applies coefficient matrix A
+// Applies coefficient matrix A to Search (s) and starts dotproduct (component-wise multiply) searchTimesA with original Search (s)
 
 #version 460
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict image3D SearchVector;
-layout(set = 2, binding = 1, r32f) uniform restrict writeonly image3D Auxiliary;
+layout(set = 2, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
+layout(set = 2, binding = 1) uniform texture3D Search;
 
 COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+
+    // TODO: Not a great write pattern
+    uvec3 dispatchSize = gl_WorkGroupSize * gl_NumWorkGroups;
+    uint dotProductBufferAddress =
+        gl_GlobalInvocationID.z * dispatchSize.x * dispatchSize.y + gl_GlobalInvocationID.y * dispatchSize.x + gl_GlobalInvocationID.x;
+
     if (marker != CELL_FLUID) {
+        DotProductBuffer[dotProductBufferAddress] = 0; // TODO: Do this only once.
         return;
     }
+
+    float searchValue = texelFetch(Search, gridCoord, 0).x;
 
     uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
     uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
@@ -33,30 +42,30 @@ void main() {
     numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
 
     // apply diagonal of A
-    float result = 0.0;
+    float searchTimesA = 0.0;
     if (numNonSolidNeighbors > 0.0) {
-        result += numNonSolidNeighbors * imageLoad(SearchVector, gridCoord).x;
+        searchTimesA += numNonSolidNeighbors * searchValue;
     }
 
     // apply other coefficients of A
     if (markerX0 == CELL_FLUID) {
-        result -= imageLoad(SearchVector, gridCoord - ivec3(1, 0, 0)).x;
+        searchTimesA -= texelFetch(Search, gridCoord - ivec3(1, 0, 0), 0).x;
     }
     if (markerX1 == CELL_FLUID) {
-        result -= imageLoad(SearchVector, gridCoord + ivec3(1, 0, 0)).x;
+        searchTimesA -= texelFetch(Search, gridCoord + ivec3(1, 0, 0), 0).x;
     }
     if (markerY0 == CELL_FLUID) {
-        result -= imageLoad(SearchVector, gridCoord - ivec3(0, 1, 0)).x;
+        searchTimesA -= texelFetch(Search, gridCoord - ivec3(0, 1, 0), 0).x;
     }
     if (markerY1 == CELL_FLUID) {
-        result -= imageLoad(SearchVector, gridCoord + ivec3(0, 1, 0)).x;
+        searchTimesA -= texelFetch(Search, gridCoord + ivec3(0, 1, 0), 0).x;
     }
     if (markerZ0 == CELL_FLUID) {
-        result -= imageLoad(SearchVector, gridCoord - ivec3(0, 0, 1)).x;
+        searchTimesA -= texelFetch(Search, gridCoord - ivec3(0, 0, 1), 0).x;
     }
     if (markerZ1 == CELL_FLUID) {
-        result -= imageLoad(SearchVector, gridCoord + ivec3(0, 0, 1)).x;
+        searchTimesA -= texelFetch(Search, gridCoord + ivec3(0, 0, 1), 0).x;
     }
 
-    imageStore(Auxiliary, gridCoord, result.xxxx);
+    DotProductBuffer[dotProductBufferAddress] = searchValue * searchTimesA;
 }

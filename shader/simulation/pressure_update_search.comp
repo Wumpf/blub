@@ -12,6 +12,11 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    uint marker = texelFetch(MarkerVolume, gridCoord, 0).x; // Empirically this test + skip is a speedup!
+    if (marker != CELL_FLUID) {
+        return;
+    }
+
     float beta = Scalars.AlphaBeta;
     float searchBefore = imageLoad(Search, gridCoord).x;
     float auxiliary = texelFetch(Auxillary, gridCoord, 0).x;
