@@ -1,4 +1,4 @@
-// Summing up step of a dot product between two vectors (as volumes)
+// Summing up step for the three "kinds" of dotoproduct in the PCG algorithm.
 //
 // This is a parallel reduce step similar (but more portable) to the one detailed here
 // https://on-demand.gputechconf.com/gtc/2010/presentations/S12312-DirectCompute-Pre-Conference-Tutorial.pdf

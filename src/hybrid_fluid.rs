@@ -45,8 +45,7 @@ pub struct HybridFluid {
     bind_group_pressure_compute_divergence: wgpu::BindGroup,
     bind_group_pressure_init_search_vector: wgpu::BindGroup,
     bind_group_pressure_preconditioner: [wgpu::BindGroup; 2],
-    bind_group_pressure_dotproduct_zr: wgpu::BindGroup,
-    bind_group_pressure_apply_coeff_and_dotproduct_start: wgpu::BindGroup,
+    bind_group_pressure_apply_coeff: wgpu::BindGroup,
     bind_group_pressure_dotproduct_reduce: [wgpu::BindGroup; 2],
     bind_group_pressure_dotproduct_final: [wgpu::BindGroup; 2],
     bind_group_pressure_update_pressure_and_residual: wgpu::BindGroup,
@@ -62,9 +61,8 @@ pub struct HybridFluid {
     pipeline_pressure_compute_divergence: ComputePipelineHandle,
     pipeline_pressure_copy_field: ComputePipelineHandle,
     pipeline_pressure_apply_preconditioner: ComputePipelineHandle,
-    pipeline_pressure_dotproduct_start: ComputePipelineHandle,
-    pipeline_pressure_dotproduct_reduce_and_final: ComputePipelineHandle,
-    pipeline_pressure_apply_coeff_and_dotproduct_start: ComputePipelineHandle,
+    pipeline_pressure_reduce: ComputePipelineHandle,
+    pipeline_pressure_apply_coeff: ComputePipelineHandle,
     pipeline_pressure_update_pressure_and_residual: ComputePipelineHandle,
     pipeline_pressure_update_search: ComputePipelineHandle,
 
@@ -255,7 +253,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .create(device, "BindGroupLayout: Pressure solver init");
-        let group_layout_apply_coeff_and_dotproduct_start = BindGroupLayoutBuilder::new()
+        let group_layout_apply_coeff = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
             .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: Apply coeff matrix & start dot product");
@@ -264,10 +262,18 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // Read0
             .next_binding_compute(binding_glsl::texture3D()) // Read1
             .create(device, "BindGroupLayout: Pressure solver dot product init");
-        let group_layout_pressure_solve_dotproduct_reduce = BindGroupLayoutBuilder::new()
+        let group_layout_pressure_solve_reduce = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(true)) // source
             .next_binding_compute(binding_glsl::buffer(false)) // dest
             .create(device, "BindGroupLayout: Pressure solver dot product reduce");
+
+        let group_layout_pressure_preconditioner = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::buffer(false))
+            .next_binding_compute(binding_glsl::texture3D())
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::texture3D())
+            .create(device, "BindGroupLayout: Generic volume update");
+
         let group_layout_pressure_update_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::texture3D())
@@ -344,44 +350,40 @@ impl HybridFluid {
             .texture(&volume_pcg_auxiliary_view)
             .texture(&volume_pcg_search_view)
             .create(device, "BindGroup: Copy auxiliary vector to search vector");
-        let bind_group_pressure_apply_coeff_and_dotproduct_start = BindGroupBuilder::new(&group_layout_apply_coeff_and_dotproduct_start)
+        let bind_group_pressure_apply_coeff = BindGroupBuilder::new(&group_layout_apply_coeff)
             .buffer(dotproduct_reduce_step_buffers[0].slice(..))
             .texture(&volume_pcg_search_view)
             .create(device, "BindGroup: Apply coeff matrix & start dot product");
         let bind_group_pressure_preconditioner = [
-            BindGroupBuilder::new(&group_layout_pressure_update_volume)
+            BindGroupBuilder::new(&group_layout_pressure_preconditioner)
+                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
+                .texture(&volume_pcg_residual_view)
                 .texture(&volume_pcg_auxiliary_temp_view)
                 .texture(&volume_pcg_residual_view)
-                .buffer(dotproduct_reduce_result_buffer.slice(..))
                 .create(device, "BindGroup: Preconditioner, Step 1"),
-            BindGroupBuilder::new(&group_layout_pressure_update_volume)
+            BindGroupBuilder::new(&group_layout_pressure_preconditioner)
+                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
+                .texture(&volume_pcg_residual_view)
                 .texture(&volume_pcg_auxiliary_view)
                 .texture(&volume_pcg_auxiliary_temp_view)
-                .buffer(dotproduct_reduce_result_buffer.slice(..))
                 .create(device, "BindGroup: Preconditioner, Step 2"),
         ];
-        let bind_group_pressure_dotproduct_zr = BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_init)
-            .buffer(dotproduct_reduce_step_buffers[0].slice(..))
-            .texture(&volume_pcg_auxiliary_view)
-            .texture(&volume_pcg_residual_view)
-            .create(device, "BindGroup: Pressure Solve, Start z,r");
-
         let bind_group_pressure_dotproduct_reduce = [
-            BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_reduce)
+            BindGroupBuilder::new(&group_layout_pressure_solve_reduce)
                 .buffer(dotproduct_reduce_step_buffers[0].slice(..))
                 .buffer(dotproduct_reduce_step_buffers[1].slice(..))
                 .create(device, "BindGroup: Pressure Solve, Reduce 0"),
-            BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_reduce)
+            BindGroupBuilder::new(&group_layout_pressure_solve_reduce)
                 .buffer(dotproduct_reduce_step_buffers[1].slice(..))
                 .buffer(dotproduct_reduce_step_buffers[0].slice(..))
                 .create(device, "BindGroup: Pressure Solve, Reduce 1"),
         ];
         let bind_group_pressure_dotproduct_final = [
-            BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_reduce)
+            BindGroupBuilder::new(&group_layout_pressure_solve_reduce)
                 .buffer(dotproduct_reduce_step_buffers[0].slice(..))
                 .buffer(dotproduct_reduce_result_buffer.slice(..))
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 0"),
-            BindGroupBuilder::new(&group_layout_pressure_solve_dotproduct_reduce)
+            BindGroupBuilder::new(&group_layout_pressure_solve_reduce)
                 .buffer(dotproduct_reduce_step_buffers[1].slice(..))
                 .buffer(dotproduct_reduce_result_buffer.slice(..))
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
@@ -439,6 +441,17 @@ impl HybridFluid {
                 range: 0..8,
             }],
         }));
+        let layout_pressure_preconditioner = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_read_macgrid.layout,
+                &group_layout_pressure_preconditioner.layout,
+            ],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStage::COMPUTE,
+                range: 0..8,
+            }],
+        }));
         let layout_pressure_update_pressure_and_residual = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
@@ -461,34 +474,23 @@ impl HybridFluid {
                 range: 0..8,
             }],
         }));
-        let layout_pressure_solve_dotproduct_init = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[
-                per_frame_bind_group_layout,
-                &group_layout_read_macgrid.layout,
-                &group_layout_pressure_solve_dotproduct_init.layout,
-            ],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::COMPUTE,
-                range: 0..8,
-            }],
-        }));
 
-        let layout_apply_coeff_and_dotproduct_start = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_apply_coeff = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
-                &group_layout_apply_coeff_and_dotproduct_start.layout,
+                &group_layout_apply_coeff.layout,
             ],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStage::COMPUTE,
                 range: 0..8,
             }],
         }));
-        let layout_pressure_solve_dotproduct_reduce = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_pressure_solve_reduce = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
-                &group_layout_pressure_solve_dotproduct_reduce.layout,
+                &group_layout_pressure_solve_reduce.layout,
             ],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStage::COMPUTE,
@@ -565,8 +567,7 @@ impl HybridFluid {
             pipeline_transfer_clear_linkedlist,
             pipeline_transfer_build_linkedlist,
             pipeline_transfer_gather,
-            bind_group_pressure_dotproduct_zr,
-            bind_group_pressure_apply_coeff_and_dotproduct_start,
+            bind_group_pressure_apply_coeff,
             bind_group_pressure_dotproduct_reduce,
             bind_group_pressure_dotproduct_final,
             bind_group_pressure_update_pressure_and_residual,
@@ -588,31 +589,20 @@ impl HybridFluid {
             pipeline_pressure_apply_preconditioner: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_pressure_solve.clone(), Path::new("simulation/pressure_apply_preconditioner.comp")),
-            ),
-            pipeline_pressure_dotproduct_start: pipeline_manager.create_compute_pipeline(
-                device,
-                shader_dir,
                 ComputePipelineCreationDesc::new(
-                    layout_pressure_solve_dotproduct_init.clone(),
-                    Path::new("simulation/pressure_dotproduct_start.comp"),
+                    layout_pressure_preconditioner.clone(),
+                    Path::new("simulation/pressure_apply_preconditioner.comp"),
                 ),
             ),
-            pipeline_pressure_dotproduct_reduce_and_final: pipeline_manager.create_compute_pipeline(
+            pipeline_pressure_reduce: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(
-                    layout_pressure_solve_dotproduct_reduce.clone(),
-                    Path::new("simulation/pressure_dotproduct_reduce.comp"),
-                ),
+                ComputePipelineCreationDesc::new(layout_pressure_solve_reduce.clone(), Path::new("simulation/pressure_reduce.comp")),
             ),
-            pipeline_pressure_apply_coeff_and_dotproduct_start: pipeline_manager.create_compute_pipeline(
+            pipeline_pressure_apply_coeff: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(
-                    layout_apply_coeff_and_dotproduct_start.clone(),
-                    Path::new("simulation/pressure_apply_coeff_and_dotproduct_start.comp"),
-                ),
+                ComputePipelineCreationDesc::new(layout_apply_coeff.clone(), Path::new("simulation/pressure_apply_coeff.comp")),
             ),
             pipeline_pressure_update_pressure_and_residual: pipeline_manager.create_compute_pipeline(
                 device,
@@ -758,35 +748,35 @@ impl HybridFluid {
         depth: 8,
     };
     const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
-    const COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE: u32 = 1024;
-
-    const DOTPRODUCT_REDUCE_REDUCTION: u32 = Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE;
     const DOTPRODUCT_RESULTMODE_REDUCE: u32 = 0;
     const DOTPRODUCT_RESULTMODE_INIT: u32 = 1;
     const DOTPRODUCT_RESULTMODE_ALPHA: u32 = 2;
     const DOTPRODUCT_RESULTMODE_BETA: u32 = 3;
 
     fn reduce_add<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, result_mode: u32) {
+        const COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE: u32 = 1024;
+        const DOTPRODUCT_REDUCE_REDUCTION: u32 = COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE;
+
         // reduce.
         let mut source_buffer_index = 0;
-        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_reduce_and_final));
+        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_reduce));
         let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
-        while num_entries_remaining > Self::DOTPRODUCT_REDUCE_REDUCTION {
+        while num_entries_remaining > DOTPRODUCT_REDUCE_REDUCTION {
             cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
             cpass.set_push_constants(0, &[Self::DOTPRODUCT_RESULTMODE_REDUCE, num_entries_remaining]);
             cpass.dispatch(
-                wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+                wgpu_utils::compute_group_size_1d(num_entries_remaining, COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
                 1,
                 1,
             );
             source_buffer_index = 1 - source_buffer_index;
-            num_entries_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION;
+            num_entries_remaining /= DOTPRODUCT_REDUCE_REDUCTION;
         }
         // final
         cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_final[source_buffer_index], &[]);
         cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
         cpass.dispatch(
-            wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+            wgpu_utils::compute_group_size_1d(num_entries_remaining, COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
             1,
             1,
         );
@@ -855,35 +845,33 @@ impl HybridFluid {
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Apply preconditioner
-            const PRECONDITIONER_SET_UNUSED_TO_ZERO: u32 = 1;
+            const PRECONDITIONER_PASS0: u32 = 0;
+            const PRECONDITIONER_PASS1: u32 = 1;
+            const PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO: u32 = 3;
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
             cpass.set_push_constants(0, &[0]);
+            cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
             cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[0], &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-            cpass.set_push_constants(0, &[PRECONDITIONER_SET_UNUSED_TO_ZERO]);
+            cpass.set_push_constants(0, &[PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO]);
             cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[1], &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            // Init sigma to dotproduct of auxiliary field (z) and residual field (r)
+            self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_INIT);
 
-            // Copy search field (z) to preconditioner result
+            // Copy preconditioner result (z) to search vector (s)
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_copy_field));
             cpass.set_bind_group(2, &self.bind_group_pressure_init_search_vector, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-
-            // Init sigma to dotproduct of auxiliary field (z) and residual field (r)
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_start));
-            cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_zr, &[]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-            self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_INIT);
 
             // Solver iterations ...
             const NUM_ITERATIONS: u32 = 16;
             let mut i = 0;
             loop {
                 // Apply cell relationships to search vector (i.e. multiply s with A)
-                // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s)
-                // -> Compute <s; As>
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_coeff_and_dotproduct_start));
-                cpass.set_bind_group(2, &self.bind_group_pressure_apply_coeff_and_dotproduct_start, &[]);
+                // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s), i.e. compute <s; As>
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_coeff));
+                cpass.set_bind_group(2, &self.bind_group_pressure_apply_coeff, &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 // finish dotproduct of auxiliary field (z) and search field (s)
                 self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_ALPHA);
@@ -902,18 +890,15 @@ impl HybridFluid {
                     break;
                 }
 
-                // Apply preconditioner on (r) and store result to (z)
+                // Apply preconditioner on (r), store result to (z) and start dotproduct of <z; r>
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
-                cpass.set_push_constants(0, &[0]);
+                cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
                 cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[0], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.set_push_constants(0, &[PRECONDITIONER_PASS1]);
                 cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[1], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-
-                // dotproduct of auxiliary field (z) and residual field (r)
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_dotproduct_start));
-                cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_zr, &[]);
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                // finish dotproduct of auxiliary field (z) and residual field (r)
                 self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_BETA);
 
                 // Update search vector

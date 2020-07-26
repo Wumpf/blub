@@ -1,16 +1,21 @@
-// Applies preconditioner to the residual, yielding the auxiliary vector usually denoted as z.
+// Applies preconditioner to the Residual, yielding the auxiliary vector usually denoted as z,
+// and starts dotproduct (component-wise multiply) of z with Residual (r)
 
 #version 460
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict writeonly image3D Auxiliary;
+layout(set = 2, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
 layout(set = 2, binding = 1) uniform texture3D Residual;
-// layout(set = 2, binding = 2) uniform PcgScalars_ { PcgScalars Scalars; };
+
+layout(set = 2, binding = 2, r32f) uniform restrict writeonly image3D AuxiliaryOrTemp;
+layout(set = 2, binding = 3) uniform texture3D ResidualOrTemp;
 
 COMPUTE_PASS_VOLUME
 
-#define PRECONDITIONER_SET_UNUSED_TO_ZERO 1
+#define PRECONDITIONER_PASS0 0
+#define PRECONDITIONER_PASS1 1
+#define PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO 3
 
 // Incomplete Poisson preconditioner
 // see https://software.intel.com/content/www/us/en/develop/articles/parallelized-incomplete-poisson-preconditioner-in-cloth-simulation.html
@@ -24,16 +29,23 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+
+    // TODO: Not a great write pattern
+    uvec3 dispatchSize = gl_WorkGroupSize * gl_NumWorkGroups;
+    uint globalLinearTid =
+        gl_GlobalInvocationID.z * dispatchSize.x * dispatchSize.y + gl_GlobalInvocationID.y * dispatchSize.x + gl_GlobalInvocationID.x;
+
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
-        // Set to zero during init of the Auxiliary, so we don't need to special case dot products
-        if (PushConstants.Mode == PRECONDITIONER_SET_UNUSED_TO_ZERO) {
-            imageStore(Auxiliary, gridCoord, vec4(0.0));
+        // Someone needs to set the unused parts of the dot product buffer to zero.
+        // This is the first time we need it, so the fist time this is executed we do the reset!
+        if (PushConstants.Mode == PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO) {
+            DotProductBuffer[globalLinearTid] = 0.0;
         }
         return;
     }
 
-    float result = texelFetch(Residual, gridCoord, 0).x;
+    float result = texelFetch(ResidualOrTemp, gridCoord, 0).x;
 
     float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
     float markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
@@ -43,13 +55,13 @@ void main() {
     float markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
     if (markerX0 == CELL_FLUID) {
-        result -= texelFetch(Residual, gridCoord - ivec3(1, 0, 0), 1).x;
+        result -= texelFetch(ResidualOrTemp, gridCoord - ivec3(1, 0, 0), 1).x;
     }
     if (markerY0 == CELL_FLUID) {
-        result -= texelFetch(Residual, gridCoord - ivec3(0, 1, 0), 1).x;
+        result -= texelFetch(ResidualOrTemp, gridCoord - ivec3(0, 1, 0), 1).x;
     }
     if (markerZ0 == CELL_FLUID) {
-        result -= texelFetch(Residual, gridCoord - ivec3(0, 0, 1), 1).x;
+        result -= texelFetch(ResidualOrTemp, gridCoord - ivec3(0, 0, 1), 1).x;
     }
 
     float numNonSolidNeighbors = 0.0;
@@ -62,5 +74,9 @@ void main() {
     if (numNonSolidNeighbors > 0.0)
         result /= numNonSolidNeighbors;
 
-    imageStore(Auxiliary, gridCoord, result.xxxx);
+    imageStore(AuxiliaryOrTemp, gridCoord, result.xxxx);
+
+    if (PushConstants.Mode != PRECONDITIONER_PASS0) {
+        DotProductBuffer[globalLinearTid] = result * texelFetch(Residual, gridCoord, 0).x;
+    }
 }
