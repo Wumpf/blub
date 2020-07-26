@@ -12,7 +12,7 @@ COMPUTE_PASS_VOLUME
 #define DIVERGENCE_FIRST_STEP 0
 #define DIVERGENCE_NOT_FIRST_STEP 1
 
-float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, uint oppositeWallType, const uint component) {
+float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, float oppositeWallType, const uint component) {
     ivec3 neighborCoord = coord;
     neighborCoord[component] -= 1;
 
@@ -33,18 +33,18 @@ void main() {
 
     // However, in order to not pollute future initial pressure guesses, we zero set the InitialPressureGuess everywhere else.
     // (otherwise results from early steps influence much later ones which can lead to odd artifacts)
-    uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+    float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
         imageStore(InitialPressureGuess, gridCoord, vec4(0.0));
         return;
     }
 
-    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    float markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    float markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    float markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    float markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    float markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
     float divergence = computeDivergenceForDirection(gridCoord, VelocityVolumeX, markerX0, 0);
     divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeY, markerY0, 1);

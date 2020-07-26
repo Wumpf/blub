@@ -10,8 +10,6 @@ layout(set = 1, binding = 0) uniform SimulationProperties {
 #endif
 
 // Boundary is zero, so texel fetch outside of the domain always gives us boundary cells.
-#define CELL_SOLID 0 // A couple of things rely on this being zero! (sampling images out of bounds returns zero)
-#define CELL_FLUID 1
-#define CELL_AIR 2
-
-// TODO: Idea: Cell marker could encode direct neighborhood and thus safe us quite a few samplings!
+#define CELL_SOLID 0.0 // A couple of things rely on this being zero! (sampling images out of bounds returns zero)
+#define CELL_FLUID 1.0
+#define CELL_AIR -1.0

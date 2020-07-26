@@ -8,7 +8,7 @@ layout(set = 1, binding = 3) buffer restrict readonly ParticleBufferVz { vec4 Pa
 layout(set = 1, binding = 4) uniform texture3D VelocityVolumeX;
 layout(set = 1, binding = 5) uniform texture3D VelocityVolumeY;
 layout(set = 1, binding = 6) uniform texture3D VelocityVolumeZ;
-layout(set = 1, binding = 7) uniform utexture3D MarkerVolume;
+layout(set = 1, binding = 7) uniform texture3D MarkerVolume;
 layout(set = 1, binding = 8) uniform texture3D PressureVolume;
 
 ivec3 getVolumeCoordinate(uint positionIndex) {

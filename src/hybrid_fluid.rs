@@ -156,7 +156,7 @@ impl HybridFluid {
         let volume_velocity_y = device.create_texture(&create_volume_texture_descriptor("Velocity Volume Y", wgpu::TextureFormat::R32Float));
         let volume_velocity_z = device.create_texture(&create_volume_texture_descriptor("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_descriptor("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
-        let volume_marker = device.create_texture(&create_volume_texture_descriptor("Marker Grid", wgpu::TextureFormat::R8Uint));
+        let volume_marker = device.create_texture(&create_volume_texture_descriptor("Marker Grid", wgpu::TextureFormat::R8Snorm));
 
         let volume_pressure = device.create_texture(&create_volume_texture_descriptor("Pressure Volume", wgpu::TextureFormat::R32Float));
         let volume_pcg_residual = device.create_texture(&create_volume_texture_descriptor(
@@ -222,7 +222,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(true)) // particles, velocity component
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
-            .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R8Uint, false)) // marker volume
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R8Snorm, false)) // marker volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocity component
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
@@ -230,7 +230,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityX
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityY
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityZ
-            .next_binding_compute(binding_glsl::utexture3D()) // marker volume
+            .next_binding_compute(binding_glsl::texture3D()) // marker volume
             .next_binding_compute(binding_glsl::texture2D()) // pressure
             .create(device, "BindGroupLayout: Write to Velocity");
         // TODO: This should also be used in combination with group_layout_read_macgrid
@@ -238,7 +238,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // velocityX
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
-            .next_binding_compute(binding_glsl::utexture3D()) // marker volume
+            .next_binding_compute(binding_glsl::texture3D()) // marker volume
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
@@ -248,7 +248,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // velocityX
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
-            .next_binding_compute(binding_glsl::utexture3D()) // marker volume
+            .next_binding_compute(binding_glsl::texture3D()) // marker volume
             .create(device, "BindGroupLayout: Read MAC Grid");
 
         let group_layout_pressure_solve_init = BindGroupLayoutBuilder::new()
@@ -737,7 +737,7 @@ impl HybridFluid {
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityX
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityY
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityZ
-                    .next_binding_vertex(binding_glsl::utexture3D()) // marker
+                    .next_binding_vertex(binding_glsl::texture3D()) // marker
                     .next_binding_vertex(binding_glsl::texture3D()) // pressure
                     .create(device, "BindGroupLayout: ParticleRenderer")
             })

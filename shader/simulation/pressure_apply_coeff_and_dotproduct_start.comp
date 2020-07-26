@@ -11,7 +11,7 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+    float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
 
     // TODO: Not a great write pattern
     uvec3 dispatchSize = gl_WorkGroupSize * gl_NumWorkGroups;
@@ -25,12 +25,12 @@ void main() {
 
     float searchValue = texelFetch(Search, gridCoord, 0).x;
 
-    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    float markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    float markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    float markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    float markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    float markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
     // This is the diagonal value of matrix A!
     float numNonSolidNeighbors = 0.0;

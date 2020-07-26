@@ -19,7 +19,7 @@ void main() {
     uint globalLinearTid =
         gl_GlobalInvocationID.z * dispatchSize.x * dispatchSize.y + gl_GlobalInvocationID.y * dispatchSize.x + gl_GlobalInvocationID.x;
 
-    uint marker = texelFetch(MarkerVolume, gridCoord, 0).x; // Empirically this test + skip is a speedup!
+    float marker = texelFetch(MarkerVolume, gridCoord, 0).x; // Empirically this test + skip is a speedup!
     if (marker != CELL_FLUID) {
         DotProductBuffer[globalLinearTid] = 0.0; // todo: Do this only once.
         return;

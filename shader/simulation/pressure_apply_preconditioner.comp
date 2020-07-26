@@ -24,7 +24,7 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-    uint marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+    float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
         // Set to zero during init of the Auxiliary, so we don't need to special case dot products
         if (PushConstants.Mode == PRECONDITIONER_SET_UNUSED_TO_ZERO) {
@@ -35,12 +35,12 @@ void main() {
 
     float result = texelFetch(Residual, gridCoord, 0).x;
 
-    uint markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    uint markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    uint markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    uint markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    uint markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-    uint markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    float markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    float markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    float markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    float markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    float markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
     if (markerX0 == CELL_FLUID) {
         result -= texelFetch(Residual, gridCoord - ivec3(1, 0, 0), 1).x;

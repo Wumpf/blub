@@ -15,7 +15,7 @@ void main() {
     vec3 position = Particles[particleIndex].Position;
 
     if (VelocityTransferComponent == 0) {
-        imageStore(MarkerVolume, ivec3(position), uvec4(CELL_FLUID));
+        imageStore(MarkerVolume, ivec3(position), vec4(CELL_FLUID, 0, 0, 0));
     }
 
     vec3 offset = vec3(0.5);

@@ -7,7 +7,7 @@
 
 COMPUTE_PASS_VOLUME
 
-void AccumulateNeighbors(uint neighborCellType, ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
+void AccumulateNeighbors(float neighborCellType, ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
     if (neighborCellType == CELL_FLUID) {
         accumulator.x += imageLoad(VelocityVolumeX, neighborCellCoord).x * weight;
         accumulator.y += imageLoad(VelocityVolumeY, neighborCellCoord).x * weight;
@@ -17,7 +17,7 @@ void AccumulateNeighbors(uint neighborCellType, ivec3 neighborCellCoord, inout v
 }
 
 void AccumulateNeighbors(ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
-    uint neighborCellType = texelFetch(MarkerVolume, neighborCellCoord, 0).x;
+    float neighborCellType = texelFetch(MarkerVolume, neighborCellCoord, 0).x;
     AccumulateNeighbors(neighborCellType, neighborCellCoord, accumulator, accumulatedWeight, weight);
 }
 
@@ -25,14 +25,14 @@ void main() {
     vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
-    uint cellType = texelFetch(MarkerVolume, gridCoord, 0).x;
+    float cellType = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (cellType == CELL_FLUID)
         return; // all good already!
 
     // Direct neighbor cells are special, need them later.
-    uint cellTypePosX = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    uint cellTypePosY = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    uint cellTypePosZ = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    float cellTypePosX = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    float cellTypePosY = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    float cellTypePosZ = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
 
     // Average velocity over neighbors.
     vec3 velocity = vec3(0.0);

@@ -27,7 +27,7 @@ void main() {
     ivec3 volumeCoordinate = getVolumeCoordinate(gl_InstanceIndex / 3);
     uint channel = gl_InstanceIndex % 3;
 
-    uint marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
+    float marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
 
     vec3 cellCenter = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
     vec3 linePosition = cellCenter;

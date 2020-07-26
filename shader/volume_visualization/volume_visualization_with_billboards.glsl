@@ -11,7 +11,7 @@ layout(location = 1) out vec3 out_ParticleWorldPosition;
 layout(location = 2) out vec3 out_Tint;
 layout(location = 3) out float out_Radius;
 
-float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, uint oppositeWallType, const uint component) {
+float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, float oppositeWallType, const uint component) {
     ivec3 neighborCoord = coord;
     neighborCoord[component] -= 1;
 
@@ -25,16 +25,16 @@ float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, uint 
 
 void main() {
     ivec3 volumeCoordinate = getVolumeCoordinate(gl_InstanceIndex);
-    uint marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
+    float marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
 
 #if defined(VISUALIZE_DIVERGENCE)
     float divergence = 0.0;
     if (marker == CELL_FLUID) {
-        uint markerX0 = texelFetch(MarkerVolume, volumeCoordinate - ivec3(1, 0, 0), 0).x;
+        float markerX0 = texelFetch(MarkerVolume, volumeCoordinate - ivec3(1, 0, 0), 0).x;
         divergence += computeDivergenceForDirection(volumeCoordinate, VelocityVolumeX, markerX0, 0);
-        uint markerY0 = texelFetch(MarkerVolume, volumeCoordinate - ivec3(0, 1, 0), 0).x;
+        float markerY0 = texelFetch(MarkerVolume, volumeCoordinate - ivec3(0, 1, 0), 0).x;
         divergence += computeDivergenceForDirection(volumeCoordinate, VelocityVolumeY, markerY0, 1);
-        uint markerZ0 = texelFetch(MarkerVolume, volumeCoordinate - ivec3(0, 0, 1), 0).x;
+        float markerZ0 = texelFetch(MarkerVolume, volumeCoordinate - ivec3(0, 0, 1), 0).x;
         divergence += computeDivergenceForDirection(volumeCoordinate, VelocityVolumeZ, markerZ0, 2);
     }
 

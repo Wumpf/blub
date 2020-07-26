@@ -8,7 +8,7 @@
 layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
 layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
 layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
-layout(set = 2, binding = 3) uniform utexture3D MarkerVolume;
+// layout(set = 2, binding = 3) uniform texture3D MarkerVolume;
 
 layout(set = 2, binding = 4) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
 layout(set = 2, binding = 5) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
