@@ -13,6 +13,13 @@ layout(set = 2, binding = 3) uniform texture3D ResidualOrTemp;
 
 COMPUTE_PASS_VOLUME
 
+// It seems that there is a bug that will make this function misbehave if it is declared before the thread group layout declaration
+uint GetDotProductBufferAddress() {
+    uint threadsPerWorkgroup = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+    uint threadGroupIndex = (gl_WorkGroupID.z * gl_NumWorkGroups.y + gl_WorkGroupID.y) * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+    return gl_LocalInvocationIndex + threadsPerWorkgroup * threadGroupIndex;
+}
+
 #define PRECONDITIONER_PASS0 0
 #define PRECONDITIONER_PASS1 1
 #define PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO 3
@@ -29,11 +36,7 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
-
-    // TODO: Not a great write pattern
-    uvec3 dispatchSize = gl_WorkGroupSize * gl_NumWorkGroups;
-    uint globalLinearTid =
-        gl_GlobalInvocationID.z * dispatchSize.x * dispatchSize.y + gl_GlobalInvocationID.y * dispatchSize.x + gl_GlobalInvocationID.x;
+    uint globalLinearTid = GetDotProductBufferAddress();
 
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {

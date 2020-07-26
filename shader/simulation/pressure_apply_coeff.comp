@@ -9,22 +9,26 @@ layout(set = 2, binding = 1) uniform texture3D Search;
 
 COMPUTE_PASS_VOLUME
 
+// It seems that there is a bug that will make this function misbehave if it is declared before the thread group layout declaration
+uint GetDotProductBufferAddress() {
+    uint threadsPerWorkgroup = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+    uint threadGroupIndex = (gl_WorkGroupID.z * gl_NumWorkGroups.y + gl_WorkGroupID.y) * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+    return gl_LocalInvocationIndex + threadsPerWorkgroup * threadGroupIndex;
+}
+
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
 
-    // TODO: Not a great write pattern
-    uvec3 dispatchSize = gl_WorkGroupSize * gl_NumWorkGroups;
-    uint dotProductBufferAddress =
-        gl_GlobalInvocationID.z * dispatchSize.x * dispatchSize.y + gl_GlobalInvocationID.y * dispatchSize.x + gl_GlobalInvocationID.x;
+    uint threadsPerWorkgroup = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+    uint threadGroupIndex = (gl_WorkGroupID.z * gl_NumWorkGroups.y + gl_WorkGroupID.y) * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+    uint dotProductBufferAddress = gl_LocalInvocationIndex + threadsPerWorkgroup * threadGroupIndex;
 
     if (marker != CELL_FLUID) {
-        DotProductBuffer[dotProductBufferAddress] = 0; // TODO: Do this only once.
         return;
     }
 
     float searchValue = texelFetch(Search, gridCoord, 0).x;
     float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, searchValue);
-
-    DotProductBuffer[dotProductBufferAddress] = searchValue * searchTimesA;
+    DotProductBuffer[GetDotProductBufferAddress()] = searchValue * searchTimesA;
 }
