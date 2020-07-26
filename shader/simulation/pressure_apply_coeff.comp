@@ -24,48 +24,7 @@ void main() {
     }
 
     float searchValue = texelFetch(Search, gridCoord, 0).x;
-
-    float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    float markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
-    float markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    float markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
-    float markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
-    float markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
-
-    // This is the diagonal value of matrix A!
-    float numNonSolidNeighbors = 0.0;
-    numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
-    numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
-
-    // apply diagonal of A
-    float searchTimesA = 0.0;
-    if (numNonSolidNeighbors > 0.0) {
-        searchTimesA += numNonSolidNeighbors * searchValue;
-    }
-
-    // apply other coefficients of A
-    if (markerX0 == CELL_FLUID) {
-        searchTimesA -= texelFetch(Search, gridCoord - ivec3(1, 0, 0), 0).x;
-    }
-    if (markerX1 == CELL_FLUID) {
-        searchTimesA -= texelFetch(Search, gridCoord + ivec3(1, 0, 0), 0).x;
-    }
-    if (markerY0 == CELL_FLUID) {
-        searchTimesA -= texelFetch(Search, gridCoord - ivec3(0, 1, 0), 0).x;
-    }
-    if (markerY1 == CELL_FLUID) {
-        searchTimesA -= texelFetch(Search, gridCoord + ivec3(0, 1, 0), 0).x;
-    }
-    if (markerZ0 == CELL_FLUID) {
-        searchTimesA -= texelFetch(Search, gridCoord - ivec3(0, 0, 1), 0).x;
-    }
-    if (markerZ1 == CELL_FLUID) {
-        searchTimesA -= texelFetch(Search, gridCoord + ivec3(0, 0, 1), 0).x;
-    }
+    float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, searchValue);
 
     DotProductBuffer[dotProductBufferAddress] = searchValue * searchTimesA;
 }
