@@ -22,21 +22,30 @@ layout(local_size_x = LOCAL_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 shared float sharedBuffer[LOCAL_SIZE];
 
+#define FETCHES_PER_THREAD 16
+
 void main() {
-    // TODO: Multiple fetches per thread
-    if (gl_GlobalInvocationID.x < PushConstants.SourceBufferSize)
-        sharedBuffer[gl_LocalInvocationID.x] = DotProductSource[gl_GlobalInvocationID.x];
-    else
-        sharedBuffer[gl_LocalInvocationID.x] = 0.0;
+    // Fetch FETCHES_PER_THREAD values from global memory and store to shared memory.
+    uint fetchAddress = gl_GlobalInvocationID.x;
+    uint dispatchSize = LOCAL_SIZE * gl_NumWorkGroups.x;
+    float fetchedValue = 0.0;
+    [[unroll]] for (int i = 0; i < FETCHES_PER_THREAD; ++i) {
+        if (fetchAddress < PushConstants.SourceBufferSize)
+            fetchedValue += DotProductSource[fetchAddress];
+        fetchAddress += dispatchSize;
+    }
+    sharedBuffer[gl_LocalInvocationID.x] = fetchedValue;
     barrier();
 
-    // Reduce
-    // TODO: Unlike the Nvidia slides we can't just unroll the last 32 additions and leave out that barriers since some gpus have quite small
-    // subgroups (Intel can have 8). But we could just assume a minimal subgroup size and unroll that bit.
+    // Reduce shared memory to a single value.
+    // Unlike the Nvidia slides we can't just unroll the last 32 additions and leave out that barriers since some gpus have quite small
+    // subgroups (Intel can have 8). But we could just assume a minimal subgroup size and unroll that bit...
+    // Empirically it doesn't make all that much difference here.
     [[unroll]] for (uint i = LOCAL_SIZE / 2; i > 1; i /= 2) {
-        if (gl_LocalInvocationID.x < i) {
-            sharedBuffer[gl_LocalInvocationID.x] += sharedBuffer[gl_LocalInvocationID.x + i];
+        if (gl_LocalInvocationID.x >= i) {
+            return;
         }
+        sharedBuffer[gl_LocalInvocationID.x] += sharedBuffer[gl_LocalInvocationID.x + i];
         barrier();
     }
 

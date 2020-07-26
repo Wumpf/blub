@@ -179,7 +179,7 @@ impl HybridFluid {
             }),
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Buffer: DotProduct Reduce 1"),
-                size: num_cells * std::mem::size_of::<f32>() as u64 / 2,
+                size: num_cells * std::mem::size_of::<f32>() as u64 / Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP as u64,
                 usage: wgpu::BufferUsage::STORAGE,
                 mapped_at_creation: false,
             }),
@@ -740,30 +740,34 @@ impl HybridFluid {
     const DOTPRODUCT_RESULTMODE_ALPHA: u32 = 2;
     const DOTPRODUCT_RESULTMODE_BETA: u32 = 3;
 
-    fn reduce_add<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, result_mode: u32) {
-        const COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE: u32 = 1024;
-        const DOTPRODUCT_REDUCE_REDUCTION: u32 = COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE;
+    const COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE: u32 = 1024;
+    const DOTPRODUCT_READS_PER_STEP: u32 = 16; // 32 was distinctively slower, 16 about same as than 8, 4 clearly slower (gtx1070 ti)
+    const DOTPRODUCT_REDUCE_REDUCTION_PER_STEP: u32 = Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE * Self::DOTPRODUCT_READS_PER_STEP;
 
+    fn reduce_add<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, result_mode: u32) {
         // reduce.
         let mut source_buffer_index = 0;
         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_reduce));
         let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
-        while num_entries_remaining > DOTPRODUCT_REDUCE_REDUCTION {
+        while num_entries_remaining > Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP {
             cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
             cpass.set_push_constants(0, &[Self::DOTPRODUCT_RESULTMODE_REDUCE, num_entries_remaining]);
             cpass.dispatch(
-                wgpu_utils::compute_group_size_1d(num_entries_remaining, COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+                wgpu_utils::compute_group_size_1d(
+                    num_entries_remaining / Self::DOTPRODUCT_READS_PER_STEP,
+                    Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE,
+                ),
                 1,
                 1,
             );
             source_buffer_index = 1 - source_buffer_index;
-            num_entries_remaining /= DOTPRODUCT_REDUCE_REDUCTION;
+            num_entries_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP;
         }
         // final
         cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_final[source_buffer_index], &[]);
         cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
         cpass.dispatch(
-            wgpu_utils::compute_group_size_1d(num_entries_remaining, COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
+            wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
             1,
             1,
         );
