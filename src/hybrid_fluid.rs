@@ -16,14 +16,6 @@ struct SimulationPropertiesUniformBufferContent {
 unsafe impl bytemuck::Pod for SimulationPropertiesUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for SimulationPropertiesUniformBufferContent {}
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct TransferVelocityToGridUniformBufferContent {
-    component: u32,
-}
-unsafe impl bytemuck::Pod for TransferVelocityToGridUniformBufferContent {}
-unsafe impl bytemuck::Zeroable for TransferVelocityToGridUniformBufferContent {}
-
 pub struct HybridFluid {
     grid_dimension: wgpu::Extent3d,
 
@@ -191,12 +183,6 @@ impl HybridFluid {
             mapped_at_creation: false,
         });
 
-        let ubo_transfer_velocity = [
-            UniformBuffer::new_with_data(device, &TransferVelocityToGridUniformBufferContent { component: 0 }),
-            UniformBuffer::new_with_data(device, &TransferVelocityToGridUniformBufferContent { component: 1 }),
-            UniformBuffer::new_with_data(device, &TransferVelocityToGridUniformBufferContent { component: 2 }),
-        ];
-
         // Resource views
         let volume_velocity_view_x = volume_velocity_x.create_default_view();
         let volume_velocity_view_y = volume_velocity_y.create_default_view();
@@ -220,7 +206,6 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::uimage3d(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R8Snorm, false)) // marker volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocity component
-            .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
         let group_layout_write_velocity = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityX
@@ -229,12 +214,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // marker volume
             .next_binding_compute(binding_glsl::texture2D()) // pressure
             .create(device, "BindGroupLayout: Write to Velocity");
-        // TODO: This should also be used in combination with group_layout_read_macgrid
-        let group_layout_write_particles = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::texture3D()) // velocityX
-            .next_binding_compute(binding_glsl::texture3D()) // velocityY
-            .next_binding_compute(binding_glsl::texture3D()) // velocityZ
-            .next_binding_compute(binding_glsl::texture3D()) // marker volume
+        let group_layout_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
@@ -246,7 +226,6 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
             .next_binding_compute(binding_glsl::texture3D()) // marker volume
             .create(device, "BindGroupLayout: Read MAC Grid");
-
         let group_layout_pressure_solve_init = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
@@ -289,7 +268,6 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_x)
-                .resource(ubo_transfer_velocity[0].binding_resource())
                 .create(device, "BindGroup: Transfer velocity to volume X"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .buffer(particles_position_llindex.slice(..))
@@ -297,7 +275,6 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_y)
-                .resource(ubo_transfer_velocity[1].binding_resource())
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .buffer(particles_position_llindex.slice(..))
@@ -305,7 +282,6 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_z)
-                .resource(ubo_transfer_velocity[2].binding_resource())
                 .create(device, "BindGroup: Transfer velocity to volume Z"),
         ];
 
@@ -316,11 +292,7 @@ impl HybridFluid {
             .texture(&volume_marker_view)
             .texture(&volume_pressure_view)
             .create(device, "BindGroup: Write to Velocity Grid");
-        let bind_group_write_particles = BindGroupBuilder::new(&group_layout_write_particles)
-            .texture(&volume_velocity_view_x)
-            .texture(&volume_velocity_view_y)
-            .texture(&volume_velocity_view_z)
-            .texture(&volume_marker_view)
+        let bind_group_write_particles = BindGroupBuilder::new(&group_layout_particles)
             .buffer(particles_position_llindex.slice(..))
             .buffer(particles_velocity_x.slice(..))
             .buffer(particles_velocity_y.slice(..))
@@ -407,13 +379,19 @@ impl HybridFluid {
             .create(device, "BindGroup: Fluid Renderers");
 
         // pipeline layouts.
+        // Use same push constant range for all pipelines to improve internal Vulkan pipeline compatibility.
+        let push_constant_ranges = &[wgpu::PushConstantRange {
+            stages: wgpu::ShaderStage::COMPUTE,
+            range: 0..8,
+        }];
+
         let layout_transfer_velocity = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
                 &group_layout_transfer_velocity.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges,
         }));
         let layout_write_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -421,7 +399,7 @@ impl HybridFluid {
                 &group_layout_uniform.layout,
                 &group_layout_write_velocity.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges,
         }));
         let layout_pressure_update_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -429,10 +407,7 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_update_volume.layout,
             ],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::COMPUTE,
-                range: 0..8,
-            }],
+            push_constant_ranges,
         }));
         let layout_pressure_preconditioner = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -440,10 +415,7 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_preconditioner.layout,
             ],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::COMPUTE,
-                range: 0..8,
-            }],
+            push_constant_ranges,
         }));
         let layout_pressure_update_pressure_and_residual = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -451,10 +423,7 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_update_pressure_and_residual.layout,
             ],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::COMPUTE,
-                range: 0..8,
-            }],
+            push_constant_ranges,
         }));
         let layout_pressure_solve_init = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -462,10 +431,7 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_solve_init.layout,
             ],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::COMPUTE,
-                range: 0..8,
-            }],
+            push_constant_ranges,
         }));
 
         let layout_pressure_apply_coeff = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -474,10 +440,7 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_apply_coeff.layout,
             ],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::COMPUTE,
-                range: 0..8,
-            }],
+            push_constant_ranges,
         }));
         let layout_pressure_solve_reduce = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
@@ -485,18 +448,16 @@ impl HybridFluid {
                 &group_layout_read_macgrid.layout,
                 &group_layout_pressure_solve_reduce.layout,
             ],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStage::COMPUTE,
-                range: 0..8,
-            }],
+            push_constant_ranges,
         }));
-        let layout_write_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
-                &group_layout_write_particles.layout,
+                &group_layout_read_macgrid.layout,
+                &group_layout_particles.layout,
             ],
-            push_constant_ranges: &[],
+            push_constant_ranges,
         }));
 
         let pipeline_transfer_clear_linkedlist = pipeline_manager.create_compute_pipeline(
@@ -528,7 +489,7 @@ impl HybridFluid {
         let pipeline_update_particles = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_particles.clone(), Path::new("simulation/update_particles.comp")),
+            ComputePipelineCreationDesc::new(layout_particles.clone(), Path::new("simulation/update_particles.comp")),
         );
 
         HybridFluid {
@@ -801,6 +762,7 @@ impl HybridFluid {
                 // It's either this or a loop over encoder.begin_render_pass which then also requires a myriad of texture views...
                 // (might still be faster because RT clear operations are usually very quick :/)
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear_linkedlist));
+                cpass.set_push_constants(0, &[i as u32]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
                 // Create particle linked lists and write heads in dual grids
@@ -916,14 +878,15 @@ impl HybridFluid {
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         {
-            cpass.set_bind_group(2, &self.bind_group_write_particles, &[]);
+            cpass.set_bind_group(2, &self.bind_group_read_mac_grid, &[]);
+            cpass.set_bind_group(3, &self.bind_group_write_particles, &[]);
 
             // Transfer velocities to particles.
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_particles));
             /////////////////////////// TODO Workaround for https://github.com/gfx-rs/wgpu-rs/issues/451
             cpass.set_bind_group(0, &self.bind_group_uniform, &[]);
             cpass.set_bind_group(0, &per_frame_bind_group, &[]);
             ///////////////////////////
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_particles));
             cpass.dispatch(particle_work_groups, 1, 1);
         }
         self.is_first_step.set(false);

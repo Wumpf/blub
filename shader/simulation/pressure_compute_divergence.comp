@@ -57,13 +57,14 @@ void main() {
     if (PushConstants.Mode == DIVERGENCE_FIRST_STEP) {
         imageStore(InitialPressureGuess, gridCoord, vec4(0.0));
     } else {
+        // See MultiplyWithCoefficientMatrix (which works with textures not images :/)
         float numNonSolidNeighbors = 0.0;
-        numNonSolidNeighbors += float(markerX0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerX1 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerY0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerY1 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerZ0 != CELL_SOLID);
-        numNonSolidNeighbors += float(markerZ1 != CELL_SOLID);
+        numNonSolidNeighbors += abs(markerX0); // float(markerX0 != CELL_SOLID);
+        numNonSolidNeighbors += abs(markerX1); // float(markerX1 != CELL_SOLID);
+        numNonSolidNeighbors += abs(markerY0); // float(markerY0 != CELL_SOLID);
+        numNonSolidNeighbors += abs(markerY1); // float(markerY1 != CELL_SOLID);
+        numNonSolidNeighbors += abs(markerZ0); // float(markerZ0 != CELL_SOLID);
+        numNonSolidNeighbors += abs(markerZ1); // float(markerZ1 != CELL_SOLID);
         if (numNonSolidNeighbors > 0.0)
             residual -= numNonSolidNeighbors * imageLoad(InitialPressureGuess, gridCoord).x;
         if (markerX0 == CELL_FLUID) {

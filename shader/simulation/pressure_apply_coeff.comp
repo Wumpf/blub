@@ -19,11 +19,6 @@ uint GetDotProductBufferAddress() {
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
-
-    uint threadsPerWorkgroup = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
-    uint threadGroupIndex = (gl_WorkGroupID.z * gl_NumWorkGroups.y + gl_WorkGroupID.y) * gl_NumWorkGroups.x + gl_WorkGroupID.x;
-    uint dotProductBufferAddress = gl_LocalInvocationIndex + threadsPerWorkgroup * threadGroupIndex;
-
     if (marker != CELL_FLUID) {
         return;
     }

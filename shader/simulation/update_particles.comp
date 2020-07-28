@@ -10,10 +10,10 @@ layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
 layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
 // layout(set = 2, binding = 3) uniform texture3D MarkerVolume;
 
-layout(set = 2, binding = 4) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
-layout(set = 2, binding = 5) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
-layout(set = 2, binding = 6) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
-layout(set = 2, binding = 7) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
+layout(set = 3, binding = 0) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
+layout(set = 3, binding = 1) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
+layout(set = 3, binding = 2) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
+layout(set = 3, binding = 3) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
 
 COMPUTE_PASS_PARTICLES
 

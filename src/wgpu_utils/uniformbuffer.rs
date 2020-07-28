@@ -26,23 +26,23 @@ impl<Content: bytemuck::Pod> UniformBuffer<Content> {
         }
     }
 
-    pub fn new_with_data(device: &wgpu::Device, initial_content: &Content) -> UniformBuffer<Content> {
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("UniformBuffer: {}", Self::name())),
-            size: std::mem::size_of::<Content>() as u64,
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            mapped_at_creation: true,
-        });
+    // pub fn new_with_data(device: &wgpu::Device, initial_content: &Content) -> UniformBuffer<Content> {
+    //     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+    //         label: Some(&format!("UniformBuffer: {}", Self::name())),
+    //         size: std::mem::size_of::<Content>() as u64,
+    //         usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+    //         mapped_at_creation: true,
+    //     });
 
-        let mapped_memory = buffer.slice(..);
-        mapped_memory.get_mapped_range_mut().clone_from_slice(bytemuck::bytes_of(initial_content));
-        buffer.unmap();
+    //     let mapped_memory = buffer.slice(..);
+    //     mapped_memory.get_mapped_range_mut().clone_from_slice(bytemuck::bytes_of(initial_content));
+    //     buffer.unmap();
 
-        UniformBuffer {
-            buffer,
-            content: PhantomData,
-        }
-    }
+    //     UniformBuffer {
+    //         buffer,
+    //         content: PhantomData,
+    //     }
+    // }
 
     pub fn update_content(&self, queue: &wgpu::Queue, content: Content) {
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&content));
