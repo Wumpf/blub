@@ -53,6 +53,7 @@ impl ScreenSpaceFluid {
             RenderPipelineCreationDesc {
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
+                    push_constant_ranges: &[],
                 })),
                 vertex_shader_relative_path: PathBuf::from("screenspace_fluid/particles.vert"),
                 fragment_shader_relative_path: Some(PathBuf::from("screenspace_fluid/particles.frag")),
@@ -105,6 +106,7 @@ impl ScreenSpaceFluid {
             ComputePipelineCreationDesc::new(
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout, &group_layout_compose.layout],
+                    push_constant_ranges: &[],
                 })),
                 Path::new("screenspace_fluid/compose.comp"),
             ),

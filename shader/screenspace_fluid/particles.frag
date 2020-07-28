@@ -15,8 +15,9 @@ layout(depth_less) out float gl_FragDepth;
 void main() {
     vec3 rayDir = normalize(in_WorldPosition - Camera.Position);
     float cameraDistance;
+    float cameraDistanceFar;
     // TODO: Elipsoids using APIC matrix?
-    if (!sphereIntersect(in_ParticleWorldPosition, in_Radius, Camera.Position, rayDir, cameraDistance))
+    if (!sphereIntersect(in_ParticleWorldPosition, in_Radius, Camera.Position, rayDir, cameraDistance, cameraDistanceFar))
         discard;
 
     vec3 cameraPosToSpherePos = cameraDistance * rayDir;
@@ -30,6 +31,6 @@ void main() {
 
     // There's more clever ways to store depth for this particular purpose here, but going with the standard one is simply less confusing.
     out_Depth = gl_FragDepth;
-    // TODO: Fade this out, want gaussian/quadratic splats
-    out_Thickness = in_Radius;
+    // quadratic splats
+    out_Thickness = sq((cameraDistanceFar - cameraDistance) / in_Radius) * in_Radius;
 }

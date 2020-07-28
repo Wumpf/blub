@@ -15,16 +15,10 @@ layout(depth_less) out float gl_FragDepth;
 void main() {
     const vec3 lightdir = normalize(vec3(1.0, 2.0, 1.0));
 
-    // Sphere intersect raycast.
-    // (uses equation based intersect: rayOrigin + t * rayDir, ||sphereOrigin-pointOnSphere||= r*r, [...])
     vec3 rayDir = normalize(in_WorldPosition - Camera.Position);
-    vec3 particleCenterToCamera = Camera.Position - in_ParticleWorldPosition; // (often denoted as oc == OriginCenter)
-    float b = dot(particleCenterToCamera, rayDir);
-    float c = dot(particleCenterToCamera, particleCenterToCamera) - in_Radius * in_Radius;
-    float discr = b * b - c;
-    if (discr < 0.0)
-        discard; // todo: antialias?
-    float cameraDistance = -b - sqrt(discr);
+    float cameraDistance;
+    if (!sphereIntersect(in_ParticleWorldPosition, in_Radius, Camera.Position, rayDir, cameraDistance))
+        discard;
 
     vec3 sphereWorldPos = Camera.Position + cameraDistance * rayDir;
     vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / in_Radius;
