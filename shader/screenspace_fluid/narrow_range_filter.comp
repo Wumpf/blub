@@ -1,0 +1,57 @@
+#version 460
+
+#include "../fluid_render_info.glsl"
+#include "../per_frame_resources.glsl"
+#include "../utilities.glsl"
+
+layout(set = 2, binding = 0, r32f) uniform restrict image2D DepthDest;
+layout(set = 2, binding = 1) uniform texture2D DepthSource;
+
+// Needs to be uneven
+#define FILTER_SIZE 31
+#define HALF_FILTER_SIZE (FILTER_SIZE / 2)
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+// http://www.cemyuksel.com/research/papers/narrowrangefilter.pdf
+
+float gaussianFilter2D(float x, float y) {
+
+    // Normalization removes (invSquaredStandardDeviation * INV_TAU) factor.
+    float invHalfSquaredStandardDeviation = 0.5 / sq(5.3);
+    return exp(-(x * x + y * y) * invHalfSquaredStandardDeviation);
+}
+
+void main() {
+    ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
+
+    // TODO: Expose
+    float sigma = 0.0;
+    float delta = 0.01;
+
+    float filteredDepth = 0.0;
+    float totalWeight = 1.0;
+
+    float centerDepth = texelFetch(DepthSource, screenCoord, 0).r;
+
+    // Assuming that filter isn't so big that we need to consider zigzagging the sampling for better cache hits
+    [[unroll]] for (int x = -HALF_FILTER_SIZE; x <= HALF_FILTER_SIZE; ++x) {
+        [[unroll]] for (int y = -HALF_FILTER_SIZE; y <= HALF_FILTER_SIZE; ++y) {
+            // TODO: Try with filtering linear depth.
+            float depth = texelFetch(DepthSource, screenCoord + ivec2(x, y), 0).r;
+            if (depth != 0.0) {
+
+                float weight = gaussianFilter2D(x, y);
+                //  if (depth < centerDepth - delta)
+                //      depth = centerDepth - sigma;
+
+                totalWeight += weight;
+                filteredDepth += depth * weight;
+            }
+        }
+    }
+    filteredDepth /= totalWeight;
+    //    filteredDepth = centerDepth;
+
+    imageStore(DepthDest, screenCoord, filteredDepth.rrrr);
+}

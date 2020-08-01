@@ -5,7 +5,7 @@ use enumflags2::BitFlags;
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
-const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+const OPENGL_PROJECTION_TO_WGPU_PROJECTION: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
     0.0, 0.0, 0.5, 0.0,
@@ -121,26 +121,27 @@ impl Camera {
         self.mouse_delta = (0.0, 0.0);
     }
 
-    fn view_projection(&self, aspect_ratio: f32) -> cgmath::Matrix4<f32> {
-        let projection = cgmath::perspective(cgmath::Deg(80f32), aspect_ratio, 0.01, 1000.0);
-        let view = cgmath::Matrix4::look_at_dir(self.position, self.direction, self.rotational_up);
-        OPENGL_TO_WGPU_MATRIX * projection * view
-    }
-
     pub fn fill_global_uniform_buffer(&self, aspect_ratio: f32) -> CameraUniformBufferContent {
         let right = self.direction.cross(self.rotational_up).normalize();
         let up = right.cross(self.direction).normalize();
 
-        let view_projection = self.view_projection(aspect_ratio);
-        let inverse_view_projection = view_projection.invert().unwrap();
+        let view = cgmath::Matrix4::look_at_dir(self.position, self.direction, self.rotational_up);
+        let projection = OPENGL_PROJECTION_TO_WGPU_PROJECTION * cgmath::perspective(cgmath::Deg(80f32), aspect_ratio, 0.01, 1000.0);
+        let view_projection = projection * view;
+        let inverse_projection = projection.invert().unwrap();
+        //let inverse_view_projection = view_projection.invert().unwrap();
+
+        let ndc_corner_camera = inverse_projection.transform_point(cgmath::point3(1.0, 1.0, 0.0));
+        let ndc_camera_space_projected = cgmath::point2(-ndc_corner_camera.x / ndc_corner_camera.z, -ndc_corner_camera.y / ndc_corner_camera.z);
 
         CameraUniformBufferContent {
             view_projection,
-            inverse_view_projection,
             position: self.position.into(),
             right: right.into(),
             up: up.into(),
             direction: self.direction.into(),
+            ndc_camera_space_projected: ndc_camera_space_projected.into(),
+            padding: cgmath::point2(0.0, 0.0),
         }
     }
 }
@@ -149,9 +150,10 @@ impl Camera {
 #[derive(Clone, Copy)]
 pub struct CameraUniformBufferContent {
     view_projection: cgmath::Matrix4<f32>,
-    inverse_view_projection: cgmath::Matrix4<f32>,
     position: PaddedPoint3,
     right: PaddedVector3,
     up: PaddedVector3,
     direction: PaddedVector3,
+    ndc_camera_space_projected: cgmath::Point2<f32>,
+    padding: cgmath::Point2<f32>,
 }

@@ -104,7 +104,7 @@ Decided for a screen space / particle based visualization. Here's some of the li
 * and even more improvements [A Layered Particle-Based Fluid Model for Real-Time Rendering of Water, Bagar et al 2010](https://www.cg.tuwien.ac.at/research/publications/2010/bagar2010/) adding handling of a foam layer.
 * [Screen Space Foam Rendering, Akinci et al. 2013](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.373.2121&rep=rep1&type=pdf)
 * [Real-Time Screen-Space Liquid Rendering with Complex Refractions, Imai et al. 2016](http://kanamori.cs.tsukuba.ac.jp/projects/screen_space_liquids/)
-* [A Narrow-Range Filter for SCreen-Space Fluid Rendering, Truong et al. 2018](http://www.cemyuksel.com/research/papers/narrowrangefilter.pdf) 
+* [A Narrow-Range Filter for Screen-Space Fluid Rendering, Truong et al. 2018](http://www.cemyuksel.com/research/papers/narrowrangefilter.pdf) 
 
 What Blub implements right now resembles mostly TODO.
 I have a few interesting twists though which I haven't seen anywhere else yet:

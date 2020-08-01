@@ -6,7 +6,7 @@
 layout(location = 0) in vec3 in_WorldPosition;
 layout(location = 1) in vec3 in_ParticleWorldPosition;
 layout(location = 2) in float in_Radius;
-layout(location = 0) out float out_Depth;
+layout(location = 0) out float out_ViewSpaceDepth;
 layout(location = 1) out float out_Thickness;
 
 // Note that we promise to only lessen the depth value, so gpu can still do some hi-z/early depth culling
@@ -29,8 +29,7 @@ void main() {
     vec2 projected_zw = (Camera.ViewProjection * vec4(sphereWorldPos, 1.0)).zw; // (trusting optimizer to pick the right thing ;-))
     gl_FragDepth = projected_zw.x / projected_zw.y;
 
-    // There's more clever ways to store depth for this particular purpose here, but going with the standard one is simply less confusing.
-    out_Depth = gl_FragDepth;
+    out_ViewSpaceDepth = dot(Camera.Direction, cameraPosToSpherePos);
     // quadratic splats
     out_Thickness = sq((cameraDistanceFar - cameraDistance) / in_Radius) * in_Radius;
 }
