@@ -12,6 +12,8 @@ const OPENGL_PROJECTION_TO_WGPU_PROJECTION: cgmath::Matrix4<f32> = cgmath::Matri
     0.0, 0.0, 0.5, 1.0,
 );
 
+const VERTICAL_FOV: cgmath::Deg<f32> = cgmath::Deg(80f32);
+
 #[derive(BitFlags, Copy, Clone, Debug, PartialEq)]
 enum MoveCommands {
     Left = 0b0001,
@@ -126,7 +128,7 @@ impl Camera {
         let up = right.cross(self.direction).normalize();
 
         let view = cgmath::Matrix4::look_at_dir(self.position, self.direction, self.rotational_up);
-        let projection = OPENGL_PROJECTION_TO_WGPU_PROJECTION * cgmath::perspective(cgmath::Deg(80f32), aspect_ratio, 0.01, 1000.0);
+        let projection = OPENGL_PROJECTION_TO_WGPU_PROJECTION * cgmath::perspective(VERTICAL_FOV, aspect_ratio, 0.01, 1000.0);
         let view_projection = projection * view;
         let inverse_projection = projection.invert().unwrap();
         //let inverse_view_projection = view_projection.invert().unwrap();
@@ -141,7 +143,8 @@ impl Camera {
             up: up.into(),
             direction: self.direction.into(),
             ndc_camera_space_projected: ndc_camera_space_projected.into(),
-            padding: cgmath::point2(0.0, 0.0),
+            tan_half_vertical_fov: (VERTICAL_FOV * 0.5).tan(),
+            inv_tan_half_vertical_fov: 1.0 / (VERTICAL_FOV * 0.5).tan(),
         }
     }
 }
@@ -155,5 +158,6 @@ pub struct CameraUniformBufferContent {
     up: PaddedVector3,
     direction: PaddedVector3,
     ndc_camera_space_projected: cgmath::Point2<f32>,
-    padding: cgmath::Point2<f32>,
+    tan_half_vertical_fov: f32,
+    inv_tan_half_vertical_fov: f32,
 }

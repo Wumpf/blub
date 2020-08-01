@@ -81,7 +81,7 @@ unsafe impl bytemuck::Zeroable for ParticlePositionLl {}
 impl HybridFluid {
     // particles are distributed 2x2x2 within a single gridcell
     // (seems to be widely accepted as the default. Houdini seems to have this configurable from 4-16, maybe worth experimenting with it! (todo))
-    const PARTICLES_PER_GRID_CELL: u32 = 8;
+    pub const PARTICLES_PER_GRID_CELL: u32 = 8;
 
     pub fn new(
         device: &wgpu::Device,

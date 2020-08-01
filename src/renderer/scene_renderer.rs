@@ -23,7 +23,8 @@ pub struct GlobalRenderSettingsUniformBufferContent {
     fluid_origin: cgmath::Point3<f32>,
     fluid_grid_to_world_scale: f32,
     velocity_visualization_scale: f32,
-    padding: cgmath::Point3<f32>,
+    fluid_particle_radius: f32,
+    padding: cgmath::Point2<f32>,
 }
 
 // What renders the scene (so everything except ui!)
@@ -128,7 +129,8 @@ impl SceneRenderer {
             fluid_origin: scene.config.fluid.world_position,
             fluid_grid_to_world_scale: scene.config.fluid.grid_to_world_scale,
             velocity_visualization_scale: self.velocity_visualization_scale,
-            padding: cgmath::point3(0.0, 0.0, 0.0),
+            fluid_particle_radius: scene.config.fluid.grid_to_world_scale / (HybridFluid::PARTICLES_PER_GRID_CELL as f32).powf(1.0 / 3.0) * 0.5,
+            padding: cgmath::point2(0.0, 0.0),
         }
     }
 

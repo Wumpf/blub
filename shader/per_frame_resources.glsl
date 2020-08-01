@@ -10,7 +10,8 @@ struct CameraData {
 
     // NDC (1, 1) projected into camera space and then divded by the far plane distance.
     vec2 NdcCameraSpaceProjected;
-    vec2 _padding;
+    float TanHalfVerticalFov;    // tan(VerticalFov * 0.5)
+    float InvTanHalfVerticalFov; // 1.0 / TanHalfVerticalFov
 };
 
 // All timings in seconds.
@@ -27,6 +28,8 @@ struct GlobalRenderingSettings {
     vec3 FluidWorldOrigin;
     float FluidGridToWorldScale;
     float VelocityVisualizationScale;
+    float FluidParticleRadius; // particle size in world space == half grid scale times expected particles per axis
+                               // == FluidGridToWorldScale * 0.5 / pow(ParticlesPerCell, 1/3)
 };
 
 // Constants that change at max per frame.

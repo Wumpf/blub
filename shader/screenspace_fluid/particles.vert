@@ -12,7 +12,7 @@ layout(location = 1) out vec3 out_ParticleWorldPosition;
 layout(location = 2) out float out_Radius;
 
 void main() {
-    out_Radius = 0.25 * Rendering.FluidGridToWorldScale;
+    out_Radius = Rendering.FluidParticleRadius;
     out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
     out_WorldPosition = spanParticle(out_ParticleWorldPosition, out_Radius);
     gl_Position = Camera.ViewProjection * vec4(out_WorldPosition, 1.0);

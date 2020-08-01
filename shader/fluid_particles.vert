@@ -13,7 +13,7 @@ layout(location = 2) out vec3 out_Tint;
 layout(location = 3) out float out_Radius;
 
 void main() {
-    out_Radius = 0.25 * Rendering.FluidGridToWorldScale;
+    out_Radius = Rendering.FluidParticleRadius;
     vec3 velocity =
         vec3(ParticleBufferVelocityX[gl_InstanceIndex].w, ParticleBufferVelocityY[gl_InstanceIndex].w, ParticleBufferVelocityZ[gl_InstanceIndex].w);
     out_Tint = colormapHeat(length(velocity) * Rendering.VelocityVisualizationScale);

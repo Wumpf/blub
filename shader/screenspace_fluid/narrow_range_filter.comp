@@ -1,3 +1,9 @@
+// An implementation of:
+// A Narrow-Range Filter for Screen-Space Fluid Rendering, Truong et al. 2018
+// http://www.cemyuksel.com/research/papers/narrowrangefilter.pdf
+
+// With some flavoring of my own.
+
 #version 460
 
 #include "../fluid_render_info.glsl"
@@ -7,51 +13,66 @@
 layout(set = 2, binding = 0, r32f) uniform restrict image2D DepthDest;
 layout(set = 2, binding = 1) uniform texture2D DepthSource;
 
-// Needs to be uneven
-#define FILTER_SIZE 31
-#define HALF_FILTER_SIZE (FILTER_SIZE / 2)
-
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-// http://www.cemyuksel.com/research/papers/narrowrangefilter.pdf
+// Maximum filter size (in one direction, i.e. 15 means that it covers a 31x31 square of pixels)
+#define MAX_FILTER_SIZE 31
 
-float gaussianFilter2D(float x, float y) {
+// Relationship between the standard deviation sigma (for gaussian kernel) and the filter size.
+// (the lower, the boxier the filter gets)
+#define SIGMA_TO_FILTERSIZE 6.0
 
-    // Normalization removes (invSquaredStandardDeviation * INV_TAU) factor.
-    float invHalfSquaredStandardDeviation = 0.5 / sq(5.3);
-    return exp(-(x * x + y * y) * invHalfSquaredStandardDeviation);
+void narrowRangeFilter(float depth, float centerDepth, float gaussianWeight, inout float totalWeight, inout float filteredDepth) {
+    if (isinf(depth) || depth == 0.0)
+        return;
+
+    // TODO: Expose
+    float mu = Rendering.FluidParticleRadius;
+    float delta = 10.0 * Rendering.FluidParticleRadius;
+
+    if (depth > centerDepth + delta)
+        return;
+    if (depth < centerDepth - delta)
+        depth = centerDepth - mu;
+
+    totalWeight += gaussianWeight;
+    filteredDepth += depth * gaussianWeight;
 }
 
 void main() {
     ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
+    float centerDepth = texelFetch(DepthSource, screenCoord, 0).r;
+    if (isinf(centerDepth) || centerDepth == 0.0) {
+        return;
+    }
 
     // TODO: Expose
-    float sigma = 0.0;
-    float delta = 0.01;
+    float worldSpaceSigma = Rendering.FluidParticleRadius * 1.8;
+    float mu = Rendering.FluidParticleRadius;
+    float delta = 10.0 * Rendering.FluidParticleRadius;
 
-    float filteredDepth = 0.0;
-    float totalWeight = 1.0;
+    float sigma = imageSize(DepthDest).y * worldSpaceSigma / (Camera.TanHalfVerticalFov * centerDepth * 2.0);
+    float filterSizef = min(MAX_FILTER_SIZE, sigma * SIGMA_TO_FILTERSIZE);
+    sigma = filterSizef * (1.0 / SIGMA_TO_FILTERSIZE); // correct sigma so we don't degenerate to a box filter
+    float gaussianK = 0.5 / sq(sigma);
+    int filterSize = int(ceil(filterSizef));
 
-    float centerDepth = texelFetch(DepthSource, screenCoord, 0).r;
+    float filteredDepth = centerDepth;
+    float totalWeight = 0.0;
 
-    // Assuming that filter isn't so big that we need to consider zigzagging the sampling for better cache hits
-    [[unroll]] for (int x = -HALF_FILTER_SIZE; x <= HALF_FILTER_SIZE; ++x) {
-        [[unroll]] for (int y = -HALF_FILTER_SIZE; y <= HALF_FILTER_SIZE; ++y) {
-            // TODO: Try with filtering linear depth.
-            float depth = texelFetch(DepthSource, screenCoord + ivec2(x, y), 0).r;
-            if (depth != 0.0) {
+    // Sample from middle to outside
+    for (int r = 1; r < filterSize; ++r) {
+        // Go round the square, sampling 4 equidistant points at the time (starting with the corners)
+        for (int i = 0; i < r * 2; ++i) {
+            float gaussianWeight = exp(-(sq(r) + sq(r - i)) * gaussianK);
 
-                float weight = gaussianFilter2D(x, y);
-                //  if (depth < centerDepth - delta)
-                //      depth = centerDepth - sigma;
-
-                totalWeight += weight;
-                filteredDepth += depth * weight;
-            }
+            narrowRangeFilter(texelFetch(DepthSource, screenCoord + ivec2(r, r - i), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
+            narrowRangeFilter(texelFetch(DepthSource, screenCoord + ivec2(r - i, -r), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
+            narrowRangeFilter(texelFetch(DepthSource, screenCoord - ivec2(r, r - i), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
+            narrowRangeFilter(texelFetch(DepthSource, screenCoord - ivec2(r - i, -r), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
         }
     }
     filteredDepth /= totalWeight;
-    //    filteredDepth = centerDepth;
-
+    // filteredDepth = centerDepth;
     imageStore(DepthDest, screenCoord, filteredDepth.rrrr);
 }
