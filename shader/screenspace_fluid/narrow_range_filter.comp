@@ -20,33 +20,25 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 // Relationship between the standard deviation sigma (for gaussian kernel) and the filter size.
 // (the lower, the boxier the filter gets)
-#define SIGMA_TO_FILTERSIZE 6.0
+#define SIGMA_TO_FILTERSIZE 3.0
 
 // depthSampleA & depthSampleB are depth samples on opposing sides, both at the same distance to the middle.
-void narrowRangeFilter(float depthSampleA, float depthSampleB, float centerDepth, float gaussianWeight, float mu, float delta, inout float delta_high,
-                       inout float delta_low, inout float totalWeight, inout float filteredDepth) {
-    if (isinf(depthSampleA) || depthSampleA == 0.0)
+void narrowRangeFilter(float depthSampleA, float depthSampleB, float lowerDepthBound, float gaussianWeight, float depthThreshold,
+                       inout float depthThresholdHigh, inout float depthThresholdLow, inout float totalWeight, inout float filteredDepth) {
+    // Is depth too high? Keep filter symmetric and early out for both opposing values.
+    if (depthSampleA > depthThresholdHigh || depthSampleA == 0.0)
         return;
-    if (isinf(depthSampleB) || depthSampleB == 0.0)
+    if (depthSampleB > depthThresholdHigh || depthSampleB == 0.0)
         return;
-    if (depthSampleA > centerDepth + delta_high)
-        return;
-    if (depthSampleB > centerDepth + delta_high)
-        return;
+    // Is depth too low? Clamp to lower bound
+    [[flatten]] if (depthSampleA < depthThresholdLow) depthSampleA = lowerDepthBound;
+    [[flatten]] if (depthSampleB < depthThresholdLow) depthSampleB = lowerDepthBound;
 
-    if (depthSampleA < centerDepth - delta_low)
-        depthSampleA = centerDepth - mu;
-    else {
-        delta_low = max(delta_low, centerDepth - depthSampleA + delta);
-        delta_high = max(delta_high, depthSampleA - centerDepth + delta);
-    }
-    if (depthSampleB < centerDepth - delta_low)
-        depthSampleB = centerDepth - mu;
-    else {
-        delta_low = max(delta_low, centerDepth - depthSampleB + delta);
-        delta_high = max(delta_high, depthSampleB - centerDepth + delta);
-    }
+    // Dynamic depth range.
+    depthThresholdLow = min(depthThresholdLow, min(depthSampleB, depthSampleA) - depthThreshold);
+    depthThresholdHigh = max(depthThresholdHigh, max(depthSampleB, depthSampleA) + depthThreshold);
 
+    // Add samples
     totalWeight += gaussianWeight * 2.0;
     filteredDepth += (depthSampleA + depthSampleB) * gaussianWeight;
 }
@@ -60,8 +52,8 @@ void main() {
 
     // TODO: Expose
     float worldSpaceSigma = Rendering.FluidParticleRadius * 1.7;
-    float delta = 10.0 * Rendering.FluidParticleRadius;
-    float mu = 1.0 * Rendering.FluidParticleRadius;
+    float depthThreshold = 10.0 * Rendering.FluidParticleRadius;
+    float mu = 4.0 * Rendering.FluidParticleRadius;
 
     float sigma = imageSize(DepthDest).y * worldSpaceSigma / (Camera.TanHalfVerticalFov * centerDepth * 2.0);
     float filterSizef = min(MAX_FILTER_SIZE, sigma * SIGMA_TO_FILTERSIZE);
@@ -70,10 +62,11 @@ void main() {
     int filterSize = int(ceil(filterSizef));
 
     float filteredDepth = centerDepth;
-    float totalWeight = 0.0;
+    float totalWeight = 1.0;
 
-    float delta_high = delta;
-    float delta_low = delta;
+    float depthThresholdHigh = centerDepth + depthThreshold;
+    float depthThresholdLow = centerDepth - depthThreshold;
+    float lowerDepthBound = centerDepth - mu;
 
     // Sample from middle to outside
     for (int r = 1; r < filterSize; ++r) {
@@ -83,13 +76,16 @@ void main() {
 
             float depthA = texelFetch(DepthSource, screenCoord + ivec2(r, r - i), 0).r;
             float depthB = texelFetch(DepthSource, screenCoord - ivec2(r, r - i), 0).r;
-            narrowRangeFilter(depthA, depthB, centerDepth, gaussianWeight, mu, delta, delta_high, delta_low, totalWeight, filteredDepth);
+            narrowRangeFilter(depthA, depthB, lowerDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+                              filteredDepth);
 
             depthA = texelFetch(DepthSource, screenCoord + ivec2(r - i, -r), 0).r;
             depthB = texelFetch(DepthSource, screenCoord - ivec2(r - i, -r), 0).r;
-            narrowRangeFilter(depthA, depthB, centerDepth, gaussianWeight, mu, delta, delta_high, delta_low, totalWeight, filteredDepth);
+            narrowRangeFilter(depthA, depthB, lowerDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+                              filteredDepth);
         }
     }
+
     filteredDepth /= totalWeight;
     // filteredDepth = centerDepth;
     imageStore(DepthDest, screenCoord, filteredDepth.rrrr);
