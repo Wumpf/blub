@@ -14,7 +14,7 @@ use std::rc::Rc;
 struct ScreenDependentProperties {
     texture_view_fluid_viewspacedepth_rendertarget: wgpu::TextureView,
     texture_view_fluid_thickness: wgpu::TextureView,
-    bind_group_narrow_range_filter: wgpu::BindGroup,
+    bind_group_narrow_range_filter: [wgpu::BindGroup; 2],
     bind_group_compose: wgpu::BindGroup,
     target_textures_resolution: wgpu::Extent3d,
 }
@@ -22,7 +22,8 @@ struct ScreenDependentProperties {
 struct ScreenIndependentProperties {
     pipeline_render_particles: RenderPipelineHandle,
 
-    pipeline_narrow_range_filter: ComputePipelineHandle,
+    pipeline_narrow_range_filter_1d: ComputePipelineHandle,
+    pipeline_narrow_range_filter_2d: ComputePipelineHandle,
     group_layout_narrow_range_filter: BindGroupLayoutWithDesc,
 
     pipeline_compose: ComputePipelineHandle,
@@ -110,19 +111,34 @@ impl ScreenSpaceFluid {
             },
         );
 
-        let pipeline_narrow_range_filter = pipeline_manager.create_compute_pipeline(
+        // Use same push constant range for all compute pipelines to improve internal Vulkan pipeline compatibility.
+        let push_constant_ranges = &[wgpu::PushConstantRange {
+            stages: wgpu::ShaderStage::COMPUTE,
+            range: 0..4,
+        }];
+
+        let layout_narrow_range_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[
+                &per_frame_bind_group_layout,
+                &fluid_renderer_group_layout,
+                &group_layout_narrow_range_filter.layout,
+            ],
+            push_constant_ranges,
+        }));
+        let pipeline_narrow_range_filter_1d = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
             ComputePipelineCreationDesc::new(
-                Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    bind_group_layouts: &[
-                        &per_frame_bind_group_layout,
-                        &fluid_renderer_group_layout,
-                        &group_layout_narrow_range_filter.layout,
-                    ],
-                    push_constant_ranges: &[],
-                })),
-                Path::new("screenspace_fluid/narrow_range_filter.comp"),
+                layout_narrow_range_filter.clone(),
+                Path::new("screenspace_fluid/narrow_range_filter_1d.comp"),
+            ),
+        );
+        let pipeline_narrow_range_filter_2d = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(
+                layout_narrow_range_filter.clone(),
+                Path::new("screenspace_fluid/narrow_range_filter_2d.comp"),
             ),
         );
 
@@ -132,7 +148,7 @@ impl ScreenSpaceFluid {
             ComputePipelineCreationDesc::new(
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout, &group_layout_compose.layout],
-                    push_constant_ranges: &[],
+                    push_constant_ranges,
                 })),
                 Path::new("screenspace_fluid/compose.comp"),
             ),
@@ -141,7 +157,8 @@ impl ScreenSpaceFluid {
         let screen_independent = ScreenIndependentProperties {
             pipeline_render_particles,
 
-            pipeline_narrow_range_filter,
+            pipeline_narrow_range_filter_1d,
+            pipeline_narrow_range_filter_2d,
             group_layout_narrow_range_filter,
 
             pipeline_compose,
@@ -173,7 +190,7 @@ impl ScreenSpaceFluid {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::FORMAT_FLUID_DEPTH,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
         });
         let texture_fluid_depth_blurtarget = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Texture: Fluid Depth 2 (blur target)"),
@@ -199,10 +216,16 @@ impl ScreenSpaceFluid {
         });
         let texture_view_fluid_thickness = texture_fluid_thickness.create_default_view();
 
-        let bind_group_narrow_range_filter = BindGroupBuilder::new(&screen_independent.group_layout_narrow_range_filter)
-            .texture(&texture_view_fluid_viewspacedepth_blurtarget)
-            .texture(&texture_view_fluid_viewspacedepth_rendertarget)
-            .create(device, "BindGroup: Narrow Range filter");
+        let bind_group_narrow_range_filter = [
+            BindGroupBuilder::new(&screen_independent.group_layout_narrow_range_filter)
+                .texture(&texture_view_fluid_viewspacedepth_blurtarget)
+                .texture(&texture_view_fluid_viewspacedepth_rendertarget)
+                .create(device, "BindGroup: Narrow Range filter 1"),
+            BindGroupBuilder::new(&screen_independent.group_layout_narrow_range_filter)
+                .texture(&texture_view_fluid_viewspacedepth_rendertarget)
+                .texture(&texture_view_fluid_viewspacedepth_blurtarget)
+                .create(device, "BindGroup: Narrow Range filter 2"),
+        ];
         let bind_group_compose = BindGroupBuilder::new(&screen_independent.group_layout_compose)
             .texture(&texture_view_fluid_viewspacedepth_blurtarget)
             .texture(&texture_view_fluid_thickness)
@@ -275,23 +298,41 @@ impl ScreenSpaceFluid {
         }
 
         {
-            const COMPUTE_LOCAL_SIZE_SCREEN: wgpu::Extent3d = wgpu::Extent3d {
-                width: 32,
-                height: 32,
-                depth: 1,
-            };
-            let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, COMPUTE_LOCAL_SIZE_SCREEN);
-
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, &per_frame_bind_group, &[]);
             cpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
 
-            cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter, &[]);
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter));
+            const LOCAL_SIZE_FILTER_1D: wgpu::Extent3d = wgpu::Extent3d {
+                width: 64,
+                height: 1,
+                depth: 1,
+            };
+            let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_1d));
+            cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
+            cpass.set_push_constants(0, &[0]); // Filter X
+            cpass.dispatch(work_group.width, work_group.height, work_group.depth);
+            cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[1], &[]);
+            cpass.set_push_constants(0, &[1]); // Filter Y
+            cpass.dispatch(work_group.width, work_group.height, work_group.depth);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_2d));
+            cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
+            const LOCAL_SIZE_FILTER_2D: wgpu::Extent3d = wgpu::Extent3d {
+                width: 32,
+                height: 32,
+                depth: 1,
+            };
+            let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_2D);
             cpass.dispatch(work_group.width, work_group.height, work_group.depth);
 
+            const LOCAL_SIZE_COMPOSE: wgpu::Extent3d = wgpu::Extent3d {
+                width: 32,
+                height: 32,
+                depth: 1,
+            };
             cpass.set_bind_group(2, &self.screen_dependent.bind_group_compose, &[]);
             cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_compose));
+            let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_COMPOSE);
             cpass.dispatch(work_group.width, work_group.height, work_group.depth);
         }
     }

@@ -1,0 +1,4 @@
+#version 460
+
+#define FILTER_1D
+#include "narrow_range_filter.glsl"
