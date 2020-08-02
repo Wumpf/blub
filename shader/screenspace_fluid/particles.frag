@@ -25,7 +25,6 @@ void main() {
     vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / in_Radius;
 
     // Adjust depth buffer value.
-    // TODO: Necessary for this step?
     vec2 projected_zw = (Camera.ViewProjection * vec4(sphereWorldPos, 1.0)).zw; // (trusting optimizer to pick the right thing ;-))
     gl_FragDepth = projected_zw.x / projected_zw.y;
 

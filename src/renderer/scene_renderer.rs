@@ -78,7 +78,7 @@ impl SceneRenderer {
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
             volume_visualization: VolumeVisualizationMode::None,
-            particle_radius_factor: 0.75,
+            particle_radius_factor: 0.7,
             enable_box_lines: true,
             velocity_visualization_scale: 0.008,
         }

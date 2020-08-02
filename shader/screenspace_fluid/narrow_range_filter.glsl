@@ -32,19 +32,20 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 // TODO: Expose
 float worldSpaceSigma = 1.5 * Rendering.FluidParticleRadius;
 float depthThreshold = 10.0 * Rendering.FluidParticleRadius;
-float mu = 10.0 * Rendering.FluidParticleRadius;
+float mu = 1.0 * Rendering.FluidParticleRadius;
 
 // depthSampleA & depthSampleB are depth samples on opposing sides, both at the same distance to the middle.
-void narrowRangeFilter(float depthSampleA, float depthSampleB, float lowerDepthBound, float gaussianWeight, float depthThreshold,
+void narrowRangeFilter(float depthSampleA, float depthSampleB, float higherDepthBound, float gaussianWeight, float depthThreshold,
                        inout float depthThresholdHigh, inout float depthThresholdLow, inout float totalWeight, inout float filteredDepth) {
-    // Is depth too high? Keep filter symmetric and early out for both opposing values.
-    if (depthSampleA > depthThresholdHigh || depthSampleA == 0.0)
+    // Is depth too low? Keep filter symmetric and early out for both opposing values.
+    // (0 is for sample outside of the fluid)
+    if (depthSampleA < depthThresholdLow)
         return;
-    if (depthSampleB > depthThresholdHigh || depthSampleB == 0.0)
+    if (depthSampleB < depthThresholdLow)
         return;
-    // Is depth too low? Clamp to lower bound
-    [[flatten]] if (depthSampleA < depthThresholdLow) depthSampleA = lowerDepthBound;
-    [[flatten]] if (depthSampleB < depthThresholdLow) depthSampleB = lowerDepthBound;
+    // Is depth too high? Clamp to upper bound.
+    [[flatten]] if (depthSampleA > depthThresholdHigh) depthSampleA = higherDepthBound;
+    [[flatten]] if (depthSampleB > depthThresholdHigh) depthSampleB = higherDepthBound;
 
     // Dynamic depth range.
     depthThresholdLow = min(depthThresholdLow, min(depthSampleB, depthSampleA) - depthThreshold);
@@ -58,7 +59,7 @@ void narrowRangeFilter(float depthSampleA, float depthSampleB, float lowerDepthB
 void main() {
     ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
     float centerDepth = texelFetch(DepthSource, screenCoord, 0).r;
-    if (isinf(centerDepth) || centerDepth == 0.0) {
+    if (centerDepth > 9999.0 || centerDepth == 0.0) {
         return;
     }
 
@@ -73,10 +74,9 @@ void main() {
 
     float depthThresholdHigh = centerDepth + depthThreshold;
     float depthThresholdLow = centerDepth - depthThreshold;
-    float lowerDepthBound = centerDepth - mu;
+    float higherDepthBound = centerDepth + mu;
 
 #if defined(FILTER_2D)
-
     // Sample from middle to outside
     for (int r = 1; r < filterSize; ++r) {
         // Go round the square, sampling 4 equidistant points at the time (starting with the corners)
@@ -85,12 +85,12 @@ void main() {
 
             float depthA = texelFetch(DepthSource, screenCoord + ivec2(r, r - i), 0).r;
             float depthB = texelFetch(DepthSource, screenCoord - ivec2(r, r - i), 0).r;
-            narrowRangeFilter(depthA, depthB, lowerDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+            narrowRangeFilter(depthA, depthB, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
                               filteredDepth);
 
             depthA = texelFetch(DepthSource, screenCoord + ivec2(r - i, -r), 0).r;
             depthB = texelFetch(DepthSource, screenCoord - ivec2(r - i, -r), 0).r;
-            narrowRangeFilter(depthA, depthB, lowerDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+            narrowRangeFilter(depthA, depthB, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
                               filteredDepth);
         }
     }
@@ -103,7 +103,7 @@ void main() {
 
         float depthA = texelFetch(DepthSource, screenCoord + offset, 0).r;
         float depthB = texelFetch(DepthSource, screenCoord - offset, 0).r;
-        narrowRangeFilter(depthA, depthB, lowerDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+        narrowRangeFilter(depthA, depthB, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
                           filteredDepth);
     }
 #endif
