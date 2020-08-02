@@ -266,6 +266,14 @@ impl GUI {
                         scene_renderer.fluid_rendering_mode = FluidRenderingMode::iter().skip(current_fluid_rendering).next().unwrap();
                     }
                     {
+                        ui.drag_float(im_str!("Particle Radius Factor"), &mut scene_renderer.particle_radius_factor)
+                            .min(0.0)
+                            .max(1.0)
+                            .speed(0.01)
+                            .display_format(im_str!("%.2f"))
+                            .build();
+                    }
+                    {
                         let mut current_volume_visualization = scene_renderer.volume_visualization as usize;
                         imgui::ComboBox::new(im_str!("Volume Visualization")).build_simple(
                             ui,

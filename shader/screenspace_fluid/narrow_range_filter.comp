@@ -22,21 +22,33 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 // (the lower, the boxier the filter gets)
 #define SIGMA_TO_FILTERSIZE 6.0
 
-void narrowRangeFilter(float depth, float centerDepth, float gaussianWeight, inout float totalWeight, inout float filteredDepth) {
-    if (isinf(depth) || depth == 0.0)
+// depthSampleA & depthSampleB are depth samples on opposing sides, both at the same distance to the middle.
+void narrowRangeFilter(float depthSampleA, float depthSampleB, float centerDepth, float gaussianWeight, float mu, float delta, inout float delta_high,
+                       inout float delta_low, inout float totalWeight, inout float filteredDepth) {
+    if (isinf(depthSampleA) || depthSampleA == 0.0)
+        return;
+    if (isinf(depthSampleB) || depthSampleB == 0.0)
+        return;
+    if (depthSampleA > centerDepth + delta_high)
+        return;
+    if (depthSampleB > centerDepth + delta_high)
         return;
 
-    // TODO: Expose
-    float mu = Rendering.FluidParticleRadius;
-    float delta = 10.0 * Rendering.FluidParticleRadius;
+    if (depthSampleA < centerDepth - delta_low)
+        depthSampleA = centerDepth - mu;
+    else {
+        delta_low = max(delta_low, centerDepth - depthSampleA + delta);
+        delta_high = max(delta_high, depthSampleA - centerDepth + delta);
+    }
+    if (depthSampleB < centerDepth - delta_low)
+        depthSampleB = centerDepth - mu;
+    else {
+        delta_low = max(delta_low, centerDepth - depthSampleB + delta);
+        delta_high = max(delta_high, depthSampleB - centerDepth + delta);
+    }
 
-    if (depth > centerDepth + delta)
-        return;
-    if (depth < centerDepth - delta)
-        depth = centerDepth - mu;
-
-    totalWeight += gaussianWeight;
-    filteredDepth += depth * gaussianWeight;
+    totalWeight += gaussianWeight * 2.0;
+    filteredDepth += (depthSampleA + depthSampleB) * gaussianWeight;
 }
 
 void main() {
@@ -47,9 +59,9 @@ void main() {
     }
 
     // TODO: Expose
-    float worldSpaceSigma = Rendering.FluidParticleRadius * 1.8;
-    float mu = Rendering.FluidParticleRadius;
+    float worldSpaceSigma = Rendering.FluidParticleRadius * 1.7;
     float delta = 10.0 * Rendering.FluidParticleRadius;
+    float mu = 1.0 * Rendering.FluidParticleRadius;
 
     float sigma = imageSize(DepthDest).y * worldSpaceSigma / (Camera.TanHalfVerticalFov * centerDepth * 2.0);
     float filterSizef = min(MAX_FILTER_SIZE, sigma * SIGMA_TO_FILTERSIZE);
@@ -60,16 +72,22 @@ void main() {
     float filteredDepth = centerDepth;
     float totalWeight = 0.0;
 
+    float delta_high = delta;
+    float delta_low = delta;
+
     // Sample from middle to outside
     for (int r = 1; r < filterSize; ++r) {
         // Go round the square, sampling 4 equidistant points at the time (starting with the corners)
         for (int i = 0; i < r * 2; ++i) {
             float gaussianWeight = exp(-(sq(r) + sq(r - i)) * gaussianK);
 
-            narrowRangeFilter(texelFetch(DepthSource, screenCoord + ivec2(r, r - i), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
-            narrowRangeFilter(texelFetch(DepthSource, screenCoord + ivec2(r - i, -r), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
-            narrowRangeFilter(texelFetch(DepthSource, screenCoord - ivec2(r, r - i), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
-            narrowRangeFilter(texelFetch(DepthSource, screenCoord - ivec2(r - i, -r), 0).r, centerDepth, gaussianWeight, totalWeight, filteredDepth);
+            float depthA = texelFetch(DepthSource, screenCoord + ivec2(r, r - i), 0).r;
+            float depthB = texelFetch(DepthSource, screenCoord - ivec2(r, r - i), 0).r;
+            narrowRangeFilter(depthA, depthB, centerDepth, gaussianWeight, mu, delta, delta_high, delta_low, totalWeight, filteredDepth);
+
+            depthA = texelFetch(DepthSource, screenCoord + ivec2(r - i, -r), 0).r;
+            depthB = texelFetch(DepthSource, screenCoord - ivec2(r - i, -r), 0).r;
+            narrowRangeFilter(depthA, depthB, centerDepth, gaussianWeight, mu, delta, delta_high, delta_low, totalWeight, filteredDepth);
         }
     }
     filteredDepth /= totalWeight;

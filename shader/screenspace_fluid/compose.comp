@@ -86,7 +86,7 @@ void main() {
 
     vec3 refractionColor = computeRefractionColor(particleThickness);
     vec4 outputColor = vec4(dot(waterSurfaceNormal, normalize(vec3(-1.0, 0.5, 0.5))).xxx, 0.0);
-    outputColor = vec4(waterSurfaceNormal, 0.0);
+    // outputColor = vec4(waterSurfaceNormal, 0.0);
     // outputColor = texelFetch(FluidViewSpaceDepth, screenCoord, 0).rrrr;
     // outputColor = reconstructWorldPositionFromViewSpaceDepth(screenPixelSize * screenCoord, texelFetch(FluidViewSpaceDepth, screenCoord,
     // 0).r).xyzz;

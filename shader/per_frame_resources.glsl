@@ -28,8 +28,7 @@ struct GlobalRenderingSettings {
     vec3 FluidWorldOrigin;
     float FluidGridToWorldScale;
     float VelocityVisualizationScale;
-    float FluidParticleRadius; // particle size in world space == half grid scale times expected particles per axis
-                               // == FluidGridToWorldScale * 0.5 / pow(ParticlesPerCell, 1/3)
+    float FluidParticleRadius; // particle size in world space
 };
 
 // Constants that change at max per frame.

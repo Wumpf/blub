@@ -41,7 +41,7 @@ impl Camera {
         let position = cgmath::Point3::new(1.0f32, 1.0, 1.0);
         Camera {
             position,
-            direction: cgmath::Point3::new(0f32, 0.0, 0.0) - position,
+            direction: (cgmath::Point3::new(0f32, 0.0, 0.0) - position).normalize(),
             rotational_up: cgmath::Vector3::unit_y(),
 
             movement_locked: true,

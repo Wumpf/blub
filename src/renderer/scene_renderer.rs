@@ -37,6 +37,7 @@ pub struct SceneRenderer {
 
     pub fluid_rendering_mode: FluidRenderingMode,
     pub volume_visualization: VolumeVisualizationMode,
+    pub particle_radius_factor: f32,
     pub enable_box_lines: bool,
     pub velocity_visualization_scale: f32,
 }
@@ -77,6 +78,7 @@ impl SceneRenderer {
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
             volume_visualization: VolumeVisualizationMode::None,
+            particle_radius_factor: 0.75,
             enable_box_lines: true,
             velocity_visualization_scale: 0.008,
         }
@@ -125,11 +127,14 @@ impl SceneRenderer {
     }
 
     pub fn fill_global_uniform_buffer(&self, scene: &Scene) -> GlobalRenderSettingsUniformBufferContent {
+        let fluid_particle_radius =
+            scene.config.fluid.grid_to_world_scale / (HybridFluid::PARTICLES_PER_GRID_CELL as f32).powf(1.0 / 3.0) * self.particle_radius_factor;
+
         GlobalRenderSettingsUniformBufferContent {
             fluid_origin: scene.config.fluid.world_position,
             fluid_grid_to_world_scale: scene.config.fluid.grid_to_world_scale,
             velocity_visualization_scale: self.velocity_visualization_scale,
-            fluid_particle_radius: scene.config.fluid.grid_to_world_scale / (HybridFluid::PARTICLES_PER_GRID_CELL as f32).powf(1.0 / 3.0) * 0.5,
+            fluid_particle_radius,
             padding: cgmath::point2(0.0, 0.0),
         }
     }
