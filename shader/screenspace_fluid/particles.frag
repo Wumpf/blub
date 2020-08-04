@@ -30,5 +30,5 @@ void main() {
 
     out_ViewSpaceDepth = dot(Camera.Direction, cameraPosToSpherePos);
     // quadratic splats
-    out_Thickness = sq((cameraDistanceFar - cameraDistance) / in_Radius) * in_Radius;
+    out_Thickness = (cameraDistanceFar - cameraDistance);
 }

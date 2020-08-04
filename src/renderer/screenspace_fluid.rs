@@ -13,8 +13,9 @@ use std::rc::Rc;
 
 struct ScreenDependentProperties {
     texture_view_fluid_view: [wgpu::TextureView; 2],
-    texture_view_fluid_thickness: wgpu::TextureView,
+    texture_view_fluid_thickness: [wgpu::TextureView; 2],
     bind_group_narrow_range_filter: [wgpu::BindGroup; 2],
+    bind_group_thickness_filter: [wgpu::BindGroup; 2],
     bind_group_compose: wgpu::BindGroup,
     target_textures_resolution: wgpu::Extent3d,
 }
@@ -25,6 +26,9 @@ struct ScreenIndependentProperties {
     pipeline_narrow_range_filter_1d: ComputePipelineHandle,
     pipeline_narrow_range_filter_2d: ComputePipelineHandle,
     group_layout_narrow_range_filter: BindGroupLayoutWithDesc,
+
+    pipeline_thickness_filter: ComputePipelineHandle,
+    group_layout_thickness_filter: BindGroupLayoutWithDesc,
 
     pipeline_compose: ComputePipelineHandle,
     group_layout_compose: BindGroupLayoutWithDesc,
@@ -49,6 +53,10 @@ impl ScreenSpaceFluid {
     ) -> ScreenSpaceFluid {
         let group_layout_narrow_range_filter = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image2d(Self::FORMAT_FLUID_DEPTH, false)) // Fluid depth target
+            .next_binding_compute(binding_glsl::texture2D()) // Fluid depth source
+            .create(device, "BindGroupLayout: Narrow Range Filter");
+        let group_layout_thickness_filter = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::image2d(Self::FORMAT_FLUID_THICKNESS, false)) // Fluid depth target
             .next_binding_compute(binding_glsl::texture2D()) // Fluid depth source
             .create(device, "BindGroupLayout: Narrow Range Filter");
 
@@ -142,6 +150,20 @@ impl ScreenSpaceFluid {
             ),
         );
 
+        let layout_thickness_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[
+                &per_frame_bind_group_layout,
+                &fluid_renderer_group_layout,
+                &group_layout_thickness_filter.layout,
+            ],
+            push_constant_ranges,
+        }));
+        let pipeline_thickness_filter = pipeline_manager.create_compute_pipeline(
+            device,
+            shader_dir,
+            ComputePipelineCreationDesc::new(layout_thickness_filter.clone(), Path::new("screenspace_fluid/thickness_filter.comp")),
+        );
+
         let pipeline_compose = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
@@ -160,6 +182,9 @@ impl ScreenSpaceFluid {
             pipeline_narrow_range_filter_1d,
             pipeline_narrow_range_filter_2d,
             group_layout_narrow_range_filter,
+
+            pipeline_thickness_filter,
+            group_layout_thickness_filter,
 
             pipeline_compose,
             group_layout_compose,
@@ -205,16 +230,30 @@ impl ScreenSpaceFluid {
         ];
         let texture_view_fluid_view = [texture_fluid_depth[0].create_default_view(), texture_fluid_depth[1].create_default_view()];
 
-        let texture_fluid_thickness = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Texture: Fluid Thickness"),
-            size: target_textures_resolution,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::FORMAT_FLUID_THICKNESS,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
-        });
-        let texture_view_fluid_thickness = texture_fluid_thickness.create_default_view();
+        let texture_fluid_thickness = [
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Texture: Fluid Thickness 1 (render target)"),
+                size: target_textures_resolution,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: Self::FORMAT_FLUID_THICKNESS,
+                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
+            }),
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Texture: Fluid Thickness 2 (blur target)"),
+                size: target_textures_resolution,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: Self::FORMAT_FLUID_THICKNESS,
+                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
+            }),
+        ];
+        let texture_view_fluid_thickness = [
+            texture_fluid_thickness[0].create_default_view(),
+            texture_fluid_thickness[1].create_default_view(),
+        ];
 
         let bind_group_narrow_range_filter = [
             BindGroupBuilder::new(&screen_independent.group_layout_narrow_range_filter)
@@ -226,9 +265,19 @@ impl ScreenSpaceFluid {
                 .texture(&texture_view_fluid_view[1])
                 .create(device, "BindGroup: Narrow Range filter 2"),
         ];
+        let bind_group_thickness_filter = [
+            BindGroupBuilder::new(&screen_independent.group_layout_thickness_filter)
+                .texture(&texture_view_fluid_thickness[1])
+                .texture(&texture_view_fluid_thickness[0])
+                .create(device, "BindGroup: Thickness Filter 1"),
+            BindGroupBuilder::new(&screen_independent.group_layout_thickness_filter)
+                .texture(&texture_view_fluid_thickness[0])
+                .texture(&texture_view_fluid_thickness[1])
+                .create(device, "BindGroup: Thickness Filter 2"),
+        ];
         let bind_group_compose = BindGroupBuilder::new(&screen_independent.group_layout_compose)
             .texture(&texture_view_fluid_view[1])
-            .texture(&texture_view_fluid_thickness)
+            .texture(&texture_view_fluid_thickness[0])
             .texture(&backbuffer.texture_view())
             .create(device, "BindGroup: SSFluid, Final Compose");
 
@@ -237,6 +286,7 @@ impl ScreenSpaceFluid {
             texture_view_fluid_thickness,
             target_textures_resolution,
             bind_group_narrow_range_filter,
+            bind_group_thickness_filter,
             bind_group_compose,
         }
     }
@@ -273,7 +323,7 @@ impl ScreenSpaceFluid {
                         },
                     },
                     wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &self.screen_dependent.texture_view_fluid_thickness,
+                        attachment: &self.screen_dependent.texture_view_fluid_thickness[0],
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -300,7 +350,7 @@ impl ScreenSpaceFluid {
             rpass.pop_debug_group();
         }
 
-        // Clear the intermediate blur target.
+        // Clear the intermediate blur targets
         {
             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -308,6 +358,19 @@ impl ScreenSpaceFluid {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(depth_clear_color),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: None,
+            });
+        }
+        {
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                    attachment: &self.screen_dependent.texture_view_fluid_thickness[1],
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
                     },
                 }],
@@ -324,32 +387,48 @@ impl ScreenSpaceFluid {
                 height: 1,
                 depth: 1,
             };
-            let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D);
+            let work_group_filter_1d = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D);
 
-            // Filter 1D
+            // Depth Filter
             {
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_1d));
+                // Filter 1D
+                {
+                    cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_1d));
+
+                    // Filter Y
+                    cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
+                    cpass.set_push_constants(0, &[1]);
+                    cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
+                    // Filter X - note that since filter is not really separable, order makes a difference. Found this order visually more pleasing.
+                    cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[1], &[]);
+                    cpass.set_push_constants(0, &[0]);
+                    cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
+                }
+                // Filter 2D
+                {
+                    cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_2d));
+                    cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
+                    const LOCAL_SIZE_FILTER_2D: wgpu::Extent3d = wgpu::Extent3d {
+                        width: 32,
+                        height: 32,
+                        depth: 1,
+                    };
+                    let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_2D);
+                    cpass.dispatch(work_group.width, work_group.height, work_group.depth);
+                }
+            }
+            // Thickness filter
+            {
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_thickness_filter));
 
                 // Filter Y
-                cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
+                cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[0], &[]);
                 cpass.set_push_constants(0, &[1]);
-                cpass.dispatch(work_group.width, work_group.height, work_group.depth);
-                // Filter X - note that since filter is not really separable, order makes a difference. Found this order visually more pleasing.
-                cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[1], &[]);
+                cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
+                // Filter X
+                cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[1], &[]);
                 cpass.set_push_constants(0, &[0]);
-                cpass.dispatch(work_group.width, work_group.height, work_group.depth);
-            }
-            // Filter 2D
-            {
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_2d));
-                cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
-                const LOCAL_SIZE_FILTER_2D: wgpu::Extent3d = wgpu::Extent3d {
-                    width: 32,
-                    height: 32,
-                    depth: 1,
-                };
-                let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_2D);
-                cpass.dispatch(work_group.width, work_group.height, work_group.depth);
+                cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
             }
 
             const LOCAL_SIZE_COMPOSE: wgpu::Extent3d = wgpu::Extent3d {
