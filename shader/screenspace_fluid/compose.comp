@@ -5,22 +5,23 @@
 #include "../utilities.glsl"
 
 layout(set = 2, binding = 0) uniform texture2D FluidViewSpaceDepth;
-layout(set = 2, binding = 1) uniform texture2D ParticleThickness;
+layout(set = 2, binding = 1) uniform texture2D waterDepth;
 layout(set = 2, binding = 2, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image2D BackbufferImage;
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-// TODO: Will certainly come in handy.
 const float RefractionIndex_Water = 1.33;
 const float RefractionIndex_Air = 1.00029;
 const float RefractionAirToWater = RefractionIndex_Air / RefractionIndex_Water;
+const float ReflectionCoefficient = (RefractionIndex_Air - RefractionIndex_Water) * (RefractionIndex_Air - RefractionIndex_Water) /
+                                    ((RefractionIndex_Air + RefractionIndex_Water) * (RefractionIndex_Air + RefractionIndex_Water));
 
-vec3 computeRefractionColor(float particleThickness) {
+vec3 computeRefractionColor(float waterDepth) {
     // TODO: Compute refaction
     vec3 refractionRayResult = imageLoad(BackbufferImage, ivec2(gl_GlobalInvocationID.xy)).xyz;
 
     // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector goes through more water than this.
-    float waterRefractionDepth = particleThickness * 100;
+    float waterRefractionDepth = waterDepth * 100;
 
     // Water color
     // This otherwise quite convincing reference assumes linear extinction, I'll go with exponential-
@@ -50,7 +51,7 @@ vec3 reconstructWorldPositionFromViewSpaceDepth(vec2 screenUv, float depth) {
     return viewSpace.x * Camera.Right + viewSpace.y * Camera.Up + viewSpace.z * Camera.Direction + Camera.Position;
 }
 
-vec3 reconstructNormalFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize) {
+void reconstructNormalAndPositionFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize, out vec3 worldNormal, out vec3 worldPosition) {
     // Reconstruct normals as describe here:
     // https://wickedengine.net/2019/09/22/improved-normal-reconstruction-from-depth/
     // (Improved normal reconstruction from depth, Turanszkij, September 2019)
@@ -63,7 +64,7 @@ vec3 reconstructNormalFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize) {
 
     // TODO: Shared memory for fetching depth.
     float depthCenter = texelFetch(FluidViewSpaceDepth, screenCoord, 0).r;
-    vec3 p0 = reconstructWorldPositionFromViewSpaceDepth(screenCoord * screenPixelSize, depthCenter);
+    worldPosition = reconstructWorldPositionFromViewSpaceDepth(screenCoord * screenPixelSize, depthCenter);
     float depthUp = texelFetch(FluidViewSpaceDepth, coordUp, 0).r;
     float depthRight = texelFetch(FluidViewSpaceDepth, coordRight, 0).r;
     float depthDown = texelFetch(FluidViewSpaceDepth, coordDown, 0).r;
@@ -93,26 +94,49 @@ vec3 reconstructNormalFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize) {
     // p1 = reconstructWorldPositionFromViewSpaceDepth(coordRight * screenPixelSize, depthRight);
     // p2 = reconstructWorldPositionFromViewSpaceDepth(coordUp * screenPixelSize, depthUp);
 
-    return normalize(cross(p2 - p0, p1 - p0));
+    worldNormal = normalize(cross(p2 - worldPosition, p1 - worldPosition));
 }
 
 void main() {
     ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
-    float particleThickness = texelFetch(ParticleThickness, screenCoord, 0).r;
-    if (particleThickness == 0.0)
+    float waterDepth = texelFetch(waterDepth, screenCoord, 0).r;
+    if (waterDepth == 0.0)
         return;
+
+    vec3 GlobalDirLightDirection = normalize(vec3(-1.0, 0.5, 0.5));
+    vec3 GlobalDirLightColor = vec3(1.0);
 
     vec2 screenPixelSize = vec2(1.0) / textureSize(FluidViewSpaceDepth, 0).xy;
 
-    vec3 waterSurfaceNormal = reconstructNormalFromDepthbuffer(screenCoord, screenPixelSize);
+    // Normal/Position (world coords)
+    vec3 normal;
+    vec3 position;
+    reconstructNormalAndPositionFromDepthbuffer(screenCoord, screenPixelSize, normal, position);
 
+    // vector to camera and camera distance
+    vec3 toCamera = Camera.Position - position;
+    float cameraDistance = length(toCamera);
+    toCamera /= cameraDistance;
+
+    // Normal dot Light - basic lighting term
+    float nDotL = saturate(dot(normal, GlobalDirLightDirection));
+    // Normal dot Camera - angle of viewer to water surface
+    float nDotV = saturate(dot(normal, toCamera));
+    // Schlick-Fresnel approx
+    float fresnel = schlickFresnel(nDotV, ReflectionCoefficient);
+
+    // specular lighting
+    vec3 cameraDirReflection = normalize((2 * nDotV) * normal - toCamera);
+    float specularAmount = pow(saturate(dot(cameraDirReflection, GlobalDirLightDirection)), 8.0);
+    specularAmount *= fresnel;
+
+    // Color components.
     vec4 previousColor = imageLoad(BackbufferImage, screenCoord);
+    vec3 refractionColor = computeRefractionColor(waterDepth);
+    vec3 reflectionColor = vec3(1.0); // todo, cubemap/screenspace reflection
 
-    vec3 refractionColor = computeRefractionColor(particleThickness);
-    vec4 outputColor = vec4(dot(waterSurfaceNormal, normalize(vec3(-1.0, 0.5, 0.5))).xxx, 0.0);
-    // outputColor = vec4(waterSurfaceNormal, 0.0);
-    // outputColor = mod(texelFetch(FluidViewSpaceDepth, screenCoord, 0).r * 10.0, 1.0).rrrr;
-    // outputColor = reconstructWorldPositionFromViewSpaceDepth(screenPixelSize * screenCoord, texelFetch(FluidViewSpaceDepth, screenCoord,
-    // 0).r).xyzz;
-    imageStore(BackbufferImage, screenCoord, outputColor);
+    // Combine Refraction & Reflection & Specular
+    vec3 color = mix(refractionColor, reflectionColor, fresnel) + GlobalDirLightColor * specularAmount;
+
+    imageStore(BackbufferImage, screenCoord, vec4(color, 1.0));
 }
