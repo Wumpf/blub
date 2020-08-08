@@ -30,7 +30,7 @@ struct ScreenIndependentProperties {
     pipeline_thickness_filter: ComputePipelineHandle,
     group_layout_thickness_filter: BindGroupLayoutWithDesc,
 
-    pipeline_compose: ComputePipelineHandle,
+    pipeline_fluid: ComputePipelineHandle,
     group_layout_compose: BindGroupLayoutWithDesc,
 }
 
@@ -64,7 +64,7 @@ impl ScreenSpaceFluid {
             .next_binding_compute(binding_glsl::texture2D()) // Fluid depth
             .next_binding_compute(binding_glsl::texture2D()) // Fluid thickness
             .next_binding_compute(binding_glsl::image2d(HdrBackbuffer::FORMAT, false)) // hdr backbuffer
-            .create(device, "BindGroupLayout: SSFluid, Final Compose");
+            .create(device, "BindGroupLayout: SSFluid, Final fluid/Compose");
 
         let pipeline_render_particles = pipeline_manager.create_render_pipeline(
             device,
@@ -164,7 +164,7 @@ impl ScreenSpaceFluid {
             ComputePipelineCreationDesc::new(layout_thickness_filter.clone(), Path::new("screenspace_fluid/thickness_filter.comp")),
         );
 
-        let pipeline_compose = pipeline_manager.create_compute_pipeline(
+        let pipeline_fluid = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
             ComputePipelineCreationDesc::new(
@@ -172,7 +172,7 @@ impl ScreenSpaceFluid {
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout, &group_layout_compose.layout],
                     push_constant_ranges,
                 })),
-                Path::new("screenspace_fluid/compose.comp"),
+                Path::new("screenspace_fluid/fluid.comp"),
             ),
         );
 
@@ -186,7 +186,7 @@ impl ScreenSpaceFluid {
             pipeline_thickness_filter,
             group_layout_thickness_filter,
 
-            pipeline_compose,
+            pipeline_fluid,
             group_layout_compose,
         };
 
@@ -437,7 +437,7 @@ impl ScreenSpaceFluid {
                 depth: 1,
             };
             cpass.set_bind_group(2, &self.screen_dependent.bind_group_compose, &[]);
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_compose));
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_fluid));
             let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_COMPOSE);
             cpass.dispatch(work_group.width, work_group.height, work_group.depth);
         }
