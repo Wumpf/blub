@@ -23,18 +23,14 @@ void main() {
     {
         const uvec2 blockScreenCoord = getBlockScreenCoord();
         for (uint smemIndex = gl_LocalInvocationID.x; smemIndex < LOCAL_SIZE + HALF_FILTER_SIZE * 2; smemIndex += LOCAL_SIZE) {
-            uvec2 sampleCoord = blockScreenCoord;
-            if (FilterDirection == 0)
-                sampleCoord.x += smemIndex - HALF_FILTER_SIZE;
-            else
-                sampleCoord.y += smemIndex - HALF_FILTER_SIZE;
+            uvec2 sampleCoord = addInFilterDirection(blockScreenCoord, smemIndex - HALF_FILTER_SIZE);
             float s = texelFetch(Source, ivec2(sampleCoord), 0).r;
             sharedBuffer[smemIndex] = s;
         }
     }
     barrier();
 
-    uint sharedBufferCenterIndex = gl_LocalInvocationID.x + HALF_FILTER_SIZE;
+    const uint sharedBufferCenterIndex = gl_LocalInvocationID.x + HALF_FILTER_SIZE;
     float totalSamples = sharedBuffer[sharedBufferCenterIndex];
     if (totalSamples == 0.0) {
         return;

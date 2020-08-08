@@ -21,4 +21,12 @@ uvec2 getBlockScreenCoord() {
         return gl_WorkGroupID.xy * gl_WorkGroupSize.xy;
 }
 
+uvec2 addInFilterDirection(uvec2 a, uint b) {
+    if (FilterDirection == 0)
+        a.x += b;
+    else
+        a.y += b;
+    return a;
+}
+
 #endif

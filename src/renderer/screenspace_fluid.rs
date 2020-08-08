@@ -419,8 +419,8 @@ impl ScreenSpaceFluid {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_2d));
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
                     const LOCAL_SIZE_FILTER_2D: wgpu::Extent3d = wgpu::Extent3d {
-                        width: 32,
-                        height: 32,
+                        width: 16,
+                        height: 16,
                         depth: 1,
                     };
                     let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_2D);
