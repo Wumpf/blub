@@ -8,14 +8,6 @@
 #error "Need to define either FILTER_1D or FILTER_2D"
 #endif
 
-#include "fluid_render_info.glsl"
-#include "per_frame_resources.glsl"
-#include "utilities.glsl"
-
-layout(set = 2, binding = 0, r32f) uniform restrict image2D DepthDest;
-layout(set = 2, binding = 1) uniform texture2D DepthSource;
-layout(push_constant) uniform PushConstants { uint FilterDirection; };
-
 // MAX_FILTER_SIZE: Maximum filter size (in one direction, i.e. 15 means that it covers a 31x31 square of pixels when FILTER_XY is active)
 #if defined(FILTER_2D)
 #define MAX_FILTER_SIZE 5
@@ -24,6 +16,15 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 #define MAX_FILTER_SIZE 31
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #endif
+
+#include "screenspace_fluid/filter.glsl"
+
+#include "fluid_render_info.glsl"
+#include "per_frame_resources.glsl"
+#include "utilities.glsl"
+
+layout(set = 2, binding = 0, r32f) uniform restrict image2D DepthDest;
+layout(set = 2, binding = 1) uniform texture2D DepthSource;
 
 // Relationship between the standard deviation sigma (for gaussian kernel) and the filter size.
 // (the lower, the boxier the filter gets)
@@ -57,7 +58,8 @@ void narrowRangeFilter(float depthSampleA, float depthSampleB, float higherDepth
 }
 
 void main() {
-    ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
+    // TODO: Shared memory. Needs to be 1d filter aware, block layout is wrong for that right now.
+    ivec2 screenCoord = ivec2(getScreenCoord());
     float centerDepth = texelFetch(DepthSource, screenCoord, 0).r;
     if (centerDepth > 9999.0 || centerDepth == 0.0) {
         return;

@@ -1,51 +1,63 @@
-// Filtering for the thickness texture.
+// Filtering for the thickness texture - a simple gaussian filter.
 #version 460
 
+// Total filter size is (HALF_FILTER_SIZE + HALF_FILTER_SIZE + 1)
+#define HALF_FILTER_SIZE 16
+#define LOCAL_SIZE 64
+layout(local_size_x = LOCAL_SIZE, local_size_y = 1, local_size_z = 1) in;
+
 #include "../utilities.glsl"
+#include "filter.glsl"
 
 layout(set = 2, binding = 0, r16f) uniform restrict image2D Dest;
 layout(set = 2, binding = 1) uniform texture2D Source;
-layout(push_constant) uniform PushConstants { uint FilterDirection; };
-
-// Half filter size.
-#define HALF_FILTER_SIZE 17
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 // Relationship between the standard deviation sigma (for gaussian kernel) and the filter size.
 // (the lower, the boxier the filter gets)
-#define FILTERSIZE_TO_SIGMA 0.3333
+#define FILTERSIZE_TO_SIGMA 0.4
+
+shared float sharedBuffer[LOCAL_SIZE + HALF_FILTER_SIZE * 2];
 
 void main() {
-    // TODO: Shared memory. Needs to be 1d filter aware, block layout is wrong for that right now.
-    ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
-    float thickness = texelFetch(Source, screenCoord, 0).r;
-    if (thickness == 0.0) {
+    // Preload to shared memory.
+    {
+        const uvec2 blockScreenCoord = getBlockScreenCoord();
+        for (uint smemIndex = gl_LocalInvocationID.x; smemIndex < LOCAL_SIZE + HALF_FILTER_SIZE * 2; smemIndex += LOCAL_SIZE) {
+            uvec2 sampleCoord = blockScreenCoord;
+            if (FilterDirection == 0)
+                sampleCoord.x += smemIndex - HALF_FILTER_SIZE;
+            else
+                sampleCoord.y += smemIndex - HALF_FILTER_SIZE;
+            float s = texelFetch(Source, ivec2(sampleCoord), 0).r;
+            sharedBuffer[smemIndex] = s;
+        }
+    }
+    barrier();
+
+    uint sharedBufferCenterIndex = gl_LocalInvocationID.x + HALF_FILTER_SIZE;
+    float totalSamples = sharedBuffer[sharedBufferCenterIndex];
+    if (totalSamples == 0.0) {
         return;
     }
 
-    // TODO: Make depth aware for filter size?
     const float gaussianK = 0.5 / sq(HALF_FILTER_SIZE * FILTERSIZE_TO_SIGMA);
-
     float totalWeight = 1.0;
 
-    for (int r = 1; r < HALF_FILTER_SIZE; ++r) {
+    for (uint r = 1; r <= HALF_FILTER_SIZE; ++r) {
         float gaussianWeight = exp(-sq(r) * gaussianK);
 
-        ivec2 offset = ivec2(0);
-        offset[FilterDirection] = r;
-
-        float thicknessSample = texelFetch(Source, screenCoord + offset, 0).r;
-        if (thicknessSample != 0.0) {
-            thickness += thicknessSample * gaussianWeight;
+        float textureSample = sharedBuffer[sharedBufferCenterIndex + r];
+        if (textureSample != 0.0) {
+            totalSamples += textureSample * gaussianWeight;
             totalWeight += gaussianWeight;
         }
-        thicknessSample = texelFetch(Source, screenCoord - offset, 0).r;
-        if (thicknessSample != 0.0) {
-            thickness += thicknessSample * gaussianWeight;
+        textureSample = sharedBuffer[sharedBufferCenterIndex - r];
+        if (textureSample != 0.0) {
+            totalSamples += textureSample * gaussianWeight;
             totalWeight += gaussianWeight;
         }
     }
 
-    thickness /= totalWeight;
-    imageStore(Dest, screenCoord, thickness.rrrr);
+    totalSamples /= totalWeight;
+    imageStore(Dest, ivec2(getScreenCoord()), totalSamples.rrrr);
 }

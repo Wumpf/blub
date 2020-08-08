@@ -352,42 +352,52 @@ impl ScreenSpaceFluid {
 
         // Clear the intermediate blur targets
         {
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &self.screen_dependent.texture_view_fluid_view[1],
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(depth_clear_color),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
+            encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                        attachment: &self.screen_dependent.texture_view_fluid_view[1],
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(depth_clear_color),
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                })
+                .insert_debug_marker("clear secondary water depth texture");
         }
         {
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &self.screen_dependent.texture_view_fluid_thickness[1],
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
+            encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                        attachment: &self.screen_dependent.texture_view_fluid_thickness[1],
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                })
+                .insert_debug_marker("clear secondary water thickness texture");
         }
         {
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, &per_frame_bind_group, &[]);
             cpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
 
-            const LOCAL_SIZE_FILTER_1D: wgpu::Extent3d = wgpu::Extent3d {
+            const LOCAL_SIZE_FILTER_1D_X: wgpu::Extent3d = wgpu::Extent3d {
                 width: 64,
                 height: 1,
                 depth: 1,
             };
-            let work_group_filter_1d = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D);
+            const LOCAL_SIZE_FILTER_1D_Y: wgpu::Extent3d = wgpu::Extent3d {
+                width: 1, // xy not actually swizzled in the local_size shader definition but we treat it like that
+                height: 64,
+                depth: 1,
+            };
+            let work_group_filter_1d_x = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D_X);
+            let work_group_filter_1d_y = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D_Y);
 
             // Depth Filter
             {
@@ -398,11 +408,11 @@ impl ScreenSpaceFluid {
                     // Filter Y
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
                     cpass.set_push_constants(0, &[1]);
-                    cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
+                    cpass.dispatch(work_group_filter_1d_y.width, work_group_filter_1d_y.height, work_group_filter_1d_y.depth);
                     // Filter X - note that since filter is not really separable, order makes a difference. Found this order visually more pleasing.
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[1], &[]);
                     cpass.set_push_constants(0, &[0]);
-                    cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
+                    cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
                 }
                 // Filter 2D
                 {
@@ -424,11 +434,11 @@ impl ScreenSpaceFluid {
                 // Filter Y
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[0], &[]);
                 cpass.set_push_constants(0, &[1]);
-                cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
+                cpass.dispatch(work_group_filter_1d_y.width, work_group_filter_1d_y.height, work_group_filter_1d_y.depth);
                 // Filter X
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[1], &[]);
                 cpass.set_push_constants(0, &[0]);
-                cpass.dispatch(work_group_filter_1d.width, work_group_filter_1d.height, work_group_filter_1d.depth);
+                cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
             }
 
             const LOCAL_SIZE_COMPOSE: wgpu::Extent3d = wgpu::Extent3d {
