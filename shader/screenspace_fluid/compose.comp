@@ -1,5 +1,6 @@
 #version 460
 
+#include "../brdf.glsl"
 #include "../fluid_render_info.glsl"
 #include "../per_frame_resources.glsl"
 #include "../utilities.glsl"
@@ -10,36 +11,56 @@ layout(set = 2, binding = 2, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-const float RefractionIndex_Water = 1.33;
+const float RefractionIndex_Water = 1.333;
 const float RefractionIndex_Air = 1.00029;
-const float RefractionAirToWater = RefractionIndex_Air / RefractionIndex_Water;
-const float ReflectionCoefficient = (RefractionIndex_Air - RefractionIndex_Water) * (RefractionIndex_Air - RefractionIndex_Water) /
-                                    ((RefractionIndex_Air + RefractionIndex_Water) * (RefractionIndex_Air + RefractionIndex_Water));
+const float RefractionAirToWater = RefractionIndex_Water / RefractionIndex_Air; // denoted as η (eta)
 
-vec3 computeRefractionColor(float waterDepth) {
-    // TODO: Compute refaction
+// from "Acquiring Scattering Properties of Participating Media by Dilution" (https://cseweb.ucsd.edu/~ravir/dilution.pdf)
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.902, 0.825, 0.914); // Pacific Ocean Surface Water
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.842, 0.865, 0.912); // Mission Bay Surface Water
+const vec3 HenyeyGreensteinParameterWater = vec3(0.929, 0.910, 0.945); // Missian Bay 10ft deep
+
+// Tried using values from "Acquiring Scattering Properties of Participating Media by Dilution" (https://cseweb.ucsd.edu/~ravir/dilution.pdf), but
+// didn't work out well
+// const vec3 ColorScatteringCoefficient = vec3(0.2415, 0.2762, 0.3256) * 0.1;                              // Denoted as sigma_s in PBRT
+// const vec3 ColorExtinctionCoefficient = vec3(3.3623, 3.2929, 3.2193) * 0.1 + ColorScatteringCoefficient; // Denoted as sigma_t in PBRT
+const vec3 ColorExtinctionCoefficient = vec3(0.46, 0.09, 0.06);
+
+// Evaluates the refractive part of the rendering equation.
+// (Technically also has lambert reflection)
+vec3 computeRefraction(float waterDepth, vec3 toCamera, vec3 toLight, vec3 lightRadiance) {
+    // TODO: Compute proper (faked) refraction
     vec3 refractionRayResult = imageLoad(BackbufferImage, ivec2(gl_GlobalInvocationID.xy)).xyz;
-
     // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector goes through more water than this.
-    float waterRefractionDepth = waterDepth * 100;
+    float waterRefractionDepth = waterDepth * 50;
 
-    // Water color
-    // This otherwise quite convincing reference assumes linear extinction, I'll go with exponential-
-    // http://www.gamedev.net/page/reference/index.html/_/technical/graphics-programming-and-theory/rendering-water-as-a-post-process-effect-r2642
-    // This leaves the questions: What are convining Extinction coefficients?
-    // For that I solved the equations exp(-4.5 * R) = exp(-75 * G) = exp(-300 * B) = 0.001 (depths are from link above)
-    // .. which is.. convincing pseudo physical! :)
-    // In reality water color depends on a lot of factors: https://en.wikipedia.org/wiki/Color_of_water
-    const vec3 ColorExtinctionCoefficient = vec3(1.53506, 0.0921034, 0.0230259);
-    const vec3 SurfaceColor = vec3(0.003, 0.179, 0.270);
-    const vec3 BigDepthColor = vec3(0.002, 0.001, 0.072);
-    const float Opaqueness = 0.1;
+    // Relevant sources on the topic:
+    // * https://mtnphil.wordpress.com/2012/09/15/water-shader-follow-up/
+    // * PBR Book
+    // * "GPU Gems 2, Chapter 13. Volumetric Light Scattering as a Post-Process"
+    // https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-13-volumetric-light-scattering-post-process
+    // ... and others ;-).
+    //
+    // Transmittance/absorption is quite straight forward, but in-scattering I found hard to formulate:
+    // Wanted something that works with a phase function (I did volume marching on a different project with that and that worked out very well),
+    // but couldn't quite get my head around how to integrate over the whole volume.
+    // Formula for scattering comes from "GPU Gems 2, Chapter 13. Volumetric Light Scattering as a Post-Process", formula 1
 
-    vec3 colorExtinction = saturate(exp(-waterRefractionDepth * ColorExtinctionCoefficient));
-    vec3 normalLightingColor = vec3(1.0); // GlobalDirLightColor * nDotL + GlobalAmbient;
-    vec3 waterColor = mix(refractionRayResult, SurfaceColor * normalLightingColor, saturate(waterRefractionDepth * Opaqueness));
+    vec3 colorExtinction = exp(-waterRefractionDepth * ColorExtinctionCoefficient); // Beer-Lambert law
+    vec3 transmittedLight = colorExtinction * refractionRayResult;                  // The amount of light directly transmitted through the fluid.
+    vec3 scatteredLight = (vec3(1.0) - colorExtinction) * evaluateHenyeyGreensteinPhaseFunction(HenyeyGreensteinParameterWater, toCamera, toLight) *
+                          lightRadiance / ColorExtinctionCoefficient;
 
-    return mix(vec3(0.0), waterColor, colorExtinction);
+    return transmittedLight + scatteredLight;
+}
+
+// Evaluates the reflective part of the rendering equation.
+vec3 computeReflection(vec3 normal, vec3 toCamera, vec3 toLight, vec3 lightRadiance) {
+    // Using normalized blinn phong with single light direction right now.
+    // Want to do something more interesting here later when having somethign to reflect.
+    // Note that water reflections are mirror like so I believe there is no point in having a more complicated BRDF.
+    const float BlinnPhongExponent = 16.0; // Maybe should vary this for foam later?
+    return evaluateNormalizedBlinnPhong(BlinnPhongExponent, normal, toCamera, toLight) * lightRadiance * dot(toLight, normal);
 }
 
 // Computes world space position from standard depth buffer depth.
@@ -104,7 +125,7 @@ void main() {
         return;
 
     vec3 GlobalDirLightDirection = normalize(vec3(-1.0, 0.5, 0.5));
-    vec3 GlobalDirLightColor = vec3(1.0);
+    vec3 GlobalDirLightColor = vec3(1.64, 1.27, 0.99);
 
     vec2 screenPixelSize = vec2(1.0) / textureSize(FluidViewSpaceDepth, 0).xy;
 
@@ -118,25 +139,14 @@ void main() {
     float cameraDistance = length(toCamera);
     toCamera /= cameraDistance;
 
-    // Normal dot Light - basic lighting term
-    float nDotL = saturate(dot(normal, GlobalDirLightDirection));
-    // Normal dot Camera - angle of viewer to water surface
-    float nDotV = saturate(dot(normal, toCamera));
-    // Schlick-Fresnel approx
-    float fresnel = schlickFresnel(nDotV, ReflectionCoefficient);
-
-    // specular lighting
-    vec3 cameraDirReflection = normalize((2 * nDotV) * normal - toCamera);
-    float specularAmount = pow(saturate(dot(cameraDirReflection, GlobalDirLightDirection)), 8.0);
-    specularAmount *= fresnel;
-
     // Color components.
-    vec4 previousColor = imageLoad(BackbufferImage, screenCoord);
-    vec3 refractionColor = computeRefractionColor(waterDepth);
-    vec3 reflectionColor = vec3(1.0); // todo, cubemap/screenspace reflection
+    vec3 refractionColor = computeRefraction(waterDepth, toCamera, GlobalDirLightDirection, GlobalDirLightColor);
+    vec3 reflectionColor = computeReflection(normal, toCamera, GlobalDirLightDirection, GlobalDirLightColor); // todo, cubemap/screenspace reflection
 
     // Combine Refraction & Reflection & Specular
-    vec3 color = mix(refractionColor, reflectionColor, fresnel) + GlobalDirLightColor * specularAmount;
+    float nDotV = dot(normal, toCamera);
+    float fresnel = fresnelDielectricDielectric(nDotV, RefractionAirToWater);
+    vec3 color = mix(refractionColor, reflectionColor, fresnel);
 
     imageStore(BackbufferImage, screenCoord, vec4(color, 1.0));
 }
