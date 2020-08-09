@@ -11,12 +11,13 @@
 // Total filter size is (HALF_MAX_FILTER_SIZE + HALF_MAX_FILTER_SIZE + 1)
 #if defined(FILTER_2D)
 
-// We fix the filter size to half the local size
+// We fix the filter size to less than half the local size
 // This simplifies the shader, as every thread is responsible for four samples now!
-#define HALF_MAX_FILTER_SIZE 8
+#define HALF_MAX_FILTER_SIZE 6 // Careful, has very strong effect on performance.
 #define LOCAL_SIZE 16
 layout(local_size_x = LOCAL_SIZE, local_size_y = LOCAL_SIZE, local_size_z = 1) in;
 
+// has generous padding to avoid bank conflicts (if HALF_MAX_FILTER_SIZE is less than LOCAL_SIZE/2)
 shared float sharedBuffer[LOCAL_SIZE * 2][LOCAL_SIZE * 2];
 
 #else
@@ -49,24 +50,24 @@ float worldSpaceSigma = 1.5 * Rendering.FluidParticleRadius;
 float depthThreshold = 10.0 * Rendering.FluidParticleRadius;
 float mu = 1.0 * Rendering.FluidParticleRadius;
 
-// depthSampleA & depthSampleB are depth samples on opposing sides, both at the same distance to the middle.
-void narrowRangeFilter(float depthSampleA, float depthSampleB, float higherDepthBound, float gaussianWeight, float depthThreshold,
-                       inout float depthThresholdHigh, inout float depthThresholdLow, inout float totalWeight, inout float filteredDepth) {
+// depthSamples are depth samples on opposing sides, both at the same distance to the middle.
+void narrowRangeFilter(vec2 depthSamples, float higherDepthBound, float gaussianWeight, float depthThreshold, inout float depthThresholdHigh,
+                       inout float depthThresholdLow, inout float totalWeight, inout float filteredDepth) {
     // Is depth too low? Keep filter symmetric and early out for both opposing values.
-    if (depthSampleA < depthThresholdLow || depthSampleB < depthThresholdLow)
+    if (any(lessThan(depthSamples, vec2(depthThresholdLow))))
         return;
 
     // Is depth too high? Clamp to upper bound.
-    [[flatten]] if (depthSampleA > depthThresholdHigh) depthSampleA = higherDepthBound;
-    [[flatten]] if (depthSampleB > depthThresholdHigh) depthSampleB = higherDepthBound;
+    [[flatten]] if (depthSamples.x > depthThresholdHigh) depthSamples.x = higherDepthBound;
+    [[flatten]] if (depthSamples.y > depthThresholdHigh) depthSamples.y = higherDepthBound;
 
     // Dynamic depth range.
-    depthThresholdLow = min(depthThresholdLow, min(depthSampleB, depthSampleA) - depthThreshold);
-    depthThresholdHigh = max(depthThresholdHigh, max(depthSampleB, depthSampleA) + depthThreshold);
+    depthThresholdLow = min(depthThresholdLow, min(depthSamples.x, depthSamples.y) - depthThreshold);
+    depthThresholdHigh = max(depthThresholdHigh, max(depthSamples.x, depthSamples.y) + depthThreshold);
 
     // Add samples
     totalWeight += gaussianWeight * 2.0;
-    filteredDepth += (depthSampleA + depthSampleB) * gaussianWeight;
+    filteredDepth += (depthSamples.x + depthSamples.y) * gaussianWeight;
 }
 
 void main() {
@@ -97,11 +98,13 @@ void main() {
         const uvec2 sampleCoordMin = screenCoord - uvec2(HALF_MAX_FILTER_SIZE);
         const uvec2 sampleCoordMax = screenCoord + uvec2(HALF_MAX_FILTER_SIZE);
         const uvec2 smemIndexMin = gl_LocalInvocationID.xy;
-        const uvec2 smemIndexMax = gl_LocalInvocationID.xy + uvec2(LOCAL_SIZE);
+        const uvec2 smemIndexMax = gl_LocalInvocationID.xy + uvec2(HALF_MAX_FILTER_SIZE * 2);
         sharedBuffer[smemIndexMin.y][smemIndexMin.x] = texelFetch(DepthSource, ivec2(sampleCoordMin), 0).r;
-        sharedBuffer[smemIndexMin.y][smemIndexMax.x] = texelFetch(DepthSource, ivec2(sampleCoordMax.x, sampleCoordMin.y), 0).r;
-        sharedBuffer[smemIndexMax.y][smemIndexMin.x] = texelFetch(DepthSource, ivec2(sampleCoordMin.x, sampleCoordMax.y), 0).r;
-        sharedBuffer[smemIndexMax.y][smemIndexMax.x] = texelFetch(DepthSource, ivec2(sampleCoordMax), 0).r;
+        if (smemIndexMax.x < LOCAL_SIZE + HALF_MAX_FILTER_SIZE * 2 && smemIndexMax.y < LOCAL_SIZE + HALF_MAX_FILTER_SIZE * 2) {
+            sharedBuffer[smemIndexMin.y][smemIndexMax.x] = texelFetch(DepthSource, ivec2(sampleCoordMax.x, sampleCoordMin.y), 0).r;
+            sharedBuffer[smemIndexMax.y][smemIndexMin.x] = texelFetch(DepthSource, ivec2(sampleCoordMin.x, sampleCoordMax.y), 0).r;
+            sharedBuffer[smemIndexMax.y][smemIndexMax.x] = texelFetch(DepthSource, ivec2(sampleCoordMax), 0).r;
+        }
 #else
         vec2 gatherCoord =
             (vec2(getBlockScreenCoord() - uvec2(HALF_MAX_FILTER_SIZE) + gl_LocalInvocationID.xy * 2) + vec2(0.5)) / (screenSize - uvec2(1));
@@ -144,23 +147,25 @@ void main() {
         for (uint i = 0; i < r * 2; ++i) {
             float gaussianWeight = exp(-(sq(r) + sq(r - i)) * gaussianK);
 
-            float depthA = sharedBuffer[sharedBufferCenterIndex.y + (r - i)][sharedBufferCenterIndex.x + r];
-            float depthB = sharedBuffer[sharedBufferCenterIndex.y - (r - i)][sharedBufferCenterIndex.x - r];
-            narrowRangeFilter(depthA, depthB, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+            vec2 depthSamples;
+            depthSamples.x = sharedBuffer[sharedBufferCenterIndex.y + (r - i)][sharedBufferCenterIndex.x + r];
+            depthSamples.y = sharedBuffer[sharedBufferCenterIndex.y - (r - i)][sharedBufferCenterIndex.x - r];
+            narrowRangeFilter(depthSamples, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
                               filteredDepth);
-            depthA = sharedBuffer[sharedBufferCenterIndex.y - r][sharedBufferCenterIndex.x + (r - i)];
-            depthB = sharedBuffer[sharedBufferCenterIndex.y + r][sharedBufferCenterIndex.x - (r - i)];
-            narrowRangeFilter(depthA, depthB, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+            depthSamples.x = sharedBuffer[sharedBufferCenterIndex.y - r][sharedBufferCenterIndex.x + (r - i)];
+            depthSamples.y = sharedBuffer[sharedBufferCenterIndex.y + r][sharedBufferCenterIndex.x - (r - i)];
+            narrowRangeFilter(depthSamples, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
                               filteredDepth);
         }
     }
 #else
-    for (uint r = 1; r < filterSize; ++r) {
+    for (uint r = 1; r <= filterSize; ++r) {
         float gaussianWeight = exp(-sq(r) * gaussianK);
 
-        float depthA = sharedBuffer[sharedBufferCenterIndex - r];
-        float depthB = sharedBuffer[sharedBufferCenterIndex + r];
-        narrowRangeFilter(depthA, depthB, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
+        vec2 depthSamples;
+        depthSamples.x = sharedBuffer[sharedBufferCenterIndex - r];
+        depthSamples.y = sharedBuffer[sharedBufferCenterIndex + r];
+        narrowRangeFilter(depthSamples, higherDepthBound, gaussianWeight, depthThreshold, depthThresholdHigh, depthThresholdLow, totalWeight,
                           filteredDepth);
     }
 #endif
