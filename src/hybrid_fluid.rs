@@ -891,10 +891,6 @@ impl HybridFluid {
             cpass.set_bind_group(3, &self.bind_group_write_particles, &[]);
 
             // Transfer velocities to particles.
-            /////////////////////////// TODO Workaround for https://github.com/gfx-rs/wgpu-rs/issues/451
-            cpass.set_bind_group(0, &self.bind_group_uniform, &[]);
-            cpass.set_bind_group(0, &per_frame_bind_group, &[]);
-            ///////////////////////////
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_particles));
             cpass.dispatch(particle_work_groups, 1, 1);
         }
