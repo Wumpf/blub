@@ -24,7 +24,12 @@ impl BindGroupLayoutBuilder {
 
     pub fn next_binding(self, visibility: wgpu::ShaderStage, ty: wgpu::BindingType) -> Self {
         let binding = self.next_binding_index;
-        self.binding(wgpu::BindGroupLayoutEntry::new(binding, visibility, ty))
+        self.binding(wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility,
+            ty,
+            count: None,
+        })
     }
 
     pub fn next_binding_compute(self, ty: wgpu::BindingType) -> Self {

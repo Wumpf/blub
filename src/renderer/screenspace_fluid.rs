@@ -71,6 +71,7 @@ impl ScreenSpaceFluid {
             shader_dir,
             RenderPipelineCreationDesc {
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Particles for SS Fluid Pipeline Layout"),
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
                     push_constant_ranges: &[],
                 })),
@@ -104,10 +105,7 @@ impl ScreenSpaceFluid {
                     format: Screen::FORMAT_DEPTH,
                     depth_write_enabled: false,
                     depth_compare: wgpu::CompareFunction::LessEqual,
-                    stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    stencil_read_mask: 0,
-                    stencil_write_mask: 0,
+                    stencil: Default::default(),
                 }),
                 vertex_state: wgpu::VertexStateDescriptor {
                     index_format: wgpu::IndexFormat::Uint16,
@@ -126,6 +124,7 @@ impl ScreenSpaceFluid {
         }];
 
         let layout_narrow_range_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Narrow Range Filter Pipeline Layout"),
             bind_group_layouts: &[
                 &per_frame_bind_group_layout,
                 &fluid_renderer_group_layout,
@@ -151,6 +150,7 @@ impl ScreenSpaceFluid {
         );
 
         let layout_thickness_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Thickness Filter Pipeline Layout"),
             bind_group_layouts: &[
                 &per_frame_bind_group_layout,
                 &fluid_renderer_group_layout,
@@ -169,6 +169,7 @@ impl ScreenSpaceFluid {
             shader_dir,
             ComputePipelineCreationDesc::new(
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Fluid Render Pipeline Layout"),
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout, &group_layout_compose.layout],
                     push_constant_ranges,
                 })),
@@ -228,7 +229,10 @@ impl ScreenSpaceFluid {
                 usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
             }),
         ];
-        let texture_view_fluid_view = [texture_fluid_depth[0].create_default_view(), texture_fluid_depth[1].create_default_view()];
+        let texture_view_fluid_view = [
+            texture_fluid_depth[0].create_view(&Default::default()),
+            texture_fluid_depth[1].create_view(&Default::default()),
+        ];
 
         let texture_fluid_thickness = [
             device.create_texture(&wgpu::TextureDescriptor {
@@ -251,8 +255,8 @@ impl ScreenSpaceFluid {
             }),
         ];
         let texture_view_fluid_thickness = [
-            texture_fluid_thickness[0].create_default_view(),
-            texture_fluid_thickness[1].create_default_view(),
+            texture_fluid_thickness[0].create_view(&Default::default()),
+            texture_fluid_thickness[1].create_view(&Default::default()),
         ];
 
         let bind_group_narrow_range_filter = [

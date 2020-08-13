@@ -1,4 +1,5 @@
 use notify::Watcher;
+use std::borrow::Cow::Borrowed;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -105,6 +106,6 @@ impl ShaderDirectory {
             }
         };
 
-        Ok(device.create_shader_module(wgpu::ShaderModuleSource::SpirV(compilation_artifact.as_binary())))
+        Ok(device.create_shader_module(wgpu::ShaderModuleSource::SpirV(Borrowed(&compilation_artifact.as_binary()))))
     }
 }

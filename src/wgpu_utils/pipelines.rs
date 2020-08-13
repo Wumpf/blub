@@ -21,7 +21,7 @@ impl ComputePipelineCreationDesc {
     fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<wgpu::ComputePipeline, ()> {
         let module = shader_dir.load_shader_module(device, &self.compute_shader_relative_path)?;
         Ok(device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            layout: &self.layout,
+            layout: Some(&self.layout),
             compute_stage: wgpu::ProgrammableStageDescriptor {
                 module: &module,
                 entry_point: super::shader::SHADER_ENTRY_POINT_NAME,
@@ -109,7 +109,7 @@ impl RenderPipelineCreationDesc {
         };
 
         let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
-            layout: &self.layout,
+            layout: Some(&self.layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
                 entry_point: SHADER_ENTRY_POINT_NAME,
@@ -245,11 +245,8 @@ impl PipelineManager {
 pub mod rasterization_state {
     pub fn culling_none() -> wgpu::RasterizationStateDescriptor {
         wgpu::RasterizationStateDescriptor {
-            front_face: wgpu::FrontFace::Ccw,
             cull_mode: wgpu::CullMode::None,
-            depth_bias: 0,
-            depth_bias_slope_scale: 0.0,
-            depth_bias_clamp: 0.0,
+            ..Default::default()
         }
     }
 }
@@ -271,10 +268,7 @@ pub mod depth_state {
             format,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::LessEqual,
-            stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-            stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-            stencil_read_mask: 0,
-            stencil_write_mask: 0,
+            stencil: Default::default(),
         }
     }
 }

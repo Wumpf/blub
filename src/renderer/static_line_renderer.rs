@@ -40,6 +40,7 @@ impl StaticLineRenderer {
     ) -> Self {
         let mut render_pipeline_desc = RenderPipelineCreationDesc::new(
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Static Line Renderer Pipeline Layout"),
                 bind_group_layouts: &[&per_frame_bind_group_layout],
                 push_constant_ranges: &[],
             })),

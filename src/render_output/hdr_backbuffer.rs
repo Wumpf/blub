@@ -35,12 +35,13 @@ impl HdrBackbuffer {
             format: Self::FORMAT,
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
         });
-        let hdr_backbuffer_view = hdr_backbuffer.create_default_view();
+        let hdr_backbuffer_view = hdr_backbuffer.create_view(&Default::default());
 
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding_fragment(binding_glsl::texture2D())
             .create(device, "BindGroupLayout: Screen, Read Texture");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HdrBackbuffer Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout.layout],
             push_constant_ranges: &[],
         });
@@ -51,7 +52,7 @@ impl HdrBackbuffer {
         let vs_module = shader_dir.load_shader_module(device, Path::new("screentri.vert")).unwrap();
         let fs_module = shader_dir.load_shader_module(device, Path::new("copy_texture.frag")).unwrap();
         let hdr_resolve_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
                 entry_point: SHADER_ENTRY_POINT_NAME,

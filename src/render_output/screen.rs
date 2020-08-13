@@ -61,7 +61,7 @@ impl Screen {
             format: Self::FORMAT_BACKBUFFER,
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_SRC,
         });
-        let backbuffer_view = backbuffer.create_default_view();
+        let backbuffer_view = backbuffer.create_view(&Default::default());
 
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Texture: Screen DepthBuffer"),
@@ -77,6 +77,7 @@ impl Screen {
             .next_binding_fragment(binding_glsl::texture2D())
             .create(device, "BindGroupLayout: Screen, Read Texture");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Screen Swapchain Copy Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout.layout],
             push_constant_ranges: &[],
         });
@@ -88,7 +89,7 @@ impl Screen {
         let vs_module = shader_dir.load_shader_module(device, Path::new("screentri.vert")).unwrap();
         let fs_module = shader_dir.load_shader_module(device, Path::new("copy_texture.frag")).unwrap();
         let copy_to_swapchain_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
                 entry_point: SHADER_ENTRY_POINT_NAME,
@@ -116,7 +117,7 @@ impl Screen {
             present_mode,
             backbuffer,
             backbuffer_view,
-            depth_view: depth_texture.create_default_view(),
+            depth_view: depth_texture.create_view(&Default::default()),
 
             read_backbuffer_bind_group,
             copy_to_swapchain_pipeline,
@@ -149,7 +150,7 @@ impl Screen {
     }
 
     pub fn start_frame(&mut self) -> wgpu::SwapChainTexture {
-        self.swap_chain.get_next_frame().unwrap().output
+        self.swap_chain.get_current_frame().unwrap().output
     }
 
     pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder) {

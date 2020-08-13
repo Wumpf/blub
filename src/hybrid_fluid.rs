@@ -184,17 +184,17 @@ impl HybridFluid {
         });
 
         // Resource views
-        let volume_velocity_view_x = volume_velocity_x.create_default_view();
-        let volume_velocity_view_y = volume_velocity_y.create_default_view();
-        let volume_velocity_view_z = volume_velocity_z.create_default_view();
-        let volume_linked_lists_view = volume_linked_lists.create_default_view();
-        let volume_marker_view = volume_marker.create_default_view();
+        let volume_velocity_view_x = volume_velocity_x.create_view(&Default::default());
+        let volume_velocity_view_y = volume_velocity_y.create_view(&Default::default());
+        let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
+        let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
+        let volume_marker_view = volume_marker.create_view(&Default::default());
 
-        let volume_pressure_view = volume_pressure.create_default_view();
-        let volume_pcg_residual_view = volume_pcg_residual.create_default_view();
-        let volume_pcg_auxiliary_view = volume_pcg_auxiliary.create_default_view();
-        let volume_pcg_auxiliary_temp_view = volume_pcg_auxiliary_temp.create_default_view();
-        let volume_pcg_search_view = volume_pcg_search.create_default_view();
+        let volume_pressure_view = volume_pressure.create_view(&Default::default());
+        let volume_pcg_residual_view = volume_pcg_residual.create_view(&Default::default());
+        let volume_pcg_auxiliary_view = volume_pcg_auxiliary.create_view(&Default::default());
+        let volume_pcg_auxiliary_temp_view = volume_pcg_auxiliary_temp.create_view(&Default::default());
+        let volume_pcg_search_view = volume_pcg_search.create_view(&Default::default());
 
         // Layouts
         let group_layout_uniform = BindGroupLayoutBuilder::new()
@@ -386,6 +386,7 @@ impl HybridFluid {
         }];
 
         let layout_transfer_velocity = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Transfer Velocity Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
@@ -394,6 +395,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_write_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Write Volume Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
@@ -402,6 +404,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_pressure_update_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Update Volume Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
@@ -410,6 +413,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_pressure_preconditioner = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Pressure Solve Precondition Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
@@ -418,6 +422,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_pressure_update_pressure_and_residual = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Pressure Solve Update P&R Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
@@ -426,6 +431,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_pressure_solve_init = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Pressure Solve Init Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
@@ -435,6 +441,7 @@ impl HybridFluid {
         }));
 
         let layout_pressure_apply_coeff = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Pressure Solve Apply Coeff Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
@@ -443,6 +450,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_pressure_solve_reduce = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Pressure Solve Reduce Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_read_macgrid.layout,
@@ -451,6 +459,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Particles Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,

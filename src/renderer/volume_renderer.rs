@@ -31,6 +31,7 @@ impl VolumeRenderer {
         fluid_renderer_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let layout = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Volume Renderer Pipeline Layout"),
             bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
             push_constant_ranges: &[],
         }));
