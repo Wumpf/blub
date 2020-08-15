@@ -93,7 +93,11 @@ void main() {
         }
     }
 
-    if (threadWritesFluid) {
-        imageStore(DensityVolume, gridCoord, density.xxxx);
-    }
+    if (!threadWritesFluid)
+        return;
+    // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
+    // To further simplify we set the volume of a cell and the mass of a single particle to 1.
+    // Our normal density is defined by 8 evenly distributed particles in a cell. Therefore the normal density is defines as 8!
+    float densityError = 8.0 - density;
+    imageStore(DensityVolume, gridCoord, densityError.xxxx);
 }

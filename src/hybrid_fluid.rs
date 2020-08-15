@@ -43,7 +43,7 @@ pub struct HybridFluid {
 
     bind_group_advect_particles: wgpu::BindGroup,
 
-    bind_group_density_projection_gather: wgpu::BindGroup,
+    bind_group_density_projection_gather_error: wgpu::BindGroup,
 
     // The interface to any renderer of the fluid. Readonly access to relevant resources
     bind_group_renderer: wgpu::BindGroup,
@@ -63,7 +63,7 @@ pub struct HybridFluid {
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_advect_particles: ComputePipelineHandle,
 
-    pipeline_density_projection_gather: ComputePipelineHandle,
+    pipeline_density_projection_gather_error: ComputePipelineHandle,
 
     max_num_particles: u32,
 
@@ -85,7 +85,7 @@ unsafe impl bytemuck::Zeroable for ParticlePositionLl {}
 
 impl HybridFluid {
     // particles are distributed 2x2x2 within a single gridcell
-    // (seems to be widely accepted as the default. Houdini seems to have this configurable from 4-16, maybe worth experimenting with it! (todo))
+    // (seems to be widely accepted as the default. Houdini seems to have this configurable from 4-16, maybe worth experimenting with it! Note however, that the density error computation assumes this constant as well!)
     pub const PARTICLES_PER_GRID_CELL: u32 = 8;
 
     pub fn new(
@@ -261,7 +261,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: PCG update pressure and residual");
 
-        let group_layout_density_projection_gather = BindGroupLayoutBuilder::new()
+        let group_layout_density_projection_gather_error = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::utexture3D()) // linkedlist_volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R8Snorm, false)) // marker volume
@@ -383,7 +383,7 @@ impl HybridFluid {
             .buffer(dotproduct_reduce_result_buffer.slice(..))
             .create(device, "BindGroup: Pressure update search");
 
-        let bind_group_density_projection_gather = BindGroupBuilder::new(&group_layout_density_projection_gather)
+        let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .buffer(particles_position_llindex.slice(..))
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_view)
@@ -492,12 +492,12 @@ impl HybridFluid {
             ],
             push_constant_ranges,
         }));
-        let layout_density_projection_gather = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout_density_projection_gather_error = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("HybridFluid, Density Projection Gather Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
-                &group_layout_density_projection_gather.layout,
+                &group_layout_density_projection_gather_error.layout,
             ],
             push_constant_ranges,
         }));
@@ -532,7 +532,7 @@ impl HybridFluid {
             bind_group_pressure_dotproduct_final,
             bind_group_pressure_update_pressure_and_residual,
             bind_group_pressure_update_search,
-            bind_group_density_projection_gather,
+            bind_group_density_projection_gather_error,
 
             pipeline_transfer_clear: pipeline_manager.create_compute_pipeline(
                 device,
@@ -606,12 +606,12 @@ impl HybridFluid {
                 ComputePipelineCreationDesc::new(layout_pressure_update_volume.clone(), Path::new("simulation/pressure_update_search.comp")),
             ),
 
-            pipeline_density_projection_gather: pipeline_manager.create_compute_pipeline(
+            pipeline_density_projection_gather_error: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
-                    layout_density_projection_gather.clone(),
-                    Path::new("simulation/density_projection_gather.comp"),
+                    layout_density_projection_gather_error.clone(),
+                    Path::new("simulation/density_projection_gather_error.comp"),
                 ),
             ),
 
@@ -935,8 +935,8 @@ impl HybridFluid {
         }
         {
             // Compute density grid by another gather pass
-            cpass.set_bind_group(2, &self.bind_group_density_projection_gather, &[]);
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather));
+            cpass.set_bind_group(2, &self.bind_group_density_projection_gather_error, &[]);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather_error));
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         self.is_first_step.set(false);

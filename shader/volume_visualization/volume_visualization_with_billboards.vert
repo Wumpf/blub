@@ -51,18 +51,20 @@ void main() {
 
         scale = clamp(divergence * 10.0 * Rendering.FluidGridToWorldScale, -1.0, 1.0);
         out_Tint = colormapCoolToWarm(scale);
-        scale = abs(scale);
         break;
+
     case VISUALIZE_PRESSURE:
         float pressure = marker == CELL_FLUID ? texelFetch(PressureVolume, volumeCoordinate, 0).x : 0.0;
         scale = saturate(pressure * pressure * Rendering.FluidGridToWorldScale * 0.01);
         out_Tint = colormapHeat(scale).grb;
         break;
+
     case VISUALIZE_DENSITY_ERROR:
-        float density = marker == CELL_FLUID ? texelFetch(DensityErrorVolume, volumeCoordinate, 0).x : 0.0;
-        scale = saturate(density * Rendering.FluidGridToWorldScale * 10.0);
-        out_Tint = colormapHeat(scale).grb;
+        float densityError = marker == CELL_FLUID ? texelFetch(DensityErrorVolume, volumeCoordinate, 0).x : 0.0;
+        scale = densityError / 8.0;
+        out_Tint = colormapCoolToWarm(-scale);
         break;
+
     case VISUALIZE_MARKER:
         scale = marker == CELL_AIR ? 0.0 : 1.0;
 
@@ -78,6 +80,7 @@ void main() {
             out_Tint = vec3(0.0);
         break;
     }
+    scale = abs(scale);
 
     out_ParticleWorldPosition = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
     out_Radius = scale * 0.5 * Rendering.FluidGridToWorldScale;

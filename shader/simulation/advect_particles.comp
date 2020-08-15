@@ -112,8 +112,8 @@ void main() {
     // Write new LinkedList & marker grid for density projection step.
     {
         imageStore(MarkerVolume, ivec3(newPosition), vec4(CELL_FLUID, 0, 0, 0));
-        // Remember, indices in grid are offset by +1 for easy handling of empty cells.
-        Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, ivec3(newPosition), particleIndex + 1) - 1;
+        ivec3 nearestDualGridCell = ivec3(max(newPosition - vec3(0.5), vec3(0.0)));
+        Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
     }
 
     // Write out particle.
