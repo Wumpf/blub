@@ -4,10 +4,10 @@
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict image3D Pressure;
-layout(set = 2, binding = 1, r32f) uniform restrict image3D Residual;
-layout(set = 2, binding = 2) uniform texture3D Search;
-layout(set = 2, binding = 3) uniform PcgScalars_ { PcgScalars Scalars; };
+layout(set = 1, binding = 0, r32f) uniform restrict image3D Pressure;
+layout(set = 1, binding = 1, r32f) uniform restrict image3D Residual;
+layout(set = 1, binding = 2) uniform texture3D Search;
+layout(set = 1, binding = 3) uniform PcgScalars_ { PcgScalars Scalars; };
 
 #define PRUPDATE_LAST_ITERATION 1
 

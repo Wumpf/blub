@@ -4,8 +4,8 @@
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
-layout(set = 2, binding = 1, r32f) uniform restrict image3D InitialPressureGuess;
+layout(set = 1, binding = 0, r32f) uniform restrict image3D Residual;
+layout(set = 1, binding = 1, r32f) uniform restrict image3D InitialPressureGuess;
 
 COMPUTE_PASS_VOLUME
 

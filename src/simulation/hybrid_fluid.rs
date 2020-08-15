@@ -188,14 +188,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // density volume
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
 
-        let pressure_solver = PressureSolver::new(
-            device,
-            grid_dimension,
-            shader_dir,
-            pipeline_manager,
-            per_frame_bind_group_layout,
-            &volume_marker_view,
-        );
+        let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);
 
         // Bind groups.
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
@@ -531,7 +524,7 @@ impl HybridFluid {
         let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, Self::COMPUTE_LOCAL_SIZE_PARTICLES);
 
         let mut cpass = encoder.begin_compute_pass();
-        cpass.set_bind_group(0, &per_frame_bind_group, &[]);
+        cpass.set_bind_group(0, per_frame_bind_group, &[]);
         cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
 
         // mostly grouped by layouts.
@@ -559,6 +552,8 @@ impl HybridFluid {
         cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         self.pressure_solver.solve(&mut cpass, pipeline_manager);
 
+        // Pressure solver messes up "global" bindings.
+        cpass.set_bind_group(0, per_frame_bind_group, &[]);
         cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
         {
             cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);
