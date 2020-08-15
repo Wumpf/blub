@@ -31,7 +31,6 @@ pub struct HybridFluid {
 
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
     bind_group_write_velocity: wgpu::BindGroup,
-    bind_group_advect_particles: wgpu::BindGroup,
 
     bind_group_read_mac_grid: wgpu::BindGroup,
     bind_group_pressure_compute_divergence: wgpu::BindGroup,
@@ -42,12 +41,16 @@ pub struct HybridFluid {
     bind_group_pressure_update_pressure_and_residual: wgpu::BindGroup,
     bind_group_pressure_update_search: wgpu::BindGroup,
 
+    bind_group_advect_particles: wgpu::BindGroup,
+
+    bind_group_density_projection_gather: wgpu::BindGroup,
+
     // The interface to any renderer of the fluid. Readonly access to relevant resources
     bind_group_renderer: wgpu::BindGroup,
 
     pipeline_transfer_clear: ComputePipelineHandle,
     pipeline_transfer_build_linkedlist: ComputePipelineHandle,
-    pipeline_transfer_gather: ComputePipelineHandle,
+    pipeline_transfer_gather_velocity: ComputePipelineHandle,
 
     pipeline_pressure_compute_divergence: ComputePipelineHandle,
     pipeline_pressure_apply_preconditioner: ComputePipelineHandle,
@@ -59,6 +62,8 @@ pub struct HybridFluid {
     pipeline_remove_divergence: ComputePipelineHandle,
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_advect_particles: ComputePipelineHandle,
+
+    pipeline_density_projection_gather: ComputePipelineHandle,
 
     max_num_particles: u32,
 
@@ -140,13 +145,15 @@ impl HybridFluid {
                 usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
             }
         };
+        // TODO: Reuse volumes to safe memory, not all are used simultaneously.
         let volume_velocity_x = device.create_texture(&create_volume_texture_desc("Velocity Volume X", wgpu::TextureFormat::R32Float));
         let volume_velocity_y = device.create_texture(&create_volume_texture_desc("Velocity Volume Y", wgpu::TextureFormat::R32Float));
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
 
-        let volume_pressure_or_density = device.create_texture(&create_volume_texture_desc("Pressure/Density Volume", wgpu::TextureFormat::R32Float));
+        let volume_density = device.create_texture(&create_volume_texture_desc("Density Volume", wgpu::TextureFormat::R32Float));
+        let volume_pressure = device.create_texture(&create_volume_texture_desc("Pressure Volume", wgpu::TextureFormat::R32Float)); // Previous frame is required for this one!
         let volume_pcg_residual = device.create_texture(&create_volume_texture_desc("PCG Solve Residual", wgpu::TextureFormat::R32Float));
         let volume_pcg_auxiliary = device.create_texture(&create_volume_texture_desc("PCG Solve Auxiliary", wgpu::TextureFormat::R32Float));
         let volume_pcg_auxiliary_temp = device.create_texture(&create_volume_texture_desc("PCG Solve Auxiliary Temp", wgpu::TextureFormat::R32Float));
@@ -181,7 +188,8 @@ impl HybridFluid {
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
         let volume_marker_view = volume_marker.create_view(&Default::default());
 
-        let volume_pressure_or_density_view = volume_pressure_or_density.create_view(&Default::default());
+        let volume_pressure_view = volume_pressure.create_view(&Default::default());
+        let volume_density_view = volume_density.create_view(&Default::default());
         let volume_pcg_residual_view = volume_pcg_residual.create_view(&Default::default());
         let volume_pcg_auxiliary_view = volume_pcg_auxiliary.create_view(&Default::default());
         let volume_pcg_auxiliary_temp_view = volume_pcg_auxiliary_temp.create_view(&Default::default());
@@ -251,7 +259,14 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::texture3D())
             .next_binding_compute(binding_glsl::uniform())
-            .create(device, "BindGroupLayout: Generic volume update");
+            .create(device, "BindGroupLayout: PCG update pressure and residual");
+
+        let group_layout_density_projection_gather = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
+            .next_binding_compute(binding_glsl::utexture3D()) // linkedlist_volume
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R8Snorm, false)) // marker volume
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // density volume
+            .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
 
         // Bind groups.
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
@@ -287,7 +302,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
-            .texture(&volume_pressure_or_density_view)
+            .texture(&volume_pressure_view)
             .create(device, "BindGroup: Write to Velocity Grid");
         let bind_group_advect_particles = BindGroupBuilder::new(&group_layout_advect_particles)
             .texture(&volume_velocity_view_x)
@@ -309,7 +324,7 @@ impl HybridFluid {
             .create(device, "BindGroup: Read MAC Grid");
         let bind_group_pressure_compute_divergence = BindGroupBuilder::new(&group_layout_pressure_solve_init)
             .texture(&volume_pcg_residual_view)
-            .texture(&volume_pressure_or_density_view)
+            .texture(&volume_pressure_view)
             .create(device, "BindGroup: Compute initial residual");
         let bind_group_pressure_apply_coeff = BindGroupBuilder::new(&group_layout_apply_coeff)
             .buffer(dotproduct_reduce_step_buffers[0].slice(..))
@@ -357,7 +372,7 @@ impl HybridFluid {
         ];
 
         let bind_group_pressure_update_pressure_and_residual = BindGroupBuilder::new(&group_layout_pressure_update_pressure_and_residual)
-            .texture(&volume_pressure_or_density_view)
+            .texture(&volume_pressure_view)
             .texture(&volume_pcg_residual_view)
             .texture(&volume_pcg_search_view)
             .buffer(dotproduct_reduce_result_buffer.slice(..))
@@ -368,6 +383,13 @@ impl HybridFluid {
             .buffer(dotproduct_reduce_result_buffer.slice(..))
             .create(device, "BindGroup: Pressure update search");
 
+        let bind_group_density_projection_gather = BindGroupBuilder::new(&group_layout_density_projection_gather)
+            .buffer(particles_position_llindex.slice(..))
+            .texture(&volume_linked_lists_view)
+            .texture(&volume_marker_view)
+            .texture(&volume_density_view)
+            .create(device, "BindGroup: Density projection gather");
+
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(particles_position_llindex.slice(..))
             .buffer(particles_velocity_x.slice(..))
@@ -377,7 +399,8 @@ impl HybridFluid {
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
-            .texture(&volume_pressure_or_density_view)
+            .texture(&volume_pressure_view)
+            .texture(&volume_density_view)
             .create(device, "BindGroup: Fluid Renderers");
 
         // pipeline layouts.
@@ -469,38 +492,15 @@ impl HybridFluid {
             ],
             push_constant_ranges,
         }));
-
-        let pipeline_transfer_clear = pipeline_manager.create_compute_pipeline(
-            device,
-            shader_dir,
-            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_clear.comp")),
-        );
-        let pipeline_transfer_build_linkedlist = pipeline_manager.create_compute_pipeline(
-            device,
-            shader_dir,
-            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_build_linkedlist.comp")),
-        );
-        let pipeline_transfer_gather = pipeline_manager.create_compute_pipeline(
-            device,
-            shader_dir,
-            ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_gather.comp")),
-        );
-
-        let pipeline_remove_divergence = pipeline_manager.create_compute_pipeline(
-            device,
-            shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_volume.clone(), Path::new("simulation/remove_divergence.comp")),
-        );
-        let pipeline_extrapolate_velocity = pipeline_manager.create_compute_pipeline(
-            device,
-            shader_dir,
-            ComputePipelineCreationDesc::new(layout_write_volume.clone(), Path::new("simulation/extrapolate_velocity.comp")),
-        );
-        let pipeline_advect_particles = pipeline_manager.create_compute_pipeline(
-            device,
-            shader_dir,
-            ComputePipelineCreationDesc::new(layout_particles.clone(), Path::new("simulation/advect_particles.comp")),
-        );
+        let layout_density_projection_gather = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("HybridFluid, Density Projection Gather Layout"),
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_uniform.layout,
+                &group_layout_density_projection_gather.layout,
+            ],
+            push_constant_ranges,
+        }));
 
         HybridFluid {
             grid_dimension,
@@ -527,14 +527,44 @@ impl HybridFluid {
 
             bind_group_renderer,
 
-            pipeline_transfer_clear,
-            pipeline_transfer_build_linkedlist,
-            pipeline_transfer_gather,
             bind_group_pressure_apply_coeff,
             bind_group_pressure_dotproduct_reduce,
             bind_group_pressure_dotproduct_final,
             bind_group_pressure_update_pressure_and_residual,
             bind_group_pressure_update_search,
+            bind_group_density_projection_gather,
+
+            pipeline_transfer_clear: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_clear.comp")),
+            ),
+            pipeline_transfer_build_linkedlist: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_build_linkedlist.comp")),
+            ),
+            pipeline_transfer_gather_velocity: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_gather_velocity.comp")),
+            ),
+
+            pipeline_remove_divergence: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(layout_write_volume.clone(), Path::new("simulation/remove_divergence.comp")),
+            ),
+            pipeline_extrapolate_velocity: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(layout_write_volume.clone(), Path::new("simulation/extrapolate_velocity.comp")),
+            ),
+            pipeline_advect_particles: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(layout_particles.clone(), Path::new("simulation/advect_particles.comp")),
+            ),
 
             pipeline_pressure_compute_divergence: pipeline_manager.create_compute_pipeline(
                 device,
@@ -576,9 +606,14 @@ impl HybridFluid {
                 ComputePipelineCreationDesc::new(layout_pressure_update_volume.clone(), Path::new("simulation/pressure_update_search.comp")),
             ),
 
-            pipeline_extrapolate_velocity,
-            pipeline_remove_divergence,
-            pipeline_advect_particles,
+            pipeline_density_projection_gather: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(
+                    layout_density_projection_gather.clone(),
+                    Path::new("simulation/density_projection_gather.comp"),
+                ),
+            ),
 
             max_num_particles,
             is_first_step: Cell::new(true),
@@ -687,6 +722,7 @@ impl HybridFluid {
                     .next_binding_vertex(binding_glsl::texture3D()) // velocityZ
                     .next_binding_vertex(binding_glsl::texture3D()) // marker
                     .next_binding_vertex(binding_glsl::texture3D()) // pressure
+                    .next_binding_vertex(binding_glsl::texture3D()) // density
                     .create(device, "BindGroupLayout: ParticleRenderer")
             })
         }
@@ -778,7 +814,7 @@ impl HybridFluid {
                 cpass.dispatch(particle_work_groups, 1, 1);
 
                 // Gather velocities in velocity grid and apply global forces.
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather));
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather_velocity));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             }
         }
@@ -896,6 +932,12 @@ impl HybridFluid {
             cpass.set_bind_group(2, &self.bind_group_advect_particles, &[]);
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_advect_particles));
             cpass.dispatch(particle_work_groups, 1, 1);
+        }
+        {
+            // Compute density grid by another gather pass
+            cpass.set_bind_group(2, &self.bind_group_density_projection_gather, &[]);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather));
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         self.is_first_step.set(false);
     }

@@ -12,6 +12,7 @@ pub enum VolumeVisualizationMode {
     Velocity,
     DivergenceError,
     PseudoPressure,
+    UncorrectedDensity,
     Marker,
 }
 
@@ -19,6 +20,7 @@ pub struct VolumeRenderer {
     velocity_render_pipeline: RenderPipelineHandle,
     divergence_render_pipeline_desc: RenderPipelineHandle,
     pressure_render_pipeline_desc: RenderPipelineHandle,
+    density_render_pipeline_desc: RenderPipelineHandle,
     marker_render_pipeline_desc: RenderPipelineHandle,
 }
 
@@ -61,6 +63,14 @@ impl VolumeRenderer {
             Some(Screen::FORMAT_DEPTH),
         );
 
+        let density_render_pipeline_desc = RenderPipelineCreationDesc::new(
+            layout.clone(),
+            Path::new("volume_visualization/density.vert"),
+            Some(Path::new("sphere_particles.frag")),
+            HdrBackbuffer::FORMAT,
+            Some(Screen::FORMAT_DEPTH),
+        );
+
         let marker_render_pipeline_desc = RenderPipelineCreationDesc::new(
             layout.clone(),
             Path::new("volume_visualization/marker.vert"),
@@ -73,6 +83,7 @@ impl VolumeRenderer {
             velocity_render_pipeline: pipeline_manager.create_render_pipeline(device, shader_dir, velocity_render_pipeline_desc),
             divergence_render_pipeline_desc: pipeline_manager.create_render_pipeline(device, shader_dir, divergence_render_pipeline_desc),
             pressure_render_pipeline_desc: pipeline_manager.create_render_pipeline(device, shader_dir, pressure_render_pipeline_desc),
+            density_render_pipeline_desc: pipeline_manager.create_render_pipeline(device, shader_dir, density_render_pipeline_desc),
             marker_render_pipeline_desc: pipeline_manager.create_render_pipeline(device, shader_dir, marker_render_pipeline_desc),
         }
     }
@@ -102,6 +113,11 @@ impl VolumeRenderer {
             }
             VolumeVisualizationMode::PseudoPressure => {
                 rpass.set_pipeline(pipeline_manager.get_render(&self.pressure_render_pipeline_desc));
+                rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
+                rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));
+            }
+            VolumeVisualizationMode::UncorrectedDensity => {
+                rpass.set_pipeline(pipeline_manager.get_render(&self.density_render_pipeline_desc));
                 rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
                 rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));
             }

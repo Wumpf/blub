@@ -1,0 +1,99 @@
+// Builds density grid from particles and llgrid
+// Uses shepard interpolation on particles.
+// TODO: Similar to transfer_gather_velocity.comp - can share more code?
+
+#version 450
+
+#include "../per_frame_resources.glsl"
+#include "../utilities.glsl"
+#include "hybrid_fluid.glsl"
+#include "particles.glsl"
+
+layout(set = 2, binding = 0) buffer restrict readonly ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
+layout(set = 2, binding = 1) uniform utexture3D LinkedListDualGrid;
+layout(set = 2, binding = 2, r8_snorm) uniform restrict image3D MarkerVolume;
+layout(set = 2, binding = 3, r32f) uniform restrict image3D DensityVolume;
+// layout(push_constant) uniform PushConstants { uint VelocityTransferComponent; };
+
+// Uses a shared memory so every thread loads one particle for its current cell and then accesses remaining neighbors (a 2x2x2 environment) from
+// there. Note that the naive approach (every thread goes through linked lists of 8 cells) is an order of magnitude slower than this approach!
+layout(local_size_x = 9, local_size_y = 9, local_size_z = 9) in;
+
+// TODO: Are we avoiding bank conflicts?
+shared vec4 SharedPositions[9][9][9];
+
+void addParticleContribution(inout float density, vec3 particlePosition, vec3 samplePosition) {
+    vec3 toSamplePosition = samplePosition - particlePosition;
+    vec3 offset = saturate(vec3(1.0) - abs(toSamplePosition));
+    density += offset.x * offset.y * offset.z;
+}
+
+void addParticleContributionFromSharedMemory(inout float density, uvec3 threadGroupOffset, vec3 samplePosition) {
+    uvec3 sharedMemoryAddress = gl_LocalInvocationID - threadGroupOffset;
+    vec4 particlePosition = SharedPositions[sharedMemoryAddress.x][sharedMemoryAddress.y][sharedMemoryAddress.z];
+    if (particlePosition.w != 0.0) {
+        addParticleContribution(density, particlePosition.xyz, samplePosition);
+    }
+}
+
+void main() {
+    // TODO: Should/can we make it so that full warps are full of border threads? 🤔
+    ivec3 gridCoord = ivec3(gl_WorkGroupID * (gl_WorkGroupSize - uvec3(1)) + gl_LocalInvocationID) - ivec3(1);
+
+    float marker = imageLoad(MarkerVolume, gridCoord).r;
+
+    // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
+    // (top/right/front are marked implicitely and there are walls readily available!)
+    // CELL_SOLID for negative gridCoord.
+    if (any(equal(gridCoord, ivec3(0)))) {
+        marker = CELL_SOLID;
+        imageStore(MarkerVolume, gridCoord, marker.xxxx);
+    }
+
+    bool isBorderThread = any(equal(gl_LocalInvocationID, uvec3(0)));
+    bool threadWritesFluid = !isBorderThread && marker == CELL_FLUID;
+
+    vec3 samplePosition = vec3(gridCoord) + vec3(0.5);
+
+    uint localParticleIndex = texelFetch(LinkedListDualGrid, gridCoord, 0).r - 1;
+
+    float density = 0.0;
+
+    // A cell starts out with 8 particles, ideally that stays roughly constant.
+    for (int i = 0; i < 12; ++i) {
+        if (localParticleIndex != INVALID_LINKED_LIST_PTR) {
+            // Load a particle
+            vec3 particlePosition = Particles[localParticleIndex].Position;
+            localParticleIndex = Particles[localParticleIndex].LinkedListNext;
+
+            // Apply it
+            if (threadWritesFluid) {
+                addParticleContribution(density, particlePosition, samplePosition);
+            }
+
+            // Write particle info to shared memory in order to share with others.
+            SharedPositions[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = vec4(particlePosition, 1.0);
+        } else {
+            // TODO: Don't need to write every time.
+            SharedPositions[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z].w = 0.0;
+        }
+
+        // Wait for shared variables to be updated.
+        barrier(); // (newer GLSL specifications clarify that this is ALSO a memoryBarrierShared)
+
+        // Load & apply remaining seven neighbor particles.
+        if (threadWritesFluid) {
+            addParticleContributionFromSharedMemory(density, uvec3(1, 0, 0), samplePosition);
+            addParticleContributionFromSharedMemory(density, uvec3(0, 1, 0), samplePosition);
+            addParticleContributionFromSharedMemory(density, uvec3(1, 1, 0), samplePosition);
+            addParticleContributionFromSharedMemory(density, uvec3(0, 0, 1), samplePosition);
+            addParticleContributionFromSharedMemory(density, uvec3(1, 0, 1), samplePosition);
+            addParticleContributionFromSharedMemory(density, uvec3(0, 1, 1), samplePosition);
+            addParticleContributionFromSharedMemory(density, uvec3(1, 1, 1), samplePosition);
+        }
+    }
+
+    if (threadWritesFluid) {
+        imageStore(DensityVolume, gridCoord, density.xxxx);
+    }
+}

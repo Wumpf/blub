@@ -10,6 +10,7 @@ layout(set = 1, binding = 5) uniform texture3D VelocityVolumeY;
 layout(set = 1, binding = 6) uniform texture3D VelocityVolumeZ;
 layout(set = 1, binding = 7) uniform texture3D MarkerVolume;
 layout(set = 1, binding = 8) uniform texture3D PressureVolume;
+layout(set = 1, binding = 9) uniform texture3D DensityVolume;
 
 ivec3 getVolumeCoordinate(uint positionIndex) {
     ivec3 volumeSize = textureSize(PressureVolume, 0).xyz;
