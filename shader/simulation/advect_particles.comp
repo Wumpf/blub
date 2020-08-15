@@ -8,12 +8,12 @@
 layout(set = 2, binding = 0) uniform texture3D VelocityVolumeX;
 layout(set = 2, binding = 1) uniform texture3D VelocityVolumeY;
 layout(set = 2, binding = 2) uniform texture3D VelocityVolumeZ;
-// layout(set = 2, binding = 3) uniform texture3D MarkerVolume;
-
-layout(set = 3, binding = 0) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
-layout(set = 3, binding = 1) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
-layout(set = 3, binding = 2) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
-layout(set = 3, binding = 3) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
+layout(set = 2, binding = 3, r8_snorm) uniform restrict image3D MarkerVolume;
+layout(set = 2, binding = 4, r32ui) uniform restrict coherent uimage3D LinkedListDualGrid;
+layout(set = 2, binding = 5) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
+layout(set = 2, binding = 6) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
+layout(set = 2, binding = 7) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
+layout(set = 2, binding = 8) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
 
 COMPUTE_PASS_PARTICLES
 
@@ -109,13 +109,22 @@ void main() {
     // float clampFactor = min(min(clampRatio.x, clampRatio.y), clampRatio.z);
     vec3 newPosition = clamp(originalPosition + totalMovement, vec3(1.0001), gridSize - vec3(0.0001));
 
+    // Write new LinkedList & marker grid for density projection step.
+    {
+        imageStore(MarkerVolume, ivec3(newPosition), vec4(CELL_FLUID, 0, 0, 0));
+        // Remember, indices in grid are offset by +1 for easy handling of empty cells.
+        Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, ivec3(newPosition), particleIndex + 1) - 1;
+    }
+
     // Write out particle.
-    Particles[particleIndex].Position = newPosition;
-    ParticleBufferVelocityX[particleIndex] = vec4(cx, newVelocity.x);
-    ParticleBufferVelocityY[particleIndex] = vec4(cy, newVelocity.y);
-    ParticleBufferVelocityZ[particleIndex] = vec4(cz, newVelocity.z);
-    // PIC only
-    // Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
-    // Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);
-    // Particles[particleIndex].VelocityMatrix[2] = vec4(vec3(0), newVelocity.z);
+    {
+        Particles[particleIndex].Position = newPosition;
+        ParticleBufferVelocityX[particleIndex] = vec4(cx, newVelocity.x);
+        ParticleBufferVelocityY[particleIndex] = vec4(cy, newVelocity.y);
+        ParticleBufferVelocityZ[particleIndex] = vec4(cz, newVelocity.z);
+        // PIC only
+        // Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
+        // Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);
+        // Particles[particleIndex].VelocityMatrix[2] = vec4(vec3(0), newVelocity.z);
+    }
 }
