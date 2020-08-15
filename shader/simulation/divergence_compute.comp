@@ -1,0 +1,47 @@
+// Computes velocity divergence
+
+#version 460
+
+#include "../utilities.glsl"
+#include "hybrid_fluid.glsl"
+
+layout(set = 1, binding = 0) uniform texture3D MarkerVolume;
+layout(set = 1, binding = 1) uniform texture3D VelocityVolumeX;
+layout(set = 1, binding = 2) uniform texture3D VelocityVolumeY;
+layout(set = 1, binding = 3) uniform texture3D VelocityVolumeZ;
+layout(set = 1, binding = 4, r32f) uniform restrict image3D Divergence;
+
+COMPUTE_PASS_VOLUME
+
+float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, float oppositeWallType, const uint component) {
+    ivec3 neighborCoord = coord;
+    neighborCoord[component] -= 1;
+
+    if (oppositeWallType == CELL_FLUID)
+        return texelFetch(velocityVolume, coord, 0).x - texelFetch(velocityVolume, neighborCoord, 0).x;
+    else if (oppositeWallType == CELL_SOLID)
+        return texelFetch(velocityVolume, coord, 0).x;
+    else
+        return 0.0;
+}
+
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+
+    // If there is no fluid, we don't need to compute divergence.
+    // Divergence tells us how much fluid is going in/out. If we're at a air/solid cell then that's clearly zero as there's no fluid in the first
+    // place!
+    float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+    if (marker != CELL_FLUID) {
+        return;
+    }
+
+    float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    float markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    float markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+
+    float divergence = computeDivergenceForDirection(gridCoord, VelocityVolumeX, markerX0, 0);
+    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeY, markerY0, 1);
+    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeZ, markerZ0, 2);
+    imageStore(Divergence, gridCoord, divergence.xxxx);
+}

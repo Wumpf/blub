@@ -1,0 +1,74 @@
+// Use intitial pressure guess to start with an improved residual and clean the intial guess where it is not valid.
+
+#version 460
+
+#include "pressure.glsl"
+
+layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
+layout(set = 2, binding = 1, r32f) uniform restrict image3D InitialPressureGuess;
+
+COMPUTE_PASS_VOLUME
+
+#define FIRST_STEP 0
+#define NOT_FIRST_STEP 1
+
+void main() {
+    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+
+    // If this is the first step overall, just do a clear, nothing else.
+    if (PushConstants.Mode == FIRST_STEP) {
+        imageStore(InitialPressureGuess, gridCoord, vec4(0.0));
+        return;
+    }
+
+    // Don't solve outside of the fluid domain!
+    // However, in order to not pollute future initial pressure guesses, we zero set the InitialPressureGuess everywhere else.
+    // (otherwise results from early steps influence much later ones which can lead to odd artifacts)
+    float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+    if (marker != CELL_FLUID) {
+        imageStore(InitialPressureGuess, gridCoord, vec4(0.0));
+        return;
+    }
+
+    float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
+    float markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    float markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
+    float markerY1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    float markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    float markerZ1 = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+
+    // The residual is computed as r -= A * x0
+    // r is assumed to be initialized already with b (divergence or density error)
+    // x0 is our initial guess
+    float residual = imageLoad(Residual, gridCoord).x;
+
+    // See MultiplyWithCoefficientMatrix (which works with textures not images :/)
+    float numNonSolidNeighbors = 0.0;
+    numNonSolidNeighbors += abs(markerX0); // float(markerX0 != CELL_SOLID);
+    numNonSolidNeighbors += abs(markerX1); // float(markerX1 != CELL_SOLID);
+    numNonSolidNeighbors += abs(markerY0); // float(markerY0 != CELL_SOLID);
+    numNonSolidNeighbors += abs(markerY1); // float(markerY1 != CELL_SOLID);
+    numNonSolidNeighbors += abs(markerZ0); // float(markerZ0 != CELL_SOLID);
+    numNonSolidNeighbors += abs(markerZ1); // float(markerZ1 != CELL_SOLID);
+    if (numNonSolidNeighbors > 0.0)
+        residual -= numNonSolidNeighbors * imageLoad(InitialPressureGuess, gridCoord).x;
+    if (markerX0 == CELL_FLUID) {
+        residual += imageLoad(InitialPressureGuess, gridCoord - ivec3(1, 0, 0)).x;
+    }
+    if (markerX1 == CELL_FLUID) {
+        residual += imageLoad(InitialPressureGuess, gridCoord + ivec3(1, 0, 0)).x;
+    }
+    if (markerY0 == CELL_FLUID) {
+        residual += imageLoad(InitialPressureGuess, gridCoord - ivec3(0, 1, 0)).x;
+    }
+    if (markerY1 == CELL_FLUID) {
+        residual += imageLoad(InitialPressureGuess, gridCoord + ivec3(0, 1, 0)).x;
+    }
+    if (markerZ0 == CELL_FLUID) {
+        residual += imageLoad(InitialPressureGuess, gridCoord - ivec3(0, 0, 1)).x;
+    }
+    if (markerZ1 == CELL_FLUID) {
+        residual += imageLoad(InitialPressureGuess, gridCoord + ivec3(0, 0, 1)).x;
+    }
+    imageStore(Residual, gridCoord, residual.xxxx);
+}

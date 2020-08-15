@@ -31,14 +31,11 @@ pub struct HybridFluid {
     simulation_properties_dirty: Cell<bool>,
 
     bind_group_uniform: wgpu::BindGroup,
-
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
+    bind_group_divergence_compute: wgpu::BindGroup,
     bind_group_write_velocity: wgpu::BindGroup,
-
     bind_group_read_mac_grid: wgpu::BindGroup,
-
     bind_group_advect_particles: wgpu::BindGroup,
-
     bind_group_density_projection_gather_error: wgpu::BindGroup,
 
     // The interface to any renderer of the fluid. Readonly access to relevant resources
@@ -47,11 +44,10 @@ pub struct HybridFluid {
     pipeline_transfer_clear: ComputePipelineHandle,
     pipeline_transfer_build_linkedlist: ComputePipelineHandle,
     pipeline_transfer_gather_velocity: ComputePipelineHandle,
-
-    pipeline_remove_divergence: ComputePipelineHandle,
+    pipeline_divergence_compute: ComputePipelineHandle,
+    pipeline_divergence_remove: ComputePipelineHandle,
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_advect_particles: ComputePipelineHandle,
-
     pipeline_density_projection_gather_error: ComputePipelineHandle,
 
     max_num_particles: u32,
@@ -160,7 +156,14 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R8Snorm, false)) // marker volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocity component
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
-        let group_layout_write_velocity = BindGroupLayoutBuilder::new()
+        let group_layout_divergence_compute = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::texture3D()) // marker volume
+            .next_binding_compute(binding_glsl::texture3D()) // velocityX
+            .next_binding_compute(binding_glsl::texture3D()) // velocityY
+            .next_binding_compute(binding_glsl::texture3D()) // velocityZ
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // divergence / initial residual
+            .create(device, "BindGroupLayout: Compute Divergence");
+        let group_layout_write_velocity_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityX
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityY
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityZ
@@ -178,7 +181,6 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
             .create(device, "BindGroupLayout: Advect to Particles");
-
         let group_layout_read_macgrid = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture3D()) // velocityX
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
@@ -199,7 +201,7 @@ impl HybridFluid {
             shader_dir,
             pipeline_manager,
             per_frame_bind_group_layout,
-            &group_layout_read_macgrid.layout,
+            &volume_marker_view,
         );
 
         // Bind groups.
@@ -230,8 +232,14 @@ impl HybridFluid {
                 .texture(&volume_velocity_view_z)
                 .create(device, "BindGroup: Transfer velocity to volume Z"),
         ];
-
-        let bind_group_write_velocity = BindGroupBuilder::new(&group_layout_write_velocity)
+        let bind_group_divergence_compute = BindGroupBuilder::new(&group_layout_divergence_compute)
+            .texture(&volume_marker_view)
+            .texture(&volume_velocity_view_x)
+            .texture(&volume_velocity_view_y)
+            .texture(&volume_velocity_view_z)
+            .texture(pressure_solver.residual_view())
+            .create(device, "BindGroup: Compute divergence");
+        let bind_group_write_velocity = BindGroupBuilder::new(&group_layout_write_velocity_volume)
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
@@ -249,21 +257,18 @@ impl HybridFluid {
             .buffer(particles_velocity_y.slice(..))
             .buffer(particles_velocity_z.slice(..))
             .create(device, "BindGroup: Write to Particles");
-
         let bind_group_read_mac_grid = BindGroupBuilder::new(&group_layout_read_macgrid)
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
             .create(device, "BindGroup: Read MAC Grid");
-
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .buffer(particles_position_llindex.slice(..))
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_view)
             .texture(&volume_density_view)
             .create(device, "BindGroup: Density projection gather");
-
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(particles_position_llindex.slice(..))
             .buffer(particles_velocity_x.slice(..))
@@ -285,7 +290,7 @@ impl HybridFluid {
         }];
 
         let layout_transfer_velocity = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Transfer Velocity Pipeline Layout"),
+            label: Some("PipelineLayout: HybridFluid, Transfer Velocity"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
@@ -293,17 +298,22 @@ impl HybridFluid {
             ],
             push_constant_ranges,
         }));
-        let layout_write_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Write Volume Pipeline Layout"),
+        let layout_divergence_compute = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("PipelineLayout: HybridFluid, Compute Divergence"),
+            bind_group_layouts: &[per_frame_bind_group_layout, &group_layout_divergence_compute.layout],
+            push_constant_ranges,
+        }));
+        let layout_write_velocity_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("PipelineLayout: HybridFluid, Write Volume"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
-                &group_layout_write_velocity.layout,
+                &group_layout_write_velocity_volume.layout,
             ],
             push_constant_ranges,
         }));
         let layout_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Particles Pipeline Layout"),
+            label: Some("PipelineLayout: HybridFluid, Particles"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
@@ -312,7 +322,7 @@ impl HybridFluid {
             push_constant_ranges,
         }));
         let layout_density_projection_gather_error = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Density Projection Gather Layout"),
+            label: Some("PipelineLayout: HybridFluid, Density Projection Gather"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
@@ -339,6 +349,7 @@ impl HybridFluid {
 
             bind_group_uniform,
             bind_group_transfer_velocity,
+            bind_group_divergence_compute,
             bind_group_write_velocity,
             bind_group_advect_particles,
 
@@ -362,16 +373,20 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_gather_velocity.comp")),
             ),
-
-            pipeline_remove_divergence: pipeline_manager.create_compute_pipeline(
+            pipeline_divergence_compute: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_write_volume.clone(), Path::new("simulation/remove_divergence.comp")),
+                ComputePipelineCreationDesc::new(layout_divergence_compute.clone(), Path::new("simulation/divergence_compute.comp")),
+            ),
+            pipeline_divergence_remove: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(layout_write_velocity_volume.clone(), Path::new("simulation/divergence_remove.comp")),
             ),
             pipeline_extrapolate_velocity: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_write_volume.clone(), Path::new("simulation/extrapolate_velocity.comp")),
+                ComputePipelineCreationDesc::new(layout_write_velocity_volume.clone(), Path::new("simulation/extrapolate_velocity.comp")),
             ),
             pipeline_advect_particles: pipeline_manager.create_compute_pipeline(
                 device,
@@ -553,10 +568,10 @@ impl HybridFluid {
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             }
         }
-        // Pressure solve with PCG
-        // For optimization various steps are collapsed as far as possible to avoid expensive buffer/texture read/writes
-        // This makes the algorithm a lot faster but also a bit harder to read.
-        cpass.set_bind_group(1, &self.bind_group_read_mac_grid, &[]);
+        // Compute divergence & solve for pressure
+        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_compute));
+        cpass.set_bind_group(1, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
+        cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         self.pressure_solver.solve(&mut cpass, pipeline_manager);
 
         cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
@@ -564,7 +579,7 @@ impl HybridFluid {
             cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);
 
             // Make velocity grid divergence free
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_remove_divergence));
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_remove));
             cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 

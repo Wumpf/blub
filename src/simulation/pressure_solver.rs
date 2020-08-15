@@ -4,22 +4,24 @@ use std::{cell::Cell, path::Path, rc::Rc};
 pub struct PressureSolver {
     grid_dimension: wgpu::Extent3d,
 
-    bind_group_pressure_compute_divergence: wgpu::BindGroup, // TODO: Either divergence or density error.
-    bind_group_pressure_preconditioner: [wgpu::BindGroup; 3],
-    bind_group_pressure_apply_coeff: wgpu::BindGroup,
-    bind_group_pressure_dotproduct_reduce: [wgpu::BindGroup; 2],
-    bind_group_pressure_dotproduct_final: [wgpu::BindGroup; 2],
-    bind_group_pressure_update_pressure_and_residual: wgpu::BindGroup,
-    bind_group_pressure_update_search: wgpu::BindGroup,
+    bind_group_general: wgpu::BindGroup,
+    bind_group_init: wgpu::BindGroup,
+    bind_group_preconditioner: [wgpu::BindGroup; 3],
+    bind_group_apply_coeff: wgpu::BindGroup,
+    bind_group_dotproduct_reduce: [wgpu::BindGroup; 2],
+    bind_group_dotproduct_final: [wgpu::BindGroup; 2],
+    bind_group_update_pressure_and_residual: wgpu::BindGroup,
+    bind_group_update_search: wgpu::BindGroup,
 
-    pipeline_pressure_compute_divergence: ComputePipelineHandle,
-    pipeline_pressure_apply_preconditioner: ComputePipelineHandle,
-    pipeline_pressure_reduce: ComputePipelineHandle,
-    pipeline_pressure_apply_coeff: ComputePipelineHandle,
-    pipeline_pressure_update_pressure_and_residual: ComputePipelineHandle,
-    pipeline_pressure_update_search: ComputePipelineHandle,
+    pipeline_init: ComputePipelineHandle,
+    pipeline_apply_preconditioner: ComputePipelineHandle,
+    pipeline_reduce: ComputePipelineHandle,
+    pipeline_apply_coeff: ComputePipelineHandle,
+    pipeline_update_pressure_and_residual: ComputePipelineHandle,
+    pipeline_update_search: ComputePipelineHandle,
 
     volume_pressure_view: wgpu::TextureView,
+    volume_pcg_residual_view: wgpu::TextureView,
 
     is_first_step: Cell<bool>,
 }
@@ -45,8 +47,11 @@ impl PressureSolver {
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
-        group_layout_read_macgrid: &wgpu::BindGroupLayout,
+        volume_marker_view: &wgpu::TextureView,
     ) -> Self {
+        let group_layout_general = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::texture3D())
+            .create(device, "BindGroupLayout: Pressure solver general");
         let group_layout_pressure_solve_init = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
@@ -54,7 +59,7 @@ impl PressureSolver {
         let group_layout_apply_coeff = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
             .next_binding_compute(binding_glsl::texture3D())
-            .create(device, "BindGroupLayout: Apply coeff matrix & start dot product");
+            .create(device, "BindGroupLayout: Pressure solver apply coeff matrix & start dot product");
         let group_layout_pressure_solve_reduce = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(true)) // source
             .next_binding_compute(binding_glsl::buffer(false)) // dest
@@ -69,13 +74,13 @@ impl PressureSolver {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::texture3D())
             .next_binding_compute(binding_glsl::uniform())
-            .create(device, "BindGroupLayout: Generic volume update");
+            .create(device, "BindGroupLayout: Pressure solver generic volume update");
         let group_layout_pressure_update_pressure_and_residual = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::texture3D())
             .next_binding_compute(binding_glsl::uniform())
-            .create(device, "BindGroupLayout: PCG update pressure and residual");
+            .create(device, "BindGroupLayout: Pressure solver update pressure and residual");
 
         // Use same push constant range for all pipelines to improve internal Vulkan pipeline compatibility.
         let push_constant_ranges = &[wgpu::PushConstantRange {
@@ -84,52 +89,56 @@ impl PressureSolver {
         }];
 
         let layout_pressure_update_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Update Volume Pipeline Layout"),
+            label: Some("Update Volume Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_read_macgrid,
+                &group_layout_general.layout,
                 &group_layout_pressure_update_volume.layout,
             ],
             push_constant_ranges,
         }));
         let layout_pressure_preconditioner = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Pressure Solve Precondition Pipeline Layout"),
+            label: Some("Pressure Solve Precondition Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_read_macgrid,
+                &group_layout_general.layout,
                 &group_layout_pressure_preconditioner.layout,
             ],
             push_constant_ranges,
         }));
         let layout_pressure_update_pressure_and_residual = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Pressure Solve Update P&R Pipeline Layout"),
+            label: Some("Pressure Solve Update P&R Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_read_macgrid,
+                &group_layout_general.layout,
                 &group_layout_pressure_update_pressure_and_residual.layout,
             ],
             push_constant_ranges,
         }));
         let layout_pressure_solve_init = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Pressure Solve Init Pipeline Layout"),
+            label: Some("Pressure Solve Init Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_read_macgrid,
+                &group_layout_general.layout,
                 &group_layout_pressure_solve_init.layout,
             ],
             push_constant_ranges,
         }));
 
         let layout_pressure_apply_coeff = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Pressure Solve Apply Coeff Pipeline Layout"),
-            bind_group_layouts: &[per_frame_bind_group_layout, &group_layout_read_macgrid, &group_layout_apply_coeff.layout],
+            label: Some("Pressure Solve Apply Coeff Pipeline Layout"),
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_general.layout,
+                &group_layout_apply_coeff.layout,
+            ],
             push_constant_ranges,
         }));
         let layout_pressure_solve_reduce = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("HybridFluid, Pressure Solve Reduce Pipeline Layout"),
+            label: Some("Pressure Solve Reduce Pipeline Layout"),
             bind_group_layouts: &[
                 per_frame_bind_group_layout,
-                &group_layout_read_macgrid,
+                &group_layout_general.layout,
                 &group_layout_pressure_solve_reduce.layout,
             ],
             push_constant_ranges,
@@ -181,15 +190,18 @@ impl PressureSolver {
         let volume_pcg_auxiliary_temp_view = volume_pcg_auxiliary_temp.create_view(&Default::default());
         let volume_pcg_search_view = volume_pcg_search.create_view(&Default::default());
 
-        let bind_group_pressure_compute_divergence = BindGroupBuilder::new(&group_layout_pressure_solve_init)
+        let bind_group_general = BindGroupBuilder::new(&group_layout_general)
+            .texture(&volume_marker_view)
+            .create(device, "BindGroup: Pressure Solve general");
+        let bind_group_init = BindGroupBuilder::new(&group_layout_pressure_solve_init)
             .texture(&volume_pcg_residual_view)
             .texture(&volume_pressure_from_velocity_view)
             .create(device, "BindGroup: Compute initial residual");
-        let bind_group_pressure_apply_coeff = BindGroupBuilder::new(&group_layout_apply_coeff)
+        let bind_group_apply_coeff = BindGroupBuilder::new(&group_layout_apply_coeff)
             .buffer(dotproduct_reduce_step_buffers[0].slice(..))
             .texture(&volume_pcg_search_view)
             .create(device, "BindGroup: Apply coeff matrix & start dot product");
-        let bind_group_pressure_preconditioner = [
+        let bind_group_preconditioner = [
             BindGroupBuilder::new(&group_layout_pressure_preconditioner)
                 .buffer(dotproduct_reduce_step_buffers[0].slice(..))
                 .texture(&volume_pcg_residual_view)
@@ -209,7 +221,7 @@ impl PressureSolver {
                 .texture(&volume_pcg_auxiliary_temp_view)
                 .create(device, "BindGroup: Preconditioner, Step 2, to search"),
         ];
-        let bind_group_pressure_dotproduct_reduce = [
+        let bind_group_dotproduct_reduce = [
             BindGroupBuilder::new(&group_layout_pressure_solve_reduce)
                 .buffer(dotproduct_reduce_step_buffers[0].slice(..))
                 .buffer(dotproduct_reduce_step_buffers[1].slice(..))
@@ -219,7 +231,7 @@ impl PressureSolver {
                 .buffer(dotproduct_reduce_step_buffers[0].slice(..))
                 .create(device, "BindGroup: Pressure Solve, Reduce 1"),
         ];
-        let bind_group_pressure_dotproduct_final = [
+        let bind_group_dotproduct_final = [
             BindGroupBuilder::new(&group_layout_pressure_solve_reduce)
                 .buffer(dotproduct_reduce_step_buffers[0].slice(..))
                 .buffer(dotproduct_reduce_result_buffer.slice(..))
@@ -230,13 +242,13 @@ impl PressureSolver {
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
         ];
 
-        let bind_group_pressure_update_pressure_and_residual = BindGroupBuilder::new(&group_layout_pressure_update_pressure_and_residual)
+        let bind_group_update_pressure_and_residual = BindGroupBuilder::new(&group_layout_pressure_update_pressure_and_residual)
             .texture(&volume_pressure_from_velocity_view)
             .texture(&volume_pcg_residual_view)
             .texture(&volume_pcg_search_view)
             .buffer(dotproduct_reduce_result_buffer.slice(..))
             .create(device, "BindGroup: Pressure update pressure and residual");
-        let bind_group_pressure_update_search = BindGroupBuilder::new(&group_layout_pressure_update_volume)
+        let bind_group_update_search = BindGroupBuilder::new(&group_layout_pressure_update_volume)
             .texture(&volume_pcg_search_view)
             .texture(&volume_pcg_auxiliary_view)
             .buffer(dotproduct_reduce_result_buffer.slice(..))
@@ -245,23 +257,21 @@ impl PressureSolver {
         PressureSolver {
             grid_dimension: grid_dimension,
 
-            bind_group_pressure_compute_divergence,
-            bind_group_pressure_preconditioner,
-            bind_group_pressure_apply_coeff,
-            bind_group_pressure_dotproduct_reduce,
-            bind_group_pressure_dotproduct_final,
-            bind_group_pressure_update_pressure_and_residual,
-            bind_group_pressure_update_search,
+            bind_group_general,
+            bind_group_init,
+            bind_group_preconditioner,
+            bind_group_apply_coeff,
+            bind_group_dotproduct_reduce,
+            bind_group_dotproduct_final,
+            bind_group_update_pressure_and_residual,
+            bind_group_update_search,
 
-            pipeline_pressure_compute_divergence: pipeline_manager.create_compute_pipeline(
+            pipeline_init: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(
-                    layout_pressure_solve_init.clone(),
-                    Path::new("simulation/pressure_compute_divergence.comp"),
-                ),
+                ComputePipelineCreationDesc::new(layout_pressure_solve_init.clone(), Path::new("simulation/pressure_init.comp")),
             ),
-            pipeline_pressure_apply_preconditioner: pipeline_manager.create_compute_pipeline(
+            pipeline_apply_preconditioner: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
@@ -269,17 +279,17 @@ impl PressureSolver {
                     Path::new("simulation/pressure_apply_preconditioner.comp"),
                 ),
             ),
-            pipeline_pressure_reduce: pipeline_manager.create_compute_pipeline(
+            pipeline_reduce: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(layout_pressure_solve_reduce.clone(), Path::new("simulation/pressure_reduce.comp")),
             ),
-            pipeline_pressure_apply_coeff: pipeline_manager.create_compute_pipeline(
+            pipeline_apply_coeff: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(layout_pressure_apply_coeff.clone(), Path::new("simulation/pressure_apply_coeff.comp")),
             ),
-            pipeline_pressure_update_pressure_and_residual: pipeline_manager.create_compute_pipeline(
+            pipeline_update_pressure_and_residual: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
@@ -287,13 +297,14 @@ impl PressureSolver {
                     Path::new("simulation/pressure_update_pressure_and_residual.comp"),
                 ),
             ),
-            pipeline_pressure_update_search: pipeline_manager.create_compute_pipeline(
+            pipeline_update_search: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(layout_pressure_update_volume.clone(), Path::new("simulation/pressure_update_search.comp")),
             ),
 
             volume_pressure_view: volume_pressure_from_velocity_view,
+            volume_pcg_residual_view,
 
             is_first_step: Cell::new(true),
         }
@@ -303,13 +314,17 @@ impl PressureSolver {
         &self.volume_pressure_view
     }
 
+    pub fn residual_view(&self) -> &wgpu::TextureView {
+        &self.volume_pcg_residual_view
+    }
+
     fn reduce_add<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, result_mode: u32) {
         // reduce.
         let mut source_buffer_index = 0;
-        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_reduce));
+        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_reduce));
         let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
         while num_entries_remaining > Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP {
-            cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_reduce[source_buffer_index], &[]);
+            cpass.set_bind_group(2, &self.bind_group_dotproduct_reduce[source_buffer_index], &[]);
             cpass.set_push_constants(0, &[Self::DOTPRODUCT_RESULTMODE_REDUCE, num_entries_remaining]);
             cpass.dispatch(
                 wgpu_utils::compute_group_size_1d(
@@ -323,7 +338,7 @@ impl PressureSolver {
             num_entries_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP;
         }
         // final
-        cpass.set_bind_group(2, &self.bind_group_pressure_dotproduct_final[source_buffer_index], &[]);
+        cpass.set_bind_group(2, &self.bind_group_dotproduct_final[source_buffer_index], &[]);
         cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
         cpass.dispatch(
             wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
@@ -335,23 +350,27 @@ impl PressureSolver {
     pub fn solve<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager) {
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_VOLUME);
 
-        // Compute divergence (b) and the initial residual field (r)
+        cpass.set_bind_group(1, &self.bind_group_general, &[]);
+
+        // For optimization various steps are collapsed as far as possible to avoid expensive buffer/texture read/writes
+        // This makes the algorithm a lot faster but also a bit harder to read.
+
         // We use pressure from last frame, but set explicitly set all pressure values to zero wherever there is not fluid right now.
         // This is done in order to prevent having results from many frames ago influence results for upcoming frames.
         // In first step overall we instruct to use a fresh pressure buffer.
-        const DIVERGENCE_FIRST_STEP: u32 = 0;
-        const DIVERGENCE_NOT_FIRST_STEP: u32 = 1;
-        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_compute_divergence));
+        const FIRST_STEP: u32 = 0;
+        const NOT_FIRST_STEP: u32 = 1;
+        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_init));
         // Clear pressures on first step.
         // wgpu-rs doesn't zero initialize yet (bug/missing feature impl)
         // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
         // https://github.com/gfx-rs/wgpu/issues/563
         if self.is_first_step.get() {
-            cpass.set_push_constants(0, &[DIVERGENCE_FIRST_STEP]);
+            cpass.set_push_constants(0, &[FIRST_STEP]);
         } else {
-            cpass.set_push_constants(0, &[DIVERGENCE_NOT_FIRST_STEP]);
+            cpass.set_push_constants(0, &[NOT_FIRST_STEP]);
         }
-        cpass.set_bind_group(2, &self.bind_group_pressure_compute_divergence, &[]);
+        cpass.set_bind_group(2, &self.bind_group_init, &[]);
         cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
         // Apply preconditioner on (r), store result to search vector (s) and start dotproduct of <s; r>
@@ -359,13 +378,13 @@ impl PressureSolver {
         const PRECONDITIONER_PASS0: u32 = 0;
         const PRECONDITIONER_PASS1: u32 = 1;
         const PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO: u32 = 3;
-        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
+        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
         cpass.set_push_constants(0, &[0]);
         cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
-        cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[0], &[]);
+        cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
         cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         cpass.set_push_constants(0, &[PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO]);
-        cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[2], &[]);
+        cpass.set_bind_group(2, &self.bind_group_preconditioner[2], &[]);
         cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         // Init sigma to dotproduct of search vector (s) and residual (r)
         self.reduce_add(cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_INIT);
@@ -376,40 +395,40 @@ impl PressureSolver {
         loop {
             // Apply cell relationships to search vector (i.e. multiply s with A)
             // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s), i.e. compute <s; As>
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_coeff));
-            cpass.set_bind_group(2, &self.bind_group_pressure_apply_coeff, &[]);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_coeff));
+            cpass.set_bind_group(2, &self.bind_group_apply_coeff, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             // finish dotproduct of auxiliary field (z) and search field (s)
             self.reduce_add(cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_ALPHA);
 
             // update pressure field (p) and residual field (r)
             const PRUPDATE_LAST_ITERATION: u32 = 1;
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_update_pressure_and_residual));
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
             if i == NUM_ITERATIONS {
                 cpass.set_push_constants(0, &[PRUPDATE_LAST_ITERATION]);
             } else {
                 cpass.set_push_constants(0, &[0]);
             }
-            cpass.set_bind_group(2, &self.bind_group_pressure_update_pressure_and_residual, &[]);
+            cpass.set_bind_group(2, &self.bind_group_update_pressure_and_residual, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             if i == NUM_ITERATIONS {
                 break;
             }
 
             // Apply preconditioner on (r), store result to auxillary (z) and start dotproduct of <z; r>
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_apply_preconditioner));
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
             cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
-            cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[0], &[]);
+            cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             cpass.set_push_constants(0, &[PRECONDITIONER_PASS1]);
-            cpass.set_bind_group(2, &self.bind_group_pressure_preconditioner[1], &[]);
+            cpass.set_bind_group(2, &self.bind_group_preconditioner[1], &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             // finish dotproduct of auxiliary field (z) and residual field (r)
             self.reduce_add(cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_BETA);
 
             // Update search vector
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_pressure_update_search));
-            cpass.set_bind_group(2, &self.bind_group_pressure_update_search, &[]);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_search));
+            cpass.set_bind_group(2, &self.bind_group_update_search, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             i += 1;
