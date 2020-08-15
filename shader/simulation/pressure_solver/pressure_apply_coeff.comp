@@ -4,8 +4,8 @@
 
 #include "pressure.glsl"
 
-layout(set = 1, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
-layout(set = 1, binding = 1) uniform texture3D Search;
+layout(set = 2, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
+layout(set = 2, binding = 1) uniform texture3D Search;
 
 COMPUTE_PASS_VOLUME
 

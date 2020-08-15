@@ -9,8 +9,8 @@
 
 #define LOCAL_SIZE 1024
 
-layout(set = 1, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
-layout(set = 1, binding = 1) buffer restrict DotProductDest_ { float DotProductDest[]; };
+layout(set = 2, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
+layout(set = 2, binding = 1) buffer restrict DotProductDest_ { float DotProductDest[]; };
 
 // Result mode:
 const uint DOTPRODUCT_RESULTMODE_REDUCE = 0;

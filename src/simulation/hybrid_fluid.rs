@@ -1,4 +1,4 @@
-use super::pressure_solver::PressureSolver;
+use super::pressure_solver::*;
 use crate::wgpu_utils;
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::binding_glsl;
@@ -21,6 +21,7 @@ pub struct HybridFluid {
     grid_dimension: wgpu::Extent3d,
 
     pressure_solver: PressureSolver,
+    pressure_field_from_velocity: PressureField,
 
     particles_position_llindex: wgpu::Buffer,
     particles_velocity_x: wgpu::Buffer,
@@ -189,6 +190,7 @@ impl HybridFluid {
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
 
         let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);
+        let pressure_field_from_velocity = PressureField::new("from velocity", device, grid_dimension, &pressure_solver);
 
         // Bind groups.
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
@@ -230,7 +232,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
-            .texture(pressure_solver.pressure_view())
+            .texture(pressure_field_from_velocity.pressure_view())
             .create(device, "BindGroup: Write to Velocity Grid");
         let bind_group_advect_particles = BindGroupBuilder::new(&group_layout_advect_particles)
             .texture(&volume_velocity_view_x)
@@ -258,7 +260,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
-            .texture(&pressure_solver.pressure_view())
+            .texture(&pressure_field_from_velocity.pressure_view())
             .texture(&volume_density_view)
             .create(device, "BindGroup: Fluid Renderers");
 
@@ -315,6 +317,7 @@ impl HybridFluid {
             grid_dimension,
 
             pressure_solver,
+            pressure_field_from_velocity,
 
             particles_position_llindex,
             particles_velocity_x,
@@ -550,7 +553,8 @@ impl HybridFluid {
         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_compute));
         cpass.set_bind_group(1, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
         cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-        self.pressure_solver.solve(&mut cpass, pipeline_manager);
+        self.pressure_solver
+            .solve(&self.pressure_field_from_velocity, &mut cpass, pipeline_manager);
 
         // Pressure solver messes up "global" bindings.
         cpass.set_bind_group(0, per_frame_bind_group, &[]);
