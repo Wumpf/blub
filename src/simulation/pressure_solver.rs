@@ -119,11 +119,6 @@ impl PressureSolver {
             .next_binding_compute(binding_glsl::texture3D())
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Pressure solver generic volume update");
-        let group_layout_update_pressure_and_residual = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
-            .next_binding_compute(binding_glsl::texture3D())
-            .next_binding_compute(binding_glsl::uniform())
-            .create(device, "BindGroupLayout: Pressure solver update pressure and residual");
 
         // Use same push constant range for all pipelines to improve internal Vulkan pipeline compatibility.
         let push_constant_ranges = &[wgpu::PushConstantRange {
@@ -146,15 +141,6 @@ impl PressureSolver {
                 &group_layout_general.layout,
                 &group_layout_pressure.layout,
                 &group_layout_preconditioner.layout,
-            ],
-            push_constant_ranges,
-        }));
-        let layout_update_pressure_and_residual = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Pressure Solve Update P&R Pipeline Layout"),
-            bind_group_layouts: &[
-                &group_layout_general.layout,
-                &group_layout_pressure.layout,
-                &group_layout_update_pressure_and_residual.layout,
             ],
             push_constant_ranges,
         }));
@@ -278,7 +264,7 @@ impl PressureSolver {
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
         ];
 
-        let bind_group_update_pressure_and_residual = BindGroupBuilder::new(&group_layout_update_pressure_and_residual)
+        let bind_group_update_pressure_and_residual = BindGroupBuilder::new(&group_layout_update_volume)
             .texture(&volume_residual_view)
             .texture(&volume_search_view)
             .buffer(dotproduct_reduce_result_buffer.slice(..))
@@ -330,7 +316,7 @@ impl PressureSolver {
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
-                    layout_update_pressure_and_residual.clone(),
+                    layout_update_volume.clone(),
                     &shader_path.join(&Path::new("pressure_update_pressure_and_residual.comp")),
                 ),
             ),
