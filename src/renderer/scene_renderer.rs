@@ -3,9 +3,9 @@ use super::screenspace_fluid::ScreenSpaceFluid;
 use super::static_line_renderer::{LineVertex, StaticLineRenderer};
 use super::volume_renderer::{VolumeRenderer, VolumeVisualizationMode};
 use crate::{
-    hybrid_fluid::HybridFluid,
     render_output::hdr_backbuffer::HdrBackbuffer,
     scene::Scene,
+    simulation::HybridFluid,
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
 use cgmath::EuclideanSpace;

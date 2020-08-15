@@ -1,12 +1,14 @@
-use crate::hybrid_fluid::*;
 use crate::render_output::hdr_backbuffer::HdrBackbuffer;
 use crate::render_output::screen::Screen;
 use crate::wgpu_utils::pipelines::*;
-use crate::wgpu_utils::{
-    self,
-    binding_builder::{BindGroupBuilder, BindGroupLayoutBuilder, BindGroupLayoutWithDesc},
-    binding_glsl,
-    shader::*,
+use crate::{
+    simulation::HybridFluid,
+    wgpu_utils::{
+        self,
+        binding_builder::{BindGroupBuilder, BindGroupLayoutBuilder, BindGroupLayoutWithDesc},
+        binding_glsl,
+        shader::*,
+    },
 };
 use std::path::{Path, PathBuf};
 use std::rc::Rc;

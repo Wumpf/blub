@@ -7,11 +7,11 @@ extern crate strum_macros;
 
 mod camera;
 mod gui;
-mod hybrid_fluid;
 mod per_frame_resources;
 mod render_output;
 mod renderer;
 mod scene;
+mod simulation;
 mod simulation_controller;
 mod timer;
 mod wgpu_utils;

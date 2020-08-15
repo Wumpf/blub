@@ -1,5 +1,7 @@
-use crate::hybrid_fluid::HybridFluid;
-use crate::wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory};
+use crate::{
+    simulation::HybridFluid,
+    wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
+};
 
 use serde::Deserialize;
 use std::{

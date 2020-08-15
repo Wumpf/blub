@@ -1,7 +1,7 @@
-use crate::hybrid_fluid::*;
 use crate::wgpu_utils::pipelines::*;
 use crate::{
     render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen},
+    simulation::HybridFluid,
     wgpu_utils::shader::*,
 };
 use std::{path::Path, rc::Rc};
