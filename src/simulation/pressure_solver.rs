@@ -59,7 +59,7 @@ impl PressureSolver {
         let group_layout_apply_coeff = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
             .next_binding_compute(binding_glsl::texture3D())
-            .create(device, "BindGroupLayout: Pressure solver apply coeff matrix & start dot product");
+            .create(device, "BindGroupLayout: P. solver apply coeff matrix & start dot");
         let group_layout_pressure_solve_reduce = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(true)) // source
             .next_binding_compute(binding_glsl::buffer(false)) // dest
@@ -157,9 +157,12 @@ impl PressureSolver {
         };
 
         let volume_pressure_from_velocity = device.create_texture(&create_volume_texture_desc("Pressure Volume", wgpu::TextureFormat::R32Float)); // Previous frame is required for this one!
-        let volume_pcg_residual = device.create_texture(&create_volume_texture_desc("PCG Solve Residual", wgpu::TextureFormat::R32Float));
-        let volume_pcg_auxiliary = device.create_texture(&create_volume_texture_desc("PCG Solve Auxiliary", wgpu::TextureFormat::R32Float));
-        let volume_pcg_auxiliary_temp = device.create_texture(&create_volume_texture_desc("PCG Solve Auxiliary Temp", wgpu::TextureFormat::R32Float));
+        let volume_pcg_residual = device.create_texture(&create_volume_texture_desc("Pressure Solve Residual", wgpu::TextureFormat::R32Float));
+        let volume_pcg_auxiliary = device.create_texture(&create_volume_texture_desc("Pressure Solve Auxiliary", wgpu::TextureFormat::R32Float));
+        let volume_pcg_auxiliary_temp = device.create_texture(&create_volume_texture_desc(
+            "Pressure Solve Auxiliary Temp",
+            wgpu::TextureFormat::R32Float,
+        ));
         let volume_pcg_search = device.create_texture(&create_volume_texture_desc("Pressure Solve Search", wgpu::TextureFormat::R32Float));
 
         let num_cells = (grid_dimension.width * grid_dimension.height * grid_dimension.depth) as u64;
@@ -254,6 +257,8 @@ impl PressureSolver {
             .buffer(dotproduct_reduce_result_buffer.slice(..))
             .create(device, "BindGroup: Pressure update search");
 
+        let shader_path = Path::new("simulation/pressure_solver");
+
         PressureSolver {
             grid_dimension: grid_dimension,
 
@@ -269,38 +274,47 @@ impl PressureSolver {
             pipeline_init: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_pressure_solve_init.clone(), Path::new("simulation/pressure_init.comp")),
+                ComputePipelineCreationDesc::new(layout_pressure_solve_init.clone(), &shader_path.join(Path::new("pressure_init.comp"))),
             ),
             pipeline_apply_preconditioner: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     layout_pressure_preconditioner.clone(),
-                    Path::new("simulation/pressure_apply_preconditioner.comp"),
+                    &shader_path.join(&Path::new("pressure_apply_preconditioner.comp")),
                 ),
             ),
             pipeline_reduce: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_pressure_solve_reduce.clone(), Path::new("simulation/pressure_reduce.comp")),
+                ComputePipelineCreationDesc::new(
+                    layout_pressure_solve_reduce.clone(),
+                    &shader_path.join(&Path::new("pressure_reduce.comp")),
+                ),
             ),
             pipeline_apply_coeff: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_pressure_apply_coeff.clone(), Path::new("simulation/pressure_apply_coeff.comp")),
+                ComputePipelineCreationDesc::new(
+                    layout_pressure_apply_coeff.clone(),
+                    &shader_path.join(&Path::new("pressure_apply_coeff.comp")),
+                ),
             ),
             pipeline_update_pressure_and_residual: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     layout_pressure_update_pressure_and_residual.clone(),
-                    Path::new("simulation/pressure_update_pressure_and_residual.comp"),
+                    &shader_path.join(&Path::new("pressure_update_pressure_and_residual.comp")),
                 ),
             ),
             pipeline_update_search: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_pressure_update_volume.clone(), Path::new("simulation/pressure_update_search.comp")),
+                ComputePipelineCreationDesc::new(
+                    layout_pressure_update_volume.clone(),
+                    &shader_path.join(&Path::new("pressure_update_search.comp")),
+                ),
             ),
 
             volume_pressure_view: volume_pressure_from_velocity_view,

@@ -34,7 +34,6 @@ pub struct HybridFluid {
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
     bind_group_divergence_compute: wgpu::BindGroup,
     bind_group_write_velocity: wgpu::BindGroup,
-    bind_group_read_mac_grid: wgpu::BindGroup,
     bind_group_advect_particles: wgpu::BindGroup,
     bind_group_density_projection_gather_error: wgpu::BindGroup,
 
@@ -181,12 +180,6 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
             .create(device, "BindGroupLayout: Advect to Particles");
-        let group_layout_read_macgrid = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::texture3D()) // velocityX
-            .next_binding_compute(binding_glsl::texture3D()) // velocityY
-            .next_binding_compute(binding_glsl::texture3D()) // velocityZ
-            .next_binding_compute(binding_glsl::texture3D()) // marker volume
-            .create(device, "BindGroupLayout: Read MAC Grid");
 
         let group_layout_density_projection_gather_error = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
@@ -257,12 +250,6 @@ impl HybridFluid {
             .buffer(particles_velocity_y.slice(..))
             .buffer(particles_velocity_z.slice(..))
             .create(device, "BindGroup: Write to Particles");
-        let bind_group_read_mac_grid = BindGroupBuilder::new(&group_layout_read_macgrid)
-            .texture(&volume_velocity_view_x)
-            .texture(&volume_velocity_view_y)
-            .texture(&volume_velocity_view_z)
-            .texture(&volume_marker_view)
-            .create(device, "BindGroup: Read MAC Grid");
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .buffer(particles_position_llindex.slice(..))
             .texture(&volume_linked_lists_view)
@@ -352,8 +339,6 @@ impl HybridFluid {
             bind_group_divergence_compute,
             bind_group_write_velocity,
             bind_group_advect_particles,
-
-            bind_group_read_mac_grid,
             bind_group_renderer,
 
             bind_group_density_projection_gather_error,
