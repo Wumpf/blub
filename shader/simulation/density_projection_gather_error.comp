@@ -95,9 +95,20 @@ void main() {
 
     if (!threadWritesFluid)
         return;
-    // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
-    // To further simplify we set the volume of a cell and the mass of a single particle to 1.
+
+    // To simplify we set the volume of a cell and the mass of a single particle to 1.
     // Our normal density is defined by 8 evenly distributed particles in a cell. Therefore the normal density is defines as 8!
-    float densityError = 8.0 - density;
+    const float density0 = 8.0;
+
+    // Clamp too low pressure at the borders of the fluid to work around fluid deficiency
+    if (marker == CELL_AIR || imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).r == CELL_AIR ||
+        imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).r == CELL_AIR ||
+        imageLoad(MarkerVolume, gridCoord - ivec3(1, 0, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord - ivec3(0, 1, 0)).r == CELL_AIR ||
+        imageLoad(MarkerVolume, gridCoord - ivec3(0, 0, 1)).r == CELL_AIR)
+        density = max(density0, density);
+    // TODO: Handle solid cells.
+
+    // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
+    float densityError = density0 - density; // TODO: Clamping as suggested in the paper?
     imageStore(DensityVolume, gridCoord, densityError.xxxx);
 }
