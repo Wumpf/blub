@@ -16,8 +16,8 @@ layout(location = 3) out float out_Radius;
 layout(push_constant) uniform PushConstants { uint VisualizationType; };
 
 #define VISUALIZE_DIVERGENCE 0
-#define VISUALIZE_PRESSURE 1
-#define VISUALIZE_DENSITY_ERROR 2
+#define VISUALIZE_PRESSURE_VELOCITY 1
+#define VISUALIZE_PRESSURE_DENSITY 2
 #define VISUALIZE_MARKER 3
 
 float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, float oppositeWallType, const uint component) {
@@ -53,16 +53,16 @@ void main() {
         out_Tint = colormapCoolToWarm(scale);
         break;
 
-    case VISUALIZE_PRESSURE:
-        float pressure = marker == CELL_FLUID ? texelFetch(PressureVolume, volumeCoordinate, 0).x : 0.0;
-        scale = saturate(pressure * pressure * Rendering.FluidGridToWorldScale * 0.01);
+    case VISUALIZE_PRESSURE_VELOCITY:
+        float pressureV = marker == CELL_FLUID ? texelFetch(PressureVolume_Velocity, volumeCoordinate, 0).x : 0.0;
+        scale = saturate(pressureV * pressureV * Rendering.FluidGridToWorldScale * 0.01);
         out_Tint = colormapHeat(scale).grb;
         break;
 
-    case VISUALIZE_DENSITY_ERROR:
-        float densityError = marker == CELL_FLUID ? texelFetch(DensityErrorVolume, volumeCoordinate, 0).x : 0.0;
-        scale = densityError / 8.0;
-        out_Tint = colormapCoolToWarm(-scale);
+    case VISUALIZE_PRESSURE_DENSITY:
+        float pressureD = marker == CELL_FLUID ? texelFetch(PressureVolume_Density, volumeCoordinate, 0).x : 0.0;
+        scale = saturate(pressureD * pressureD * Rendering.FluidGridToWorldScale * 0.01);
+        out_Tint = colormapHeat(scale).grb;
         break;
 
     case VISUALIZE_MARKER:

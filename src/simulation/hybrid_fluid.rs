@@ -22,6 +22,7 @@ pub struct HybridFluid {
 
     pressure_solver: PressureSolver,
     pressure_field_from_velocity: PressureField,
+    pressure_field_from_density: PressureField,
 
     particles_position_llindex: wgpu::Buffer,
     particles_velocity_x: wgpu::Buffer,
@@ -135,15 +136,12 @@ impl HybridFluid {
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
 
-        let volume_density = device.create_texture(&create_volume_texture_desc("Density Volume", wgpu::TextureFormat::R32Float));
-
         // Resource views
         let volume_velocity_view_x = volume_velocity_x.create_view(&Default::default());
         let volume_velocity_view_y = volume_velocity_y.create_view(&Default::default());
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
         let volume_marker_view = volume_marker.create_view(&Default::default());
-        let volume_density_view = volume_density.create_view(&Default::default());
 
         // Layouts
         let group_layout_uniform = BindGroupLayoutBuilder::new()
@@ -191,6 +189,7 @@ impl HybridFluid {
 
         let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);
         let pressure_field_from_velocity = PressureField::new("from velocity", device, grid_dimension, &pressure_solver);
+        let pressure_field_from_density = PressureField::new("from density", device, grid_dimension, &pressure_solver);
 
         // Bind groups.
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
@@ -249,7 +248,7 @@ impl HybridFluid {
             .buffer(particles_position_llindex.slice(..))
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_view)
-            .texture(&volume_density_view)
+            .texture(&pressure_solver.residual_view())
             .create(device, "BindGroup: Density projection gather");
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(particles_position_llindex.slice(..))
@@ -261,7 +260,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_view)
             .texture(&pressure_field_from_velocity.pressure_view())
-            .texture(&volume_density_view)
+            .texture(&pressure_field_from_density.pressure_view())
             .create(device, "BindGroup: Fluid Renderers");
 
         // pipeline layouts.
@@ -318,6 +317,7 @@ impl HybridFluid {
 
             pressure_solver,
             pressure_field_from_velocity,
+            pressure_field_from_density,
 
             particles_position_llindex,
             particles_velocity_x,

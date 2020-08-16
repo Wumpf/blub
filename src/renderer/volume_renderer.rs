@@ -11,8 +11,8 @@ pub enum VolumeVisualizationMode {
     None,
     Velocity,
     DivergenceError,
-    PseudoPressure,
-    UncorrectedDensityError,
+    PressureFromVelocity,
+    PressureFromDensity,
     Marker,
 }
 
@@ -88,8 +88,8 @@ impl VolumeRenderer {
                 rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
                 match mode {
                     VolumeVisualizationMode::DivergenceError => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[0]),
-                    VolumeVisualizationMode::PseudoPressure => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[1]),
-                    VolumeVisualizationMode::UncorrectedDensityError => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[2]),
+                    VolumeVisualizationMode::PressureFromVelocity => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[1]),
+                    VolumeVisualizationMode::PressureFromDensity => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[2]),
                     VolumeVisualizationMode::Marker => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[3]),
                     _ => {}
                 };
