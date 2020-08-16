@@ -60,11 +60,8 @@ void main() {
         break;
 
     case VISUALIZE_PRESSURE_DENSITY:
-        // float densityError = marker == CELL_FLUID ? texelFetch(PressureVolume_Density, volumeCoordinate, 0).x : 0.0;
-        // scale = densityError / 8.0;
-        // out_Tint = colormapCoolToWarm(-scale);
         float pressureD = marker == CELL_FLUID ? texelFetch(PressureVolume_Density, volumeCoordinate, 0).x : 0.0;
-        scale = saturate(pressureD * pressureD * Rendering.FluidGridToWorldScale * 0.01);
+        scale = saturate(pressureD * pressureD * Rendering.FluidGridToWorldScale);
         out_Tint = colormapHeat(scale).grb;
         break;
 

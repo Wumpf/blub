@@ -102,7 +102,7 @@ void main() {
     vec3 totalMovement = Time.SimulationDelta * (1.0 / 6.0) * (k1 + 2.0 * (k2 + k3) + k4);
     // vec3 totalMovement = newVelocity * Time.SimulationDelta; // Euler integration
 
-    // Enforce boundary.
+    // Enforce boundary. TODO: Implement push boundaries as described by Implicit Density Projection paper?
     // Moving particle back a bit resulted in a lot of sticky particles that are hard to get rid of.
     // vec3 clampedMovement = clamp(originalPosition + totalMovement, boundaryMin, boundaryMax) - originalPosition;
     // vec3 clampRatio = clampedMovement / totalMovement;

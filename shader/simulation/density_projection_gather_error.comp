@@ -101,12 +101,13 @@ void main() {
     const float density0 = 8.0;
 
     // Clamp too low pressure at the borders of the fluid to work around fluid deficiency
-    if (marker == CELL_AIR || imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).r == CELL_AIR ||
-        imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).r == CELL_AIR ||
-        imageLoad(MarkerVolume, gridCoord - ivec3(1, 0, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord - ivec3(0, 1, 0)).r == CELL_AIR ||
-        imageLoad(MarkerVolume, gridCoord - ivec3(0, 0, 1)).r == CELL_AIR)
+    // TODO: Is this neighborhood check enough (diagonals missing)? This is unstable due to our write behavior!
+    if (imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).r == CELL_AIR ||
+        imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord - ivec3(1, 0, 0)).r == CELL_AIR ||
+        imageLoad(MarkerVolume, gridCoord - ivec3(0, 1, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord - ivec3(0, 0, 1)).r == CELL_AIR)
         density = max(density0, density);
-    // TODO: Handle solid cells.
+    // TODO: Handle solid cells. Idea: look at all the neighbors (including diags) and for every SOLID cell compute how much particles in there would
+    // add mass to this sample (there's only two types: direct and diagonal neighbor)
 
     // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
     float densityError = density0 - density; // TODO: Clamping as suggested in the paper?

@@ -38,6 +38,7 @@ pub struct HybridFluid {
     bind_group_write_velocity: wgpu::BindGroup,
     bind_group_advect_particles: wgpu::BindGroup,
     bind_group_density_projection_gather_error: wgpu::BindGroup,
+    bind_group_density_projection_correct_particles: wgpu::BindGroup,
 
     // The interface to any renderer of the fluid. Readonly access to relevant resources
     bind_group_renderer: wgpu::BindGroup,
@@ -50,6 +51,7 @@ pub struct HybridFluid {
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_advect_particles: ComputePipelineHandle,
     pipeline_density_projection_gather_error: ComputePipelineHandle,
+    pipeline_density_projection_correct_particles: ComputePipelineHandle,
 
     max_num_particles: u32,
 }
@@ -185,7 +187,12 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::utexture3D()) // linkedlist_volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R8Snorm, false)) // marker volume
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // density volume
-            .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
+            .create(device, "BindGroupLayout: Compute density error");
+        let group_layout_density_projection_correct_particles = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
+            .next_binding_compute(binding_glsl::texture3D()) // marker volume
+            .next_binding_compute(binding_glsl::texture3D()) // pressure from density
+            .create(device, "BindGroupLayout: Correct density error");
 
         let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);
         let pressure_field_from_velocity = PressureField::new("from velocity", device, grid_dimension, &pressure_solver);
@@ -250,6 +257,12 @@ impl HybridFluid {
             .texture(&volume_marker_view)
             .texture(&pressure_solver.residual_view())
             .create(device, "BindGroup: Density projection gather");
+        let bind_group_density_projection_correct_particles = BindGroupBuilder::new(&group_layout_density_projection_correct_particles)
+            .buffer(particles_position_llindex.slice(..))
+            .texture(&volume_marker_view)
+            .texture(&pressure_field_from_density.pressure_view())
+            .create(device, "BindGroup: Density projection gather");
+
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .buffer(particles_position_llindex.slice(..))
             .buffer(particles_velocity_x.slice(..))
@@ -311,6 +324,15 @@ impl HybridFluid {
             ],
             push_constant_ranges,
         }));
+        let layout_density_projection_correct_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("PipelineLayout: HybridFluid, Density Projection Gather"),
+            bind_group_layouts: &[
+                per_frame_bind_group_layout,
+                &group_layout_uniform.layout,
+                &group_layout_density_projection_correct_particles.layout,
+            ],
+            push_constant_ranges,
+        }));
 
         HybridFluid {
             grid_dimension,
@@ -338,6 +360,7 @@ impl HybridFluid {
             bind_group_renderer,
 
             bind_group_density_projection_gather_error,
+            bind_group_density_projection_correct_particles,
 
             pipeline_transfer_clear: pipeline_manager.create_compute_pipeline(
                 device,
@@ -381,6 +404,14 @@ impl HybridFluid {
                 ComputePipelineCreationDesc::new(
                     layout_density_projection_gather_error.clone(),
                     Path::new("simulation/density_projection_gather_error.comp"),
+                ),
+            ),
+            pipeline_density_projection_correct_particles: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(
+                    layout_density_projection_correct_particles.clone(),
+                    Path::new("simulation/density_projection_correct_particles.comp"),
                 ),
             ),
 
@@ -549,16 +580,20 @@ impl HybridFluid {
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             }
         }
-        // Compute divergence & solve for pressure
-        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_compute));
-        cpass.set_bind_group(1, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
-        cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-        self.pressure_solver
-            .solve(&self.pressure_field_from_velocity, &mut cpass, pipeline_manager);
-
-        // Pressure solver messes up "global" bindings.
-        cpass.set_bind_group(0, per_frame_bind_group, &[]);
-        cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
+        {
+            // Compute divergence
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_compute));
+            cpass.set_bind_group(1, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+        }
+        {
+            // Solve for pressure
+            self.pressure_solver
+                .solve(&self.pressure_field_from_velocity, &mut cpass, pipeline_manager);
+            // Pressure solver messes up "global" bindings.
+            cpass.set_bind_group(0, per_frame_bind_group, &[]);
+            cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
+        }
         {
             cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);
 
@@ -587,10 +622,24 @@ impl HybridFluid {
             cpass.dispatch(particle_work_groups, 1, 1);
         }
         {
-            // Compute density grid by another gather pass
+            // Compute density error by another gather pass
             cpass.set_bind_group(2, &self.bind_group_density_projection_gather_error, &[]);
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather_error));
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+        }
+        {
+            // Compute pressure from density error.
+            self.pressure_solver
+                .solve(&self.pressure_field_from_density, &mut cpass, pipeline_manager);
+            // Pressure solver messes up "global" bindings.
+            cpass.set_bind_group(0, per_frame_bind_group, &[]);
+            cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
+        }
+        {
+            // Correct density error.
+            cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_correct_particles));
+            cpass.dispatch(particle_work_groups, 1, 1);
         }
     }
 }

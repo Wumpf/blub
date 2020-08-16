@@ -1,0 +1,61 @@
+#version 450
+
+#include "../per_frame_resources.glsl"
+#include "../utilities.glsl"
+#include "hybrid_fluid.glsl"
+#include "particles.glsl"
+
+layout(set = 2, binding = 0) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
+layout(set = 2, binding = 1) uniform texture3D MarkerVolume;
+layout(set = 2, binding = 2) uniform texture3D PressureFromDensity;
+
+COMPUTE_PASS_PARTICLES
+
+float samplePressure(ivec3 position) {
+    // TODO: Extrapolate pass?
+    return texelFetch(PressureFromDensity, position, 0).r;
+}
+
+float interpolateBilinear(float p_00, float p_10, float p_01, float p_11, vec2 interpolants) {
+    return mix(mix(p_00, p_10, interpolants.x), mix(p_01, p_11, interpolants.x), interpolants.y);
+}
+
+void main() {
+    uint particleIndex = gl_GlobalInvocationID.x;
+    if (particleIndex >= NumParticles)
+        return;
+
+    vec3 gridSize = textureSize(PressureFromDensity, 0);
+    vec3 originalPosition = Particles[particleIndex].Position;
+    vec3 offsetPosition = originalPosition - vec3(0.5);
+
+    ivec3 volumeCoordMin = ivec3(max(vec3(0.0), offsetPosition));
+    ivec3 volumeCoordMax = min(volumeCoordMin + ivec3(1, 1, 1), ivec3(gridSize - ivec3(1)));
+
+    // Apply pressure directly
+    // Paper indicates that it computes the velocity changes on the grid and then applies it to the particles.
+    // Pro: The gradients are smoothly interpolated over the grid
+    // Con: Need first to update the entire staggered grid and then apply it to the particles again (which in turn is rather expensive!)
+
+    float p_000 = samplePressure(volumeCoordMin);
+    float p_100 = samplePressure(ivec3(volumeCoordMax.x, volumeCoordMin.yz));
+    float p_010 = samplePressure(ivec3(volumeCoordMin.x, volumeCoordMax.y, volumeCoordMin.z));
+    float p_110 = samplePressure(ivec3(volumeCoordMax.xy, volumeCoordMin.z));
+    float p_001 = samplePressure(ivec3(volumeCoordMin.xy, volumeCoordMax.z));
+    float p_101 = samplePressure(ivec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z));
+    float p_011 = samplePressure(ivec3(volumeCoordMin.x, volumeCoordMax.yz));
+    float p_111 = samplePressure(volumeCoordMax);
+
+    vec3 interpolants = fract(offsetPosition);
+    vec3 gradient =
+        vec3(interpolateBilinear(p_100, p_110, p_101, p_111, interpolants.yz) - interpolateBilinear(p_000, p_010, p_001, p_011, interpolants.yz),
+             interpolateBilinear(p_010, p_110, p_011, p_111, interpolants.xz) - interpolateBilinear(p_000, p_100, p_001, p_101, interpolants.xz),
+             interpolateBilinear(p_001, p_101, p_011, p_111, interpolants.xy) - interpolateBilinear(p_000, p_100, p_010, p_110, interpolants.xy));
+    vec3 totalMovement = Time.SimulationDelta * gradient;
+
+    // Enforce boundary. TODO: Implement push boundaries as described by Implicit Density Projection paper?
+    vec3 newPosition = clamp(originalPosition + totalMovement, vec3(1.0001), gridSize - vec3(0.0001));
+
+    // Write out corrected particle.
+    Particles[particleIndex].Position = newPosition;
+}
