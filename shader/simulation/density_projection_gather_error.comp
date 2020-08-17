@@ -92,14 +92,40 @@ void main() {
     // Our normal density is defined by 8 evenly distributed particles in a cell. Therefore the normal density is defines as 8!
     const float density0 = 8.0;
 
+    // Handle special neighbor situations.
+    // For simplicity & perf looking only at 6 direct neighbors.
+
+    // TODO: Can easily shared-mem optimize the marker. Also need to consider to put all this in a separate pass (might be faster)
+    float marker_px = imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).r;
+    float marker_py = imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).r;
+    float marker_pz = imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).r;
+    float marker_nx = imageLoad(MarkerVolume, gridCoord - ivec3(1, 0, 0)).r;
+    float marker_ny = imageLoad(MarkerVolume, gridCoord - ivec3(0, 1, 0)).r;
+    float marker_nz = imageLoad(MarkerVolume, gridCoord - ivec3(0, 0, 1)).r;
+
+    // Handle solid cells: Look at all the neighbors and for every SOLID cell compute how much particles in there would add mass to this sample.
+    // If there were particles in those solid cells (error) then the density gets too high, but that's a good thing since the gradient should work in
+    // our favor then!
+    // For equally filled out space with 8 particles per cell, the direct neighbors account for a weight of 3.375 (0.5625 for every cell)
+    // Middle cell makes 3.375 of the total weight, distributing the rest to 6 neighbors gives 0.77
+    const float solidNeighborContribution = 0.77; // 0.5625;
+    if (marker_px == CELL_SOLID)
+        density += solidNeighborContribution;
+    if (marker_py == CELL_SOLID)
+        density += solidNeighborContribution;
+    if (marker_pz == CELL_SOLID)
+        density += solidNeighborContribution;
+    if (marker_nx == CELL_SOLID)
+        density += solidNeighborContribution;
+    if (marker_ny == CELL_SOLID)
+        density += solidNeighborContribution;
+    if (marker_nz == CELL_SOLID)
+        density += solidNeighborContribution;
+
     // Clamp too low pressure at the borders of the fluid to work around fluid deficiency
-    // TODO: Is this neighborhood check enough (diagonals missing)? This is unstable due to our write behavior!
-    if (imageLoad(MarkerVolume, gridCoord + ivec3(1, 0, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord + ivec3(0, 1, 0)).r == CELL_AIR ||
-        imageLoad(MarkerVolume, gridCoord + ivec3(0, 0, 1)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord - ivec3(1, 0, 0)).r == CELL_AIR ||
-        imageLoad(MarkerVolume, gridCoord - ivec3(0, 1, 0)).r == CELL_AIR || imageLoad(MarkerVolume, gridCoord - ivec3(0, 0, 1)).r == CELL_AIR)
+    if (marker_px == CELL_AIR || marker_py == CELL_AIR || marker_pz == CELL_AIR || marker_nx == CELL_AIR || marker_ny == CELL_AIR ||
+        marker_nz == CELL_AIR)
         density = max(density0, density);
-    // TODO: Handle solid cells. Idea: look at all the neighbors (including diags) and for every SOLID cell compute how much particles in there would
-    // add mass to this sample (there's only two types: direct and diagonal neighbor)
 
     // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
     float densityError = density0 - density; // TODO: Clamping as suggested in the paper?

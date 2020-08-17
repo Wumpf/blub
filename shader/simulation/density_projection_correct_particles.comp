@@ -29,7 +29,9 @@ void main() {
     vec3 originalPosition = Particles[particleIndex].Position;
     vec3 offsetPosition = originalPosition - vec3(0.5);
 
-    ivec3 volumeCoordMin = ivec3(max(vec3(0.0), offsetPosition));
+    // Note that we clamp here to 1. We know that everything in the 0 boundary is solid and pressure was not extrapolated into this boundary
+    // (this is done for better handling of the staggered velocity grid but is a property that we need to hold up here.)
+    ivec3 volumeCoordMin = ivec3(max(vec3(1.0), offsetPosition));
     ivec3 volumeCoordMax = min(volumeCoordMin + ivec3(1, 1, 1), ivec3(gridSize - ivec3(1)));
 
     // Apply pressure directly

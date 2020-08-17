@@ -48,6 +48,7 @@ void main() {
         AccumulateNeighbors(gridCoord - ivec3(0, 0, 1), velocity, accumulatedWeight, 1.0);
 
         // diagonal neighbor cells. Need to do this or do a second pass, otherwise particles may still sample invalid velocities.
+        // TODO: Is it a problem that this actually leaves out some of the "diagonals"?
         const float diagonalWeight = 0.577; // 1 / distance = 1 / sqrt(3)
         AccumulateNeighbors(gridCoord + ivec3(1, 1, 1), velocity, accumulatedWeight, diagonalWeight);
         AccumulateNeighbors(gridCoord + ivec3(-1, 1, 1), velocity, accumulatedWeight, diagonalWeight);
