@@ -45,6 +45,7 @@ pub struct HybridFluid {
 
     pipeline_transfer_clear: ComputePipelineHandle,
     pipeline_transfer_build_linkedlist: ComputePipelineHandle,
+    pipeline_transfer_set_boundary_marker: ComputePipelineHandle,
     pipeline_transfer_gather_velocity: ComputePipelineHandle,
     pipeline_divergence_compute: ComputePipelineHandle,
     pipeline_divergence_remove: ComputePipelineHandle,
@@ -377,6 +378,14 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_gather_velocity.comp")),
             ),
+            pipeline_transfer_set_boundary_marker: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(
+                    layout_transfer_velocity.clone(),
+                    Path::new("simulation/transfer_set_boundary_marker.comp"),
+                ),
+            ),
             pipeline_divergence_compute: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
@@ -575,6 +584,12 @@ impl HybridFluid {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_build_linkedlist));
                 cpass.dispatch(particle_work_groups, 1, 1);
 
+                // Set boundary marker on first run
+                if i == 0 {
+                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
+                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                }
+
                 // Gather velocities in velocity grid and apply global forces.
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather_velocity));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
@@ -622,8 +637,14 @@ impl HybridFluid {
             cpass.dispatch(particle_work_groups, 1, 1);
         }
         {
+            // Set boundary marker
+            cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
+            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+        }
+        {
             // Compute density error by another gather pass
-            cpass.set_bind_group(2, &self.bind_group_density_projection_gather_error, &[]);
+            cpass.set_bind_group(2, &&self.bind_group_density_projection_gather_error, &[]);
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather_error));
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }

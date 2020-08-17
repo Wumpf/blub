@@ -42,14 +42,6 @@ void main() {
 
     float marker = imageLoad(MarkerVolume, gridCoord).r;
 
-    // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
-    // (top/right/front are marked implicitely and there are walls readily available!)
-    // CELL_SOLID for negative gridCoord.
-    if (any(equal(gridCoord, ivec3(0)))) {
-        marker = CELL_SOLID;
-        imageStore(MarkerVolume, gridCoord, marker.xxxx);
-    }
-
     bool isBorderThread = any(equal(gl_LocalInvocationID, uvec3(0)));
     bool threadWritesFluid = !isBorderThread && marker == CELL_FLUID;
 

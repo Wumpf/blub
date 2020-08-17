@@ -1,0 +1,14 @@
+// Sets boundary markers
+
+#version 460
+
+#include "transfer_bindings.glsl"
+
+COMPUTE_PASS_VOLUME
+
+void main() {
+    // TODO: Handle boundary marker from static and dynamic objects.
+    if (any(equal(gl_GlobalInvocationID, uvec3(0)))) {
+        imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_SOLID));
+    }
+}

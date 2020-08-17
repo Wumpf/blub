@@ -40,20 +40,8 @@ void main() {
     // TODO: Should/can we make it so that full warps are full of border threads? 🤔
     ivec3 gridCoord = ivec3(gl_WorkGroupID * (gl_WorkGroupSize - uvec3(1)) + gl_LocalInvocationID) - ivec3(1);
 
-    float marker = imageLoad(MarkerVolume, gridCoord).r;
-
-    // in order to define boundary *wall* velocities for the bottom/left/back boundary, we need to mark those cells as solid.
-    // (top/right/front are marked implicitely and there are walls readily available!)
-    if (VelocityTransferComponent == 0) {
-        // CELL_SOLID for negative gridCoord.
-        if (any(equal(gridCoord, ivec3(0)))) {
-            marker = CELL_SOLID;
-            imageStore(MarkerVolume, gridCoord, marker.xxxx);
-        }
-    }
-
     bool isBorderThread = any(equal(gl_LocalInvocationID, uvec3(0)));
-    bool threadWritesFluid = !isBorderThread && marker == CELL_FLUID;
+    bool threadWritesFluid = !isBorderThread && imageLoad(MarkerVolume, gridCoord).r == CELL_FLUID;
 
     vec3 staggeredVelocitySamplePosition = vec3(gridCoord) + vec3(0.5);
     staggeredVelocitySamplePosition[VelocityTransferComponent] += 0.5;
