@@ -37,9 +37,9 @@ Can be reloaded at runtime and will pick up any change
 
 To learn more about fluid simulation in general, check out [my Gist on CFD](https://gist.github.com/Wumpf/b3e953984de8b0efdf2c65e827a1ccc3) where I gathered a lot of resources on the topic.
 
-Implements currently APIC, [SIGGRAPH 2015, Jiang et al., The Affine Particle-In-Cell Method](https://www.math.ucla.edu/%7Ejteran/papers/JSSTS15.pdf).
+Implements APIC, [SIGGRAPH 2015, Jiang et al., The Affine Particle-In-Cell Method](https://www.math.ucla.edu/%7Ejteran/papers/JSSTS15.pdf) and [IEEE Transactions on Visualization and Computer Graphics 2019, Kugelstadt et al., Implicit Density Projection for Volume Conserving Liquids](https://animation.rwth-aachen.de/media/papers/66/2019-TVCG-ImplicitDensityProjection.pdf) on GPU
 
-Noted down a few interesting bits here.
+Noted down a few interesting implementation details here.
 
 ### Particle to Grid Transfer
 
