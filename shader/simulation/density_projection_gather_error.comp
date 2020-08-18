@@ -127,6 +127,9 @@ void main() {
         marker_nz == CELL_AIR)
         density = max(density0, density);
 
+    // Clamp density as suggested in paper to avoid displacement of more than one particle at a time
+    density = clamp(density, density0 * 0.5, density0 * 1.5);
+
     // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
     float densityError = density0 - density; // TODO: Clamping as suggested in the paper?
     imageStore(DensityVolume, gridCoord, densityError.xxxx);
