@@ -35,6 +35,7 @@ pub struct HybridFluid {
     bind_group_uniform: wgpu::BindGroup,
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
     bind_group_divergence_compute: wgpu::BindGroup,
+    bind_group_marker_rw: [wgpu::BindGroup; 2],
     bind_group_write_velocity: wgpu::BindGroup,
     bind_group_advect_particles: wgpu::BindGroup,
     bind_group_density_projection_gather_error: wgpu::BindGroup,
@@ -137,14 +138,16 @@ impl HybridFluid {
         let volume_velocity_y = device.create_texture(&create_volume_texture_desc("Velocity Volume Y", wgpu::TextureFormat::R32Float));
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
-        let volume_marker = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
+        let volume_marker_primary = device.create_texture(&create_volume_texture_desc("Marker Grid Primary", wgpu::TextureFormat::R8Snorm));
+        let volume_marker_secondary = device.create_texture(&create_volume_texture_desc("Marker Grid Secondary", wgpu::TextureFormat::R8Snorm));
 
         // Resource views
         let volume_velocity_view_x = volume_velocity_x.create_view(&Default::default());
         let volume_velocity_view_y = volume_velocity_y.create_view(&Default::default());
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
-        let volume_marker_view = volume_marker.create_view(&Default::default());
+        let volume_marker_primary_view = volume_marker_primary.create_view(&Default::default());
+        let volume_marker_secondary_view = volume_marker_secondary.create_view(&Default::default());
 
         // Layouts
         let group_layout_uniform = BindGroupLayoutBuilder::new()
@@ -168,9 +171,12 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityX
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityY
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false)) // velocityZ
-            .next_binding_compute(binding_glsl::texture3D()) // marker volume
             .next_binding_compute(binding_glsl::texture2D()) // pressure
             .create(device, "BindGroupLayout: Write to Velocity");
+        let group_layout_marker_rw = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::texture3D()) // marker volume read
+            .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R8Snorm, false)) // marker volume
+            .create(device, "BindGroupLayout: Read & write marker");
         let group_layout_advect_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture2D()) // velocityX
             .next_binding_compute(binding_glsl::texture2D()) // velocityY
@@ -195,7 +201,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // pressure from density
             .create(device, "BindGroupLayout: Correct density error");
 
-        let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);
+        let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_primary_view);
         let pressure_field_from_velocity = PressureField::new("from velocity", device, grid_dimension, &pressure_solver);
         let pressure_field_from_density = PressureField::new("from density", device, grid_dimension, &pressure_solver);
 
@@ -209,26 +215,26 @@ impl HybridFluid {
                 .buffer(particles_position_llindex.slice(..))
                 .buffer(particles_velocity_x.slice(..))
                 .texture(&volume_linked_lists_view)
-                .texture(&volume_marker_view)
+                .texture(&volume_marker_primary_view)
                 .texture(&volume_velocity_view_x)
                 .create(device, "BindGroup: Transfer velocity to volume X"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .buffer(particles_position_llindex.slice(..))
                 .buffer(particles_velocity_y.slice(..))
                 .texture(&volume_linked_lists_view)
-                .texture(&volume_marker_view)
+                .texture(&volume_marker_primary_view)
                 .texture(&volume_velocity_view_y)
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .buffer(particles_position_llindex.slice(..))
                 .buffer(particles_velocity_z.slice(..))
                 .texture(&volume_linked_lists_view)
-                .texture(&volume_marker_view)
+                .texture(&volume_marker_primary_view)
                 .texture(&volume_velocity_view_z)
                 .create(device, "BindGroup: Transfer velocity to volume Z"),
         ];
         let bind_group_divergence_compute = BindGroupBuilder::new(&group_layout_divergence_compute)
-            .texture(&volume_marker_view)
+            .texture(&volume_marker_primary_view)
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
@@ -238,14 +244,24 @@ impl HybridFluid {
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
-            .texture(&volume_marker_view)
             .texture(pressure_field_from_velocity.pressure_view())
             .create(device, "BindGroup: Write to Velocity Grid");
+        let bind_group_marker_rw = [
+            BindGroupBuilder::new(&group_layout_marker_rw)
+                .texture(&volume_marker_primary_view)
+                .texture(&volume_marker_secondary_view)
+                .create(device, "BindGroup: Marker R/W 1"),
+            BindGroupBuilder::new(&group_layout_marker_rw)
+                .texture(&volume_marker_secondary_view)
+                .texture(&volume_marker_primary_view)
+                .create(device, "BindGroup: Marker R/W 2"),
+        ];
+
         let bind_group_advect_particles = BindGroupBuilder::new(&group_layout_advect_particles)
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
-            .texture(&volume_marker_view)
+            .texture(&volume_marker_primary_view)
             .texture(&volume_linked_lists_view)
             .buffer(particles_position_llindex.slice(..))
             .buffer(particles_velocity_x.slice(..))
@@ -255,12 +271,12 @@ impl HybridFluid {
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .buffer(particles_position_llindex.slice(..))
             .texture(&volume_linked_lists_view)
-            .texture(&volume_marker_view)
+            .texture(&volume_marker_primary_view)
             .texture(&pressure_solver.residual_view())
             .create(device, "BindGroup: Density projection gather");
         let bind_group_density_projection_correct_particles = BindGroupBuilder::new(&group_layout_density_projection_correct_particles)
             .buffer(particles_position_llindex.slice(..))
-            .texture(&volume_marker_view)
+            .texture(&volume_marker_primary_view)
             .texture(&pressure_field_from_density.pressure_view())
             .create(device, "BindGroup: Density projection gather");
 
@@ -272,7 +288,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
-            .texture(&volume_marker_view)
+            .texture(&volume_marker_primary_view)
             .texture(&pressure_field_from_velocity.pressure_view())
             .texture(&pressure_field_from_density.pressure_view())
             .create(device, "BindGroup: Fluid Renderers");
@@ -304,6 +320,7 @@ impl HybridFluid {
                 per_frame_bind_group_layout,
                 &group_layout_uniform.layout,
                 &group_layout_write_velocity_volume.layout,
+                &group_layout_marker_rw.layout,
             ],
             push_constant_ranges,
         }));
@@ -356,6 +373,7 @@ impl HybridFluid {
             bind_group_uniform,
             bind_group_transfer_velocity,
             bind_group_divergence_compute,
+            bind_group_marker_rw,
             bind_group_write_velocity,
             bind_group_advect_particles,
             bind_group_renderer,
@@ -611,16 +629,18 @@ impl HybridFluid {
         }
         {
             cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);
+            cpass.set_bind_group(3, &self.bind_group_marker_rw[0], &[]);
 
             // Make velocity grid divergence free
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_remove));
-            cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
 
             // Extrapolate velocity
-            // can only do a single extrapolation since we can't change cell types without double buffering
-            // (this makes the extrapolation a bit heavier since it needs to sample all 8 diagonals as well)
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
+            cpass.set_push_constants(0, &[0]);
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            cpass.set_bind_group(3, &self.bind_group_marker_rw[1], &[]);
+            cpass.set_push_constants(0, &[1]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
         }
         {

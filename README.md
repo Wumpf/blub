@@ -79,8 +79,7 @@ Extrapolation in Blub:
 * divergence computation
   * fix on the fly by looking into marker grid (doesn't go far, so this is rather cheap)
 * particle advection
-  * do a single pass extrapolation
-    * it's a bit more complex than normal extrapolation schemes since in order to get around double buffering velocities/markers we do everything in a single pass.
+  * do a two pass extrapolation, each with 6 neighborhood (the direct 26 neighborhood would be needed for particle advection, but I eventually deemed that to be too much sampling for a single pass)
 * don't use anything fancy that needs velocity elsewhere 🙂
 
 ### Solver

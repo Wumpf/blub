@@ -7,6 +7,10 @@
 
 COMPUTE_PASS_VOLUME
 
+// Total of 2 passes
+// Don't need to update markers on last pass!
+layout(push_constant) uniform PushConstants { uint PassIndex; };
+
 void AccumulateNeighbors(float neighborCellType, ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
     if (neighborCellType == CELL_FLUID) {
         accumulator.x += imageLoad(VelocityVolumeX, neighborCellCoord).x * weight;
@@ -26,8 +30,12 @@ void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
     float cellType = texelFetch(MarkerVolume, gridCoord, 0).x;
-    if (cellType == CELL_FLUID)
+    if (cellType == CELL_FLUID) {
+        if (PassIndex == 0) {
+            imageStore(MarkerVolumeWrite, gridCoord, vec4(CELL_FLUID));
+        }
         return; // all good already!
+    }
 
     // Direct neighbor cells are special, need them later.
     float cellTypePosX = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
@@ -47,23 +55,18 @@ void main() {
         AccumulateNeighbors(cellTypePosZ, gridCoord + ivec3(0, 0, 1), velocity, accumulatedWeight, 1.0);
         AccumulateNeighbors(gridCoord - ivec3(0, 0, 1), velocity, accumulatedWeight, 1.0);
 
-        // diagonal neighbor cells. Need to do this or do a second pass, otherwise particles may still sample invalid velocities.
-        // TODO: Is it a problem that this actually leaves out some of the "diagonals"?
-        const float diagonalWeight = 0.577; // 1 / distance = 1 / sqrt(3)
-        AccumulateNeighbors(gridCoord + ivec3(1, 1, 1), velocity, accumulatedWeight, diagonalWeight);
-        AccumulateNeighbors(gridCoord + ivec3(-1, 1, 1), velocity, accumulatedWeight, diagonalWeight);
-        AccumulateNeighbors(gridCoord + ivec3(1, -1, 1), velocity, accumulatedWeight, diagonalWeight);
-        AccumulateNeighbors(gridCoord + ivec3(-1, -1, 1), velocity, accumulatedWeight, diagonalWeight);
-        AccumulateNeighbors(gridCoord + ivec3(1, 1, -1), velocity, accumulatedWeight, diagonalWeight);
-        AccumulateNeighbors(gridCoord + ivec3(-1, 1, -1), velocity, accumulatedWeight, diagonalWeight);
-        AccumulateNeighbors(gridCoord + ivec3(1, -1, -1), velocity, accumulatedWeight, diagonalWeight);
-        AccumulateNeighbors(gridCoord + ivec3(-1, -1, -1), velocity, accumulatedWeight, diagonalWeight);
+        if (PassIndex == 0) {
+            float newCellType = cellType;
+            if (accumulatedWeight > 0.0)
+                newCellType = CELL_FLUID;
+            imageStore(MarkerVolumeWrite, gridCoord, vec4(newCellType));
+        }
 
         if (accumulatedWeight == 0.0)
             return;
+
         velocity /= accumulatedWeight;
     }
-
     // don't allow flow into solid cells
     // To avoid sticking to walls we allow velocity away from it even though it violates continuity equations.
     if (cellType == CELL_SOLID) {
