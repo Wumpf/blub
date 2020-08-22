@@ -47,12 +47,13 @@ Noted down a few interesting implementation details here.
 
 Transferring the particle's velocity to the grid is tricky/costly to do in parallel!
 Either, velocities are scattered by doing 8 atomic adds for every particle to surrounding grid cells, or grid cells traverse all neighboring cells. (times 3 for staggered grid!)
-There's some good ideas on how to do efficient scattering in [Ming et al 2018, GPU Optimization of Material Point Methods](http://www.cs.utah.edu/~kwu/GPU_MPM/GPU_MPM.pdf).
-Note though that today atomic floats addition is pretty much only available in CUDA and OpenGL (using an NV extension)!
+There's some very clever ideas on how to do efficient scattering in [Ming et al 2018, GPU Optimization of Material Point Methods](http://pages.cs.wisc.edu/~sifakis/papers/GPU_MPM.pdf) using subgroup operations (i.e. inter warp/wavefront shuffles) and atomics.
+Note though that today atomic floats addition is pretty much only available in CUDA and OpenGL (using an NV extension) and subgroup operations are not available in wgpu as of writing.
 
-In Blub I tried something new (to my knowledge):
+In Blub I tried a (to my knowledge) new variant of the gather approach:
 Particles form a linked list by putting their index with a atomic exchange operation in a "linked list head pointer grid" which is a grid dual to the main velocity volume.
 Then, every velocity grid cell walks 8 neighboring linked lists to gather velocity.
+(this makes this a sort of hybrid between naive scatter and gather)
 
 Note that this all makes MAC/staggered grids a lot less appealing since the volume in which particles need to be accumulated gets bigger & more complicated, i.e. a lot slower.
 After various tries with collocated grids I ended up using staggered after all (for some details see #14) since I couldn't get the collocated case quite right.
