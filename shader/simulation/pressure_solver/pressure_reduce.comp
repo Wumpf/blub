@@ -23,6 +23,7 @@ layout(local_size_x = LOCAL_SIZE, local_size_y = 1, local_size_z = 1) in;
 shared float sharedBuffer[LOCAL_SIZE];
 
 #define FETCHES_PER_THREAD 16
+#define EPSILON 1e-10
 
 void main() {
     // Fetch FETCHES_PER_THREAD values from global memory and store to shared memory.
@@ -63,11 +64,11 @@ void main() {
             break;
 
         case DOTPRODUCT_RESULTMODE_ALPHA:
-            DotProductDest[0] = DotProductDest[1] / dotProductResult;
+            DotProductDest[0] = DotProductDest[1] / (dotProductResult + (dotProductResult < 0.0 ? -EPSILON : EPSILON));
             break;
 
         default: // case DOTPRODUCT_RESULTMODE_BETA:
-            DotProductDest[0] = dotProductResult / DotProductDest[1];
+            DotProductDest[0] = dotProductResult / (DotProductDest[1] + (DotProductDest[1] < 0.0 ? -EPSILON : EPSILON));
             DotProductDest[1] = dotProductResult;
             break;
         }
