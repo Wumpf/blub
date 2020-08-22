@@ -101,7 +101,7 @@ impl Application {
         let mut pipeline_manager = pipelines::PipelineManager::new();
 
         let screen = Screen::new(&device, &window_surface, Screen::DEFAULT_PRESENT_MODE, window.inner_size(), &shader_dir);
-        let hdr_backbuffer = HdrBackbuffer::new(&device, &screen, &shader_dir);
+        let hdr_backbuffer = HdrBackbuffer::new(&device, screen.resolution(), &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
         let simulation_controller = simulation_controller::SimulationController::new();
         let scene_renderer = SceneRenderer::new(
@@ -224,12 +224,8 @@ impl Application {
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
                         }
-                        WindowEvent::Resized(size) => {
-                            self.window_resize(*size);
-                        }
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            self.window_resize(**new_inner_size);
-                        }
+                        // Instead of handling WindowEvent::Resized and WindowEvent::ScaleFactorChanged here, we periodically check in draw.
+                        // Has the advantage of not doing more resizes than necessary, also need to check size already for 0 size!
                         WindowEvent::KeyboardInput {
                             input:
                                 KeyboardInput {
@@ -273,12 +269,9 @@ impl Application {
     }
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        // occasionally window size drops to zero which causes crashes along the way
-        if self.screen.resolution() != size && size.width != 0 && size.height != 0 {
-            self.screen = Screen::new(&self.device, &self.window_surface, self.screen.present_mode(), size, &self.shader_dir);
-            self.hdr_backbuffer = HdrBackbuffer::new(&self.device, &self.screen, &self.shader_dir);
-            self.scene_renderer.on_window_resize(&self.device, &self.hdr_backbuffer);
-        }
+        self.screen = Screen::new(&self.device, &self.window_surface, self.screen.present_mode(), size, &self.shader_dir);
+        self.hdr_backbuffer = HdrBackbuffer::new(&self.device, self.screen.resolution(), &self.shader_dir);
+        self.scene_renderer.on_window_resize(&self.device, &self.hdr_backbuffer);
     }
 
     fn update(&mut self) {
@@ -294,8 +287,16 @@ impl Application {
     }
 
     fn draw(&mut self, event_loop_proxy: &EventLoopProxy<ApplicationEvent>) {
+        let window_size = self.window.inner_size();
+        if window_size.width == 0 || window_size.height == 0 {
+            return;
+        } else if window_size != self.screen.resolution() {
+            self.window_resize(window_size);
+        }
+
         let aspect_ratio = self.screen.aspect_ratio();
-        let frame = self.screen.start_frame();
+        let frame = self.screen.start_frame(&self.device, &self.window_surface);
+
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Frame Main"),
         });

@@ -149,8 +149,30 @@ impl Screen {
         self.screenshot_capture.capture_screenshot(path, &self.backbuffer, device, encoder);
     }
 
-    pub fn start_frame(&mut self) -> wgpu::SwapChainTexture {
-        self.swap_chain.get_current_frame().unwrap().output
+    pub fn start_frame(&mut self, device: &wgpu::Device, window_surface: &wgpu::Surface) -> wgpu::SwapChainTexture {
+        // We assume here that any resizing has already been handled.
+        // In that case it can still sometimes happen that the swap chain doesn't give a valid frame, e.g. after getting back from minimized state.
+        // The problem usually goes away after recreating the swap chain.
+        match self.swap_chain.get_current_frame() {
+            Ok(frame) => frame.output,
+            Err(_) => {
+                info!(
+                    "Failed to query current frame from swap chain. Recreating swap chain (resolution {:?}, present mode {:?})",
+                    self.resolution, self.present_mode
+                );
+                self.swap_chain = device.create_swap_chain(
+                    window_surface,
+                    &wgpu::SwapChainDescriptor {
+                        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+                        format: Screen::FORMAT_SWAPCHAIN,
+                        width: self.resolution.width,
+                        height: self.resolution.height,
+                        present_mode: self.present_mode,
+                    },
+                );
+                self.swap_chain.get_current_frame().unwrap().output
+            }
+        }
     }
 
     pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder) {

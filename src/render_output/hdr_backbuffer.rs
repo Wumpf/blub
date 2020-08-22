@@ -19,10 +19,10 @@ pub struct HdrBackbuffer {
 impl HdrBackbuffer {
     pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
-    pub fn new(device: &wgpu::Device, screen: &Screen, shader_dir: &ShaderDirectory) -> Self {
+    pub fn new(device: &wgpu::Device, resolution: winit::dpi::PhysicalSize<u32>, shader_dir: &ShaderDirectory) -> Self {
         let size = wgpu::Extent3d {
-            width: screen.resolution().width,
-            height: screen.resolution().height,
+            width: resolution.width,
+            height: resolution.height,
             depth: 1,
         };
 
@@ -77,7 +77,7 @@ impl HdrBackbuffer {
         HdrBackbuffer {
             //hdr_backbuffer,
             hdr_backbuffer_view: hdr_backbuffer_view,
-            resolution: screen.resolution(),
+            resolution,
 
             read_backbuffer_bind_group,
             hdr_resolve_pipeline,
