@@ -72,6 +72,7 @@ impl ScreenSpaceFluid {
             device,
             shader_dir,
             RenderPipelineCreationDesc {
+                label: "ScreenspaceFluid: Render Particles",
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Particles for SS Fluid Pipeline Layout"),
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
@@ -138,6 +139,7 @@ impl ScreenSpaceFluid {
             device,
             shader_dir,
             ComputePipelineCreationDesc::new(
+                "ScreenspaceFluid: NarrowRane 1D",
                 layout_narrow_range_filter.clone(),
                 Path::new("screenspace_fluid/narrow_range_filter_1d.comp"),
             ),
@@ -146,6 +148,7 @@ impl ScreenSpaceFluid {
             device,
             shader_dir,
             ComputePipelineCreationDesc::new(
+                "ScreenspaceFluid: NarrowRane 2D",
                 layout_narrow_range_filter.clone(),
                 Path::new("screenspace_fluid/narrow_range_filter_2d.comp"),
             ),
@@ -163,13 +166,18 @@ impl ScreenSpaceFluid {
         let pipeline_thickness_filter = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
-            ComputePipelineCreationDesc::new(layout_thickness_filter.clone(), Path::new("screenspace_fluid/thickness_filter.comp")),
+            ComputePipelineCreationDesc::new(
+                "ScreenspaceFluid: Thickness filter",
+                layout_thickness_filter.clone(),
+                Path::new("screenspace_fluid/thickness_filter.comp"),
+            ),
         );
 
         let pipeline_fluid = pipeline_manager.create_compute_pipeline(
             device,
             shader_dir,
             ComputePipelineCreationDesc::new(
+                "ScreenspaceFluid: Fluid/compose",
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Fluid Render Pipeline Layout"),
                     bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout, &group_layout_compose.layout],

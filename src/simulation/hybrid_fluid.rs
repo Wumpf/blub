@@ -212,22 +212,22 @@ impl HybridFluid {
 
         let bind_group_transfer_velocity = [
             BindGroupBuilder::new(&group_layout_transfer_velocity)
-                .buffer(particles_position_llindex.slice(..))
-                .buffer(particles_velocity_x.slice(..))
+                .resource(particles_position_llindex.as_entire_binding())
+                .resource(particles_velocity_x.as_entire_binding())
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_primary_view)
                 .texture(&volume_velocity_view_x)
                 .create(device, "BindGroup: Transfer velocity to volume X"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
-                .buffer(particles_position_llindex.slice(..))
-                .buffer(particles_velocity_y.slice(..))
+                .resource(particles_position_llindex.as_entire_binding())
+                .resource(particles_velocity_y.as_entire_binding())
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_primary_view)
                 .texture(&volume_velocity_view_y)
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
-                .buffer(particles_position_llindex.slice(..))
-                .buffer(particles_velocity_z.slice(..))
+                .resource(particles_position_llindex.as_entire_binding())
+                .resource(particles_velocity_z.as_entire_binding())
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_primary_view)
                 .texture(&volume_velocity_view_z)
@@ -263,28 +263,28 @@ impl HybridFluid {
             .texture(&volume_velocity_view_z)
             .texture(&volume_marker_primary_view)
             .texture(&volume_linked_lists_view)
-            .buffer(particles_position_llindex.slice(..))
-            .buffer(particles_velocity_x.slice(..))
-            .buffer(particles_velocity_y.slice(..))
-            .buffer(particles_velocity_z.slice(..))
+            .resource(particles_position_llindex.as_entire_binding())
+            .resource(particles_velocity_x.as_entire_binding())
+            .resource(particles_velocity_y.as_entire_binding())
+            .resource(particles_velocity_z.as_entire_binding())
             .create(device, "BindGroup: Write to Particles");
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
-            .buffer(particles_position_llindex.slice(..))
+            .resource(particles_position_llindex.as_entire_binding())
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_primary_view)
             .texture(&pressure_solver.residual_view())
             .create(device, "BindGroup: Density projection gather");
         let bind_group_density_projection_correct_particles = BindGroupBuilder::new(&group_layout_density_projection_correct_particles)
-            .buffer(particles_position_llindex.slice(..))
+            .resource(particles_position_llindex.as_entire_binding())
             .texture(&volume_marker_primary_view)
             .texture(&pressure_field_from_density.pressure_view())
             .create(device, "BindGroup: Density projection gather");
 
         let bind_group_renderer = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
-            .buffer(particles_position_llindex.slice(..))
-            .buffer(particles_velocity_x.slice(..))
-            .buffer(particles_velocity_y.slice(..))
-            .buffer(particles_velocity_z.slice(..))
+            .resource(particles_position_llindex.as_entire_binding())
+            .resource(particles_velocity_x.as_entire_binding())
+            .resource(particles_velocity_y.as_entire_binding())
+            .resource(particles_velocity_z.as_entire_binding())
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
@@ -384,22 +384,35 @@ impl HybridFluid {
             pipeline_transfer_clear: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_clear.comp")),
+                ComputePipelineCreationDesc::new(
+                    "Fluid: P->G, clear",
+                    layout_transfer_velocity.clone(),
+                    Path::new("simulation/transfer_clear.comp"),
+                ),
             ),
             pipeline_transfer_build_linkedlist: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_build_linkedlist.comp")),
+                ComputePipelineCreationDesc::new(
+                    "Fluid: P->G, build linkedlists",
+                    layout_transfer_velocity.clone(),
+                    Path::new("simulation/transfer_build_linkedlist.comp"),
+                ),
             ),
             pipeline_transfer_gather_velocity: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_transfer_velocity.clone(), Path::new("simulation/transfer_gather_velocity.comp")),
+                ComputePipelineCreationDesc::new(
+                    "Fluid: P->G, gather velocity",
+                    layout_transfer_velocity.clone(),
+                    Path::new("simulation/transfer_gather_velocity.comp"),
+                ),
             ),
             pipeline_transfer_set_boundary_marker: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
+                    "Fluid: P->G, set boundary",
                     layout_transfer_velocity.clone(),
                     Path::new("simulation/transfer_set_boundary_marker.comp"),
                 ),
@@ -407,28 +420,45 @@ impl HybridFluid {
             pipeline_divergence_compute: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_divergence_compute.clone(), Path::new("simulation/divergence_compute.comp")),
+                ComputePipelineCreationDesc::new(
+                    "Fluid: Compute div",
+                    layout_divergence_compute.clone(),
+                    Path::new("simulation/divergence_compute.comp"),
+                ),
             ),
             pipeline_divergence_remove: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_write_velocity_volume.clone(), Path::new("simulation/divergence_remove.comp")),
+                ComputePipelineCreationDesc::new(
+                    "Fluid: Remove div",
+                    layout_write_velocity_volume.clone(),
+                    Path::new("simulation/divergence_remove.comp"),
+                ),
             ),
             pipeline_extrapolate_velocity: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_write_velocity_volume.clone(), Path::new("simulation/extrapolate_velocity.comp")),
+                ComputePipelineCreationDesc::new(
+                    "Fluid: Extrapolate V",
+                    layout_write_velocity_volume.clone(),
+                    Path::new("simulation/extrapolate_velocity.comp"),
+                ),
             ),
             pipeline_advect_particles: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_particles.clone(), Path::new("simulation/advect_particles.comp")),
+                ComputePipelineCreationDesc::new(
+                    "Fluid: G->P, advect",
+                    layout_particles.clone(),
+                    Path::new("simulation/advect_particles.comp"),
+                ),
             ),
 
             pipeline_density_projection_gather_error: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
+                    "Fluid: Density Projection, gather",
                     layout_density_projection_gather_error.clone(),
                     Path::new("simulation/density_projection_gather_error.comp"),
                 ),
@@ -437,6 +467,7 @@ impl HybridFluid {
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
+                    "Fluid: Density Projection, correct",
                     layout_density_projection_correct_particles.clone(),
                     Path::new("simulation/density_projection_correct_particles.comp"),
                 ),

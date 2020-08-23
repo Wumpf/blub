@@ -220,24 +220,24 @@ impl PressureSolver {
             .texture(&volume_residual_view)
             .create(device, "BindGroup: Compute initial residual");
         let bind_group_apply_coeff = BindGroupBuilder::new(&group_layout_apply_coeff)
-            .buffer(dotproduct_reduce_step_buffers[0].slice(..))
+            .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
             .texture(&volume_search_view)
             .create(device, "BindGroup: Apply coeff matrix & start dot product");
         let bind_group_preconditioner = [
             BindGroupBuilder::new(&group_layout_preconditioner)
-                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
+                .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
                 .texture(&volume_residual_view)
                 .texture(&volume_auxiliary_temp_view)
                 .texture(&volume_residual_view)
                 .create(device, "BindGroup: Preconditioner, Step 1"),
             BindGroupBuilder::new(&group_layout_preconditioner)
-                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
+                .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
                 .texture(&volume_residual_view)
                 .texture(&volume_auxiliary_view)
                 .texture(&volume_auxiliary_temp_view)
                 .create(device, "BindGroup: Preconditioner, Step 2"),
             BindGroupBuilder::new(&group_layout_preconditioner)
-                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
+                .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
                 .texture(&volume_residual_view)
                 .texture(&volume_search_view)
                 .texture(&volume_auxiliary_temp_view)
@@ -245,34 +245,34 @@ impl PressureSolver {
         ];
         let bind_group_dotproduct_reduce = [
             BindGroupBuilder::new(&group_layout_reduce)
-                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
-                .buffer(dotproduct_reduce_step_buffers[1].slice(..))
+                .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
+                .resource(dotproduct_reduce_step_buffers[1].as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce 0"),
             BindGroupBuilder::new(&group_layout_reduce)
-                .buffer(dotproduct_reduce_step_buffers[1].slice(..))
-                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
+                .resource(dotproduct_reduce_step_buffers[1].as_entire_binding())
+                .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce 1"),
         ];
         let bind_group_dotproduct_final = [
             BindGroupBuilder::new(&group_layout_reduce)
-                .buffer(dotproduct_reduce_step_buffers[0].slice(..))
-                .buffer(dotproduct_reduce_result_buffer.slice(..))
+                .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
+                .resource(dotproduct_reduce_result_buffer.as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 0"),
             BindGroupBuilder::new(&group_layout_reduce)
-                .buffer(dotproduct_reduce_step_buffers[1].slice(..))
-                .buffer(dotproduct_reduce_result_buffer.slice(..))
+                .resource(dotproduct_reduce_step_buffers[1].as_entire_binding())
+                .resource(dotproduct_reduce_result_buffer.as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
         ];
 
         let bind_group_update_pressure_and_residual = BindGroupBuilder::new(&group_layout_update_volume)
             .texture(&volume_residual_view)
             .texture(&volume_search_view)
-            .buffer(dotproduct_reduce_result_buffer.slice(..))
+            .resource(dotproduct_reduce_result_buffer.as_entire_binding())
             .create(device, "BindGroup: Pressure update pressure and residual");
         let bind_group_update_search = BindGroupBuilder::new(&group_layout_update_volume)
             .texture(&volume_search_view)
             .texture(&volume_auxiliary_view)
-            .buffer(dotproduct_reduce_result_buffer.slice(..))
+            .resource(dotproduct_reduce_result_buffer.as_entire_binding())
             .create(device, "BindGroup: Pressure update search");
 
         let shader_path = Path::new("simulation/pressure_solver");
@@ -292,12 +292,17 @@ impl PressureSolver {
             pipeline_init: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_init.clone(), &shader_path.join(Path::new("pressure_init.comp"))),
+                ComputePipelineCreationDesc::new(
+                    "PressureSolve: Init",
+                    layout_init.clone(),
+                    &shader_path.join(Path::new("pressure_init.comp")),
+                ),
             ),
             pipeline_apply_preconditioner: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
+                    "PressureSolve: Apply preconditioner",
                     layout_preconditioner.clone(),
                     &shader_path.join(&Path::new("pressure_apply_preconditioner.comp")),
                 ),
@@ -305,17 +310,26 @@ impl PressureSolver {
             pipeline_reduce: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_reduce.clone(), &shader_path.join(&Path::new("pressure_reduce.comp"))),
+                ComputePipelineCreationDesc::new(
+                    "PressureSolve: DotProduct Reduce",
+                    layout_reduce.clone(),
+                    &shader_path.join(&Path::new("pressure_reduce.comp")),
+                ),
             ),
             pipeline_apply_coeff: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_apply_coeff.clone(), &shader_path.join(&Path::new("pressure_apply_coeff.comp"))),
+                ComputePipelineCreationDesc::new(
+                    "PressureSolve: Apply coefficient matrix",
+                    layout_apply_coeff.clone(),
+                    &shader_path.join(&Path::new("pressure_apply_coeff.comp")),
+                ),
             ),
             pipeline_update_pressure_and_residual: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
+                    "PressureSolve: Update pressure and residual",
                     layout_update_volume.clone(),
                     &shader_path.join(&Path::new("pressure_update_pressure_and_residual.comp")),
                 ),
@@ -323,7 +337,11 @@ impl PressureSolver {
             pipeline_update_search: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(layout_update_volume.clone(), &shader_path.join(&Path::new("pressure_update_search.comp"))),
+                ComputePipelineCreationDesc::new(
+                    "PressureSolve: Update search",
+                    layout_update_volume.clone(),
+                    &shader_path.join(&Path::new("pressure_update_search.comp")),
+                ),
             ),
 
             group_layout_pressure,

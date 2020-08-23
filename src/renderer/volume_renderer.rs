@@ -39,6 +39,7 @@ impl VolumeRenderer {
         }));
 
         let mut velocity_render_pipeline_desc = RenderPipelineCreationDesc::new(
+            "VolumeRender: Velocity",
             layout.clone(),
             Path::new("volume_visualization/velocity.vert"),
             Some(Path::new("vertex_color.frag")),
@@ -48,6 +49,7 @@ impl VolumeRenderer {
         velocity_render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
 
         let volume_visualization_with_billboards_pipeline_desc = RenderPipelineCreationDesc::new(
+            "VolumeRender: Generic billboard based",
             layout.clone(),
             Path::new("volume_visualization/volume_visualization_with_billboards.vert"),
             Some(Path::new("sphere_particles.frag")),

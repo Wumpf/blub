@@ -13,7 +13,7 @@ enumflags2 = "^0.6"
 env_logger = "0.7" 
 futures = "0.3" 
 imgui = "0.4" 
-imgui-wgpu = {git = "https://github.com/Wumpf/imgui-wgpu-rs", rev = "7bab9bba7a6d84b474a232d54b1fe772b629ebe3"} 
+imgui-wgpu = {git = "https://github.com/Wumpf/imgui-wgpu-rs", rev = "882b541"} 
 imgui-winit-support = {version = "0.4", default-features = false, features = ["winit-20"]} 
 lazy_static = "1.4" 
 log = "0.4" 
@@ -27,5 +27,5 @@ serde_json = "1.0"
 shaderc = "0.6" 
 strum = "0.19" 
 strum_macros = "0.19" 
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "471d2a1a48c795a13d3c65a29ff184d7cfe9e766"}#, features = ["trace"]}    
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "7396e92"}#, features = ["trace"]}      
 winit = "0.21" # Can't upgrade to 0.2.2 because of imgui-winit-support

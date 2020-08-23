@@ -5,14 +5,19 @@ use std::rc::{Rc, Weak};
 pub type ComputePipelineHandle = Rc<usize>;
 pub type RenderPipelineHandle = Rc<usize>;
 
+// This is essentially a copy of wgpu::ComputePipelineDescriptor that we can store.
+// This is needed since we want to be able to reload pipelines while the program is running.
 pub struct ComputePipelineCreationDesc {
+    /// Debug label of the pipeline. This will show up in graphics debuggers for easy identification.
+    pub label: &'static str,
     pub layout: Rc<wgpu::PipelineLayout>,
     pub compute_shader_relative_path: PathBuf,
 }
 
 impl ComputePipelineCreationDesc {
-    pub fn new(layout: Rc<wgpu::PipelineLayout>, compute_shader_relative_path: &Path) -> Self {
+    pub fn new(label: &'static str, layout: Rc<wgpu::PipelineLayout>, compute_shader_relative_path: &Path) -> Self {
         ComputePipelineCreationDesc {
+            label,
             layout,
             compute_shader_relative_path: PathBuf::from(compute_shader_relative_path),
         }
@@ -21,6 +26,7 @@ impl ComputePipelineCreationDesc {
     fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<wgpu::ComputePipeline, ()> {
         let module = shader_dir.load_shader_module(device, &self.compute_shader_relative_path)?;
         Ok(device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some(self.label),
             layout: Some(&self.layout),
             compute_stage: wgpu::ProgrammableStageDescriptor {
                 module: &module,
@@ -30,7 +36,12 @@ impl ComputePipelineCreationDesc {
     }
 }
 
+// This is essentially a copy of wgpu::RenderPipelineDescriptor that we can store.
+// This is needed since we want to be able to reload pipelines while the program is running.
 pub struct RenderPipelineCreationDesc {
+    /// Debug label of the pipeline. This will show up in graphics debuggers for easy identification.
+    pub label: &'static str,
+
     /// The layout of bind groups for this pipeline.
     pub layout: Rc<wgpu::PipelineLayout>,
 
@@ -71,6 +82,7 @@ pub struct RenderPipelineCreationDesc {
 
 impl RenderPipelineCreationDesc {
     pub fn new(
+        label: &'static str,
         layout: Rc<wgpu::PipelineLayout>,
         vertex_shader_relative_path: &Path,
         fragment_shader_relative_path: Option<&Path>,
@@ -78,6 +90,7 @@ impl RenderPipelineCreationDesc {
         depth_format: Option<wgpu::TextureFormat>,
     ) -> Self {
         RenderPipelineCreationDesc {
+            label,
             layout: layout,
             vertex_shader_relative_path: PathBuf::from(vertex_shader_relative_path),
             fragment_shader_relative_path: match fragment_shader_relative_path {
@@ -109,6 +122,7 @@ impl RenderPipelineCreationDesc {
         };
 
         let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
+            label: Some(self.label),
             layout: Some(&self.layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,

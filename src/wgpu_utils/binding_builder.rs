@@ -87,9 +87,9 @@ impl<'a> BindGroupBuilder<'a> {
         });
         self
     }
-    pub fn buffer(self, slice: wgpu::BufferSlice<'a>) -> Self {
-        self.resource(wgpu::BindingResource::Buffer(slice))
-    }
+    // pub fn buffer(self, buffer_binding: wgpu::BindingResource<'a>::Buffer) -> Self {
+    //     self.resource(buffer_binding)
+    // }
     pub fn sampler(self, sampler: &'a wgpu::Sampler) -> Self {
         self.resource(wgpu::BindingResource::Sampler(sampler))
     }

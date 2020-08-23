@@ -49,7 +49,7 @@ impl<Content: bytemuck::Pod> UniformBuffer<Content> {
     }
 
     pub fn binding_resource(&self) -> wgpu::BindingResource {
-        wgpu::BindingResource::Buffer(self.buffer.slice(..))
+        self.buffer.as_entire_binding()
     }
 }
 

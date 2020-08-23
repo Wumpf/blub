@@ -51,7 +51,9 @@ impl HdrBackbuffer {
 
         let vs_module = shader_dir.load_shader_module(device, Path::new("screentri.vert")).unwrap();
         let fs_module = shader_dir.load_shader_module(device, Path::new("copy_texture.frag")).unwrap();
+        // TODO: Use pipelinemanager. TODO have central, this is duplicated.
         let hdr_resolve_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("HdrBackbuffer: Copy texture"),
             layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
