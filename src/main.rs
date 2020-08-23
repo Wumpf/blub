@@ -86,11 +86,10 @@ impl Application {
                 &wgpu::DeviceDescriptor {
                     features: wgpu::Features::PUSH_CONSTANTS,
                     limits: wgpu::Limits {
-                        max_storage_textures_per_shader_stage: 16, // Doesn't need to be as many https://github.com/gfx-rs/wgpu/pull/798
                         max_push_constant_size: 8,
                         ..Default::default()
                     },
-                    shader_validation: false, // Disabled shader validation for now since we use too many things that it doesn't know about.
+                    shader_validation: true,
                 },
                 None, //Some(Path::new("C:/dev/blub/trace")),
             )
@@ -350,7 +349,7 @@ impl Application {
 
 fn main() {
     // Silence warnings from `naga::front::spirv` for now since as of writing it doesn't know enough spirv yet.
-    env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info,naga=error"));
+    env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info"));
     let event_loop = EventLoop::<ApplicationEvent>::with_user_event();
     let application = futures::executor::block_on(Application::new(&event_loop));
     application.run(event_loop);
