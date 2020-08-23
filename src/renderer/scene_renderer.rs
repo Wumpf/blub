@@ -9,7 +9,6 @@ use crate::{
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
 use cgmath::EuclideanSpace;
-
 #[derive(Clone, Copy, Debug, EnumIter)]
 pub enum FluidRenderingMode {
     None,
@@ -152,67 +151,60 @@ impl SceneRenderer {
         depthbuffer: &wgpu::TextureView,
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
-        // Opaque
+        wgpu_scope!(encoder, "SceneRenderer.draw");
         {
-            let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: backbuffer,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
+            // Opaque
+            wgpu_scope!(encoder, "opaque", || {
+                let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                        attachment: backbuffer,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.1,
+                                g: 0.2,
+                                b: 0.3,
+                                a: 1.0,
+                            }),
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                        attachment: depthbuffer,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
                         }),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: depthbuffer,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
+                });
+                rpass_backbuffer.set_bind_group(0, per_frame_bind_group, &[]);
+
+                match self.fluid_rendering_mode {
+                    FluidRenderingMode::None => {}
+                    FluidRenderingMode::ScreenSpaceFluid => {
+                        // Handled earlier!
+                    }
+                    FluidRenderingMode::Particles => {
+                        self.particle_renderer.draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid());
+                    }
+                }
+
+                self.volume_renderer
+                    .draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid(), self.volume_visualization);
+
+                if self.enable_box_lines {
+                    self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
+                }
             });
-            rpass_backbuffer.push_debug_group("scene renderer, opaque");
 
-            rpass_backbuffer.set_bind_group(0, per_frame_bind_group, &[]);
-
-            rpass_backbuffer.push_debug_group("fluid");
-            match self.fluid_rendering_mode {
-                FluidRenderingMode::None => {}
-                FluidRenderingMode::ScreenSpaceFluid => {
-                    // Handled earlier!
+            // Transparent
+            wgpu_scope!(encoder, "transparent", || {
+                if let FluidRenderingMode::ScreenSpaceFluid = self.fluid_rendering_mode {
+                    self.screenspace_fluid
+                        .draw(&mut encoder, pipeline_manager, depthbuffer, per_frame_bind_group, &scene.fluid());
                 }
-                FluidRenderingMode::Particles => {
-                    self.particle_renderer.draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid());
-                }
-            }
-            rpass_backbuffer.pop_debug_group();
-
-            rpass_backbuffer.push_debug_group("volume visualizer");
-            self.volume_renderer
-                .draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid(), self.volume_visualization);
-            rpass_backbuffer.pop_debug_group();
-
-            if self.enable_box_lines {
-                rpass_backbuffer.push_debug_group("box lines");
-                self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
-                rpass_backbuffer.pop_debug_group();
-            }
-
-            rpass_backbuffer.pop_debug_group();
-        }
-
-        // Transparent
-        {
-            if let FluidRenderingMode::ScreenSpaceFluid = self.fluid_rendering_mode {
-                self.screenspace_fluid
-                    .draw(encoder, pipeline_manager, depthbuffer, per_frame_bind_group, &scene.fluid());
-            }
+            });
         }
     }
 }

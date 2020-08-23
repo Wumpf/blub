@@ -78,6 +78,8 @@ impl VolumeRenderer {
         fluid: &'a HybridFluid,
         mode: VolumeVisualizationMode,
     ) {
+        wgpu_scope!(rpass, "VolumeRenderer.draw");
+
         match mode {
             VolumeVisualizationMode::None => {}
             VolumeVisualizationMode::Velocity => {

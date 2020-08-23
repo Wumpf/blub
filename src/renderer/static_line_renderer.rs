@@ -108,6 +108,7 @@ impl StaticLineRenderer {
     }
 
     pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager) {
+        wgpu_scope!(rpass, "StaticLineRenderer.draw");
         rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
         let num_vertices = self.num_lines * 2;
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(0..(num_vertices as u64 * LINE_VERTEX_SIZE as u64)));

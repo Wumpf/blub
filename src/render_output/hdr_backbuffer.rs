@@ -95,6 +95,8 @@ impl HdrBackbuffer {
     }
 
     pub fn tonemap(&self, target: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
+        wgpu_scope!(encoder, "HdrBackbuffer.tonemap");
+
         // TODO: All this tonemapping does is go from half (linear) to srgb. Do some nice tonemapping here!
         // Note that we can't use a compute shader here since that would require STORAGE usage flag on the final output which we can't do since it's srgb!
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -108,10 +110,8 @@ impl HdrBackbuffer {
             }],
             depth_stencil_attachment: None,
         });
-        render_pass.push_debug_group("HDR Tonemapping");
         render_pass.set_pipeline(&self.hdr_resolve_pipeline);
         render_pass.set_bind_group(0, &self.read_backbuffer_bind_group, &[]);
         render_pass.draw(0..3, 0..1);
-        render_pass.pop_debug_group();
     }
 }

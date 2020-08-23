@@ -607,6 +607,8 @@ impl HybridFluid {
         queue: &wgpu::Queue,
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
+        wgpu_scope!(encoder, "HybridFluid.step");
+
         if self.simulation_properties_dirty.get() {
             self.simulation_properties_uniformbuffer.update_content(queue, self.simulation_properties);
             self.simulation_properties_dirty.set(false);
@@ -619,37 +621,40 @@ impl HybridFluid {
         cpass.set_bind_group(0, per_frame_bind_group, &[]);
         cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
 
-        // mostly grouped by layouts.
-        {
+        wgpu_scope!(cpass, "transfer particle velocity to grid", || {
             for i in 0..3 {
-                cpass.set_bind_group(2, &self.bind_group_transfer_velocity[i], &[]);
+                wgpu_scope!(cpass, &format!("dimension {}", ["x", "y", "z"][i]), || {
+                    cpass.set_bind_group(2, &self.bind_group_transfer_velocity[i], &[]);
+                    wgpu_scope!(cpass, &format!("clear linked list grid{}", if i == 0 { " & marker" } else { "" }), || {
+                        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
+                        cpass.set_push_constants(0, &[i as u32]);
+                        cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    });
 
-                // clear linkedlist grid & marker (only on first run)
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
-                cpass.set_push_constants(0, &[i as u32]);
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    wgpu_scope!(cpass, "create particle linked lists", || {
+                        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_build_linkedlist));
+                        cpass.dispatch(particle_work_groups, 1, 1);
+                    });
 
-                // Create particle linked lists by writing heads in dual grids
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_build_linkedlist));
-                cpass.dispatch(particle_work_groups, 1, 1);
+                    if i == 0 {
+                        wgpu_scope!(cpass, "set boundary marker", || {
+                            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
+                            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                        });
+                    }
 
-                // Set boundary marker on first run
-                if i == 0 {
-                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
-                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-                }
-
-                // Gather velocities in velocity grid and apply global forces.
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather_velocity));
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    wgpu_scope!(cpass, "gather velocity & apply global forces", || {
+                        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather_velocity));
+                        cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    });
+                });
             }
-        }
-        {
-            // Compute divergence
+        });
+        wgpu_scope!(cpass, "compute divergence", || {
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_compute));
             cpass.set_bind_group(1, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-        }
+        });
         {
             // Solve for pressure
             self.pressure_solver
@@ -662,56 +667,56 @@ impl HybridFluid {
             cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);
             cpass.set_bind_group(3, &self.bind_group_marker_rw[0], &[]);
 
-            // Make velocity grid divergence free
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_remove));
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            wgpu_scope!(cpass, "make velocity grid divergence free", || {
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_remove));
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            });
 
-            // Extrapolate velocity
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
-            cpass.set_push_constants(0, &[0]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-            cpass.set_bind_group(3, &self.bind_group_marker_rw[1], &[]);
-            cpass.set_push_constants(0, &[1]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            wgpu_scope!(cpass, "extrapolate velocity grid", || {
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
+                cpass.set_push_constants(0, &[0]);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.set_bind_group(3, &self.bind_group_marker_rw[1], &[]);
+                cpass.set_push_constants(0, &[1]);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            });
         }
-        {
-            // Clear Marker & linked list.
+        wgpu_scope!(cpass, "clear marker & linked list grids", || {
             cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
             cpass.set_push_constants(0, &[0]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-        }
-        {
-            // Advect particles with grid and write new linked list for density gather.
+        });
+        wgpu_scope!(cpass, "advect particles & write new linked list grid", || {
             cpass.set_bind_group(2, &self.bind_group_advect_particles, &[]);
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_advect_particles));
             cpass.dispatch(particle_work_groups, 1, 1);
-        }
-        {
-            // Set boundary marker
-            cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-        }
-        {
-            // Compute density error by another gather pass
-            cpass.set_bind_group(2, &&self.bind_group_density_projection_gather_error, &[]);
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather_error));
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-        }
-        {
+        });
+
+        wgpu_scope!(cpass, "density projection", || {
+            wgpu_scope!(cpass, "set boundary marker", || {
+                cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            });
+            wgpu_scope!(cpass, "compute density error by another gather pass", || {
+                cpass.set_bind_group(2, &&self.bind_group_density_projection_gather_error, &[]);
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather_error));
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            });
+
             // Compute pressure from density error.
             self.pressure_solver
                 .solve(&self.pressure_field_from_density, &mut cpass, pipeline_manager);
             // Pressure solver messes up "global" bindings.
             cpass.set_bind_group(0, per_frame_bind_group, &[]);
             cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
-        }
-        {
-            // Correct density error.
-            cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_correct_particles));
-            cpass.dispatch(particle_work_groups, 1, 1);
-        }
+
+            wgpu_scope!(cpass, "correct particle density error", || {
+                cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_correct_particles));
+                cpass.dispatch(particle_work_groups, 1, 1);
+            });
+        });
     }
 }

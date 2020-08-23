@@ -4,6 +4,8 @@ extern crate more_asserts;
 extern crate log;
 #[macro_use]
 extern crate strum_macros;
+#[macro_use]
+mod wgpu_utils;
 
 mod camera;
 mod gui;
@@ -14,7 +16,6 @@ mod scene;
 mod simulation;
 mod simulation_controller;
 mod timer;
-mod wgpu_utils;
 
 use per_frame_resources::*;
 use render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen, screenshot_recorder::ScreenshotRecorder};

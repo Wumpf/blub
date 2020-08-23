@@ -22,10 +22,11 @@ notify = "5.0.0-pre.2"
 png = "0.16" 
 rand = {version = "0.7.3", features = ["small_rng"]} 
 regex = "1" 
+scopeguard = "1.1" 
 serde = {version = "1.0", features = ["derive"]} 
 serde_json = "1.0" 
 shaderc = "0.6" 
 strum = "0.19" 
 strum_macros = "0.19" 
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "7396e92"}#, features = ["trace"]}      
-winit = "0.21" # Can't upgrade to 0.2.2 because of imgui-winit-support
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "7396e92"}#, features = ["trace"]}        
+winit = "0.21" # Can't upgrade to 0.22 because of imgui-winit-support
