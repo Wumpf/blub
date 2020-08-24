@@ -11,18 +11,18 @@ COMPUTE_PASS_VOLUME
 // Don't need to update markers on last pass!
 layout(push_constant) uniform PushConstants { uint PassIndex; };
 
-void AccumulateNeighbors(float neighborCellType, ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
+void AccumulateNeighbors(float neighborCellType, ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight) {
     if (neighborCellType == CELL_FLUID) {
-        accumulator.x += imageLoad(VelocityVolumeX, neighborCellCoord).x * weight;
-        accumulator.y += imageLoad(VelocityVolumeY, neighborCellCoord).x * weight;
-        accumulator.z += imageLoad(VelocityVolumeZ, neighborCellCoord).x * weight;
-        accumulatedWeight += weight;
+        accumulator.x += imageLoad(VelocityVolumeX, neighborCellCoord).x;
+        accumulator.y += imageLoad(VelocityVolumeY, neighborCellCoord).x;
+        accumulator.z += imageLoad(VelocityVolumeZ, neighborCellCoord).x;
+        accumulatedWeight += 1.0;
     }
 }
 
-void AccumulateNeighbors(ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight, float weight) {
+void AccumulateNeighbors(ivec3 neighborCellCoord, inout vec3 accumulator, inout float accumulatedWeight) {
     float neighborCellType = texelFetch(MarkerVolume, neighborCellCoord, 0).x;
-    AccumulateNeighbors(neighborCellType, neighborCellCoord, accumulator, accumulatedWeight, weight);
+    AccumulateNeighbors(neighborCellType, neighborCellCoord, accumulator, accumulatedWeight);
 }
 
 void main() {
@@ -48,12 +48,12 @@ void main() {
         float accumulatedWeight = 0.0;
 
         // direct neighbor cells.
-        AccumulateNeighbors(cellTypePosX, gridCoord + ivec3(1, 0, 0), velocity, accumulatedWeight, 1.0);
-        AccumulateNeighbors(gridCoord - ivec3(1, 0, 0), velocity, accumulatedWeight, 1.0);
-        AccumulateNeighbors(cellTypePosY, gridCoord + ivec3(0, 1, 0), velocity, accumulatedWeight, 1.0);
-        AccumulateNeighbors(gridCoord - ivec3(0, 1, 0), velocity, accumulatedWeight, 1.0);
-        AccumulateNeighbors(cellTypePosZ, gridCoord + ivec3(0, 0, 1), velocity, accumulatedWeight, 1.0);
-        AccumulateNeighbors(gridCoord - ivec3(0, 0, 1), velocity, accumulatedWeight, 1.0);
+        AccumulateNeighbors(cellTypePosX, gridCoord + ivec3(1, 0, 0), velocity, accumulatedWeight);
+        AccumulateNeighbors(gridCoord - ivec3(1, 0, 0), velocity, accumulatedWeight);
+        AccumulateNeighbors(cellTypePosY, gridCoord + ivec3(0, 1, 0), velocity, accumulatedWeight);
+        AccumulateNeighbors(gridCoord - ivec3(0, 1, 0), velocity, accumulatedWeight);
+        AccumulateNeighbors(cellTypePosZ, gridCoord + ivec3(0, 0, 1), velocity, accumulatedWeight);
+        AccumulateNeighbors(gridCoord - ivec3(0, 0, 1), velocity, accumulatedWeight);
 
         if (PassIndex == 0) {
             float newCellType = cellType;
