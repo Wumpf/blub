@@ -71,9 +71,9 @@ void main() {
 
     // Update velocity and the APIC affine matrix.
     // Trilinear interpolation for velocity.
-    vec3 interpolantsX = fract(offsetPositions[0]);
-    vec3 interpolantsY = fract(offsetPositions[1]);
-    vec3 interpolantsZ = fract(offsetPositions[2]);
+    vec3 interpolantsX = fract(vec3(offsetPositions[0].x, offsetPositions[1].x, offsetPositions[2].x));
+    vec3 interpolantsY = fract(vec3(offsetPositions[0].y, offsetPositions[1].y, offsetPositions[2].y));
+    vec3 interpolantsZ = fract(vec3(offsetPositions[0].z, offsetPositions[1].z, offsetPositions[2].z));
     vec3 v_x00 = mix(v_000, v_100, interpolantsX);
     vec3 v_x01 = mix(v_001, v_101, interpolantsX);
     vec3 v_x10 = mix(v_010, v_110, interpolantsX);
@@ -81,6 +81,9 @@ void main() {
     vec3 v_xy0 = mix(v_x00, v_x10, interpolantsY);
     vec3 v_xy1 = mix(v_x01, v_x11, interpolantsY);
     vec3 newVelocity = mix(v_xy0, v_xy1, interpolantsZ);
+    // For debugging: This needs to be equal (within small floating point errors) to our interpolation! (on all axis)
+    // newVelocity.y = texture(sampler3D(VelocityVolumeY, SamplerTrilinearClamp), offsetPositions[1] / (gridSize - vec3(1))).x;
+
     // The Apic Matrix is the jacobi matrix of the velocity for fluids.
     vec3 cx = mix(mix(v_100, v_110, interpolantsY), mix(v_101, v_111, interpolantsY), interpolantsZ) -
               mix(mix(v_000, v_010, interpolantsY), mix(v_001, v_011, interpolantsY), interpolantsZ);
@@ -99,6 +102,7 @@ void main() {
     vec3 stepK4 = Time.SimulationDelta * k3;
     vec3 k4 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolantsX + stepK4),
                                    saturate(interpolantsY + stepK4), saturate(interpolantsZ + stepK4));
+    // TODO: this introduces some error in the single cell test. Should investigate
     vec3 totalMovement = Time.SimulationDelta * (1.0 / 6.0) * (k1 + 2.0 * (k2 + k3) + k4);
     // vec3 totalMovement = newVelocity * Time.SimulationDelta; // Euler integration
 
@@ -123,8 +127,8 @@ void main() {
         ParticleBufferVelocityY[particleIndex] = vec4(cy, newVelocity.y);
         ParticleBufferVelocityZ[particleIndex] = vec4(cz, newVelocity.z);
         // PIC only
-        // Particles[particleIndex].VelocityMatrix[0] = vec4(vec3(0), newVelocity.x);
-        // Particles[particleIndex].VelocityMatrix[1] = vec4(vec3(0), newVelocity.y);
-        // Particles[particleIndex].VelocityMatrix[2] = vec4(vec3(0), newVelocity.z);
+        // ParticleBufferVelocityX[particleIndex] = vec4(vec3(0), newVelocity.x);
+        // ParticleBufferVelocityY[particleIndex] = vec4(vec3(0), newVelocity.y);
+        // ParticleBufferVelocityZ[particleIndex] = vec4(vec3(0), newVelocity.z);
     }
 }
