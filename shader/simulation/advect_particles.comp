@@ -102,7 +102,6 @@ void main() {
     vec3 stepK4 = Time.SimulationDelta * k3;
     vec3 k4 = InterpolateTrilinear(v_000, v_100, v_010, v_110, v_001, v_101, v_011, v_111, saturate(interpolantsX + stepK4),
                                    saturate(interpolantsY + stepK4), saturate(interpolantsZ + stepK4));
-    // TODO: this introduces some error in the single cell test. Should investigate
     vec3 totalMovement = Time.SimulationDelta * (1.0 / 6.0) * (k1 + 2.0 * (k2 + k3) + k4);
     // vec3 totalMovement = newVelocity * Time.SimulationDelta; // Euler integration
 

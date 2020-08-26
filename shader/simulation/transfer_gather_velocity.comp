@@ -41,7 +41,13 @@ void main() {
     ivec3 gridCoord = ivec3(gl_WorkGroupID * (gl_WorkGroupSize - uvec3(1)) + gl_LocalInvocationID) - ivec3(1);
 
     bool isBorderThread = any(equal(gl_LocalInvocationID, uvec3(0)));
-    bool threadWritesFluid = !isBorderThread && imageLoad(MarkerVolume, gridCoord).r == CELL_FLUID;
+
+    // We write velocity if we're not a read-only thread and the velocity value we care about is between at least one fluid cell.
+    ivec3 neighborGridCoord = gridCoord;
+    neighborGridCoord[VelocityTransferComponent] += 1;
+    float markerA = imageLoad(MarkerVolume, gridCoord).r;
+    float markerB = imageLoad(MarkerVolume, neighborGridCoord).r;
+    bool threadWritesFluid = !isBorderThread && (markerA == CELL_FLUID || markerB == CELL_FLUID);
 
     vec3 staggeredVelocitySamplePosition = vec3(gridCoord) + vec3(0.5);
     staggeredVelocitySamplePosition[VelocityTransferComponent] += 0.5;
@@ -86,11 +92,33 @@ void main() {
             addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 1, 1), staggeredVelocitySamplePosition);
         }
     }
+    // DEBUG CHECK for single cell scene - for comparison against linked list handling
+    // for (int i = 0; i < 8; ++i) {
+    //     addParticleContribution(velocityComponent, velocityWeight, Particles[i].Position, ParticleBufferVelocityComponent[i],
+    //                             staggeredVelocitySamplePosition);
+    // }
+    // DEBUG CHECK - for comparison against shared memory optimization
+    // ivec3 offsets[8] = {ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(0, 1, 0), ivec3(1, 1, 0),
+    //                     ivec3(0, 0, 1), ivec3(1, 0, 1), ivec3(0, 1, 1), ivec3(1, 1, 1)};
+    // for (int i = 0; i < 8; ++i) {
+    //     uint localParticleIndex = imageLoad(LinkedListDualGrid, gridCoord - offsets[i]).r - 1;
+    //     while (localParticleIndex != INVALID_LINKED_LIST_PTR) {
+    //         addParticleContribution(velocityComponent, velocityWeight, Particles[localParticleIndex].Position,
+    //                                 ParticleBufferVelocityComponent[localParticleIndex], staggeredVelocitySamplePosition);
+    //         localParticleIndex = Particles[localParticleIndex].LinkedListNext;
+    //     }
+    // }
 
     if (threadWritesFluid) {
         if (velocityWeight > 0.0)
             velocityComponent /= velocityWeight;
         velocityComponent += GravityGridSpace[VelocityTransferComponent] * Time.SimulationDelta;
+
+        // Don't flow into solid
+        if (markerA == CELL_SOLID)
+            velocityComponent = max(velocityComponent, 0.0);
+        else if (markerB == CELL_SOLID)
+            velocityComponent = min(velocityComponent, 0.0);
 
         imageStore(VelocityComponentVolume, gridCoord, velocityComponent.xxxx);
     }

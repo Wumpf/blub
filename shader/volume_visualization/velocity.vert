@@ -34,20 +34,26 @@ void main() {
     addToChannel(linePosition, 0.5 * Rendering.FluidGridToWorldScale, channel);
 
     float velocity = 0.0;
+    float neighborMarker = CELL_SOLID;
     switch (channel) {
     case 0:
+        neighborMarker = texelFetch(MarkerVolume, volumeCoordinate + ivec3(1, 0, 0), 0).x;
         velocity = texelFetch(VelocityVolumeX, volumeCoordinate, 0).x;
         break;
     case 1:
+        neighborMarker = texelFetch(MarkerVolume, volumeCoordinate + ivec3(0, 1, 0), 0).x;
         velocity = texelFetch(VelocityVolumeY, volumeCoordinate, 0).x;
         break;
     default:
+        neighborMarker = texelFetch(MarkerVolume, volumeCoordinate + ivec3(0, 0, 1), 0).x;
         velocity = texelFetch(VelocityVolumeZ, volumeCoordinate, 0).x;
         break;
     }
 
     float scale = clamp(velocity * Rendering.VelocityVisualizationScale, -1.0, 1.0);
-    if (marker != CELL_FLUID)
+    // if (marker != CELL_FLUID && neighborMarker != CELL_FLUID)
+    //    scale = 0.0;
+    if (isnan(velocity))
         scale = 0.0;
     if (gl_VertexIndex == 0) {
         addToChannel(linePosition, scale * Rendering.FluidGridToWorldScale, channel);

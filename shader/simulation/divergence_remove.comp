@@ -8,46 +8,49 @@
 
 COMPUTE_PASS_VOLUME
 
-float computeCorrectedVelocityForDirection(ivec3 coord, float pressureAtCenter, float currentCellStaggeredVelocity, const uint component) {
-    coord[component] += 1;
-
-    float neighborType = texelFetch(MarkerVolume, coord, 0).x;
-    float neighborPressure = neighborType == CELL_FLUID ? texelFetch(PressureVolume, coord, 0).x : 0.0;
-
-    [[flatten]] if (neighborType == CELL_SOLID) {
-        // At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
-        // No support for non-static boundary yet
-        // -> No flow between boundary and non-boundary allowed.
-        // To avoid sticking to walls we allow velocity away from it even though it violates continuity equations.
-        return min(0.0, currentCellStaggeredVelocity);
-    }
-    else {
-        return currentCellStaggeredVelocity - (pressureAtCenter - neighborPressure);
-    }
+float samplePressure(ivec3 gridCoord, float cellType) {
+    if (cellType == CELL_AIR)
+        return 0.0;
+    return texelFetch(PressureVolume, gridCoord, 0).x;
 }
 
+// Macro because image3D can't be passed to functions
+
+// At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
+// No support for non-static boundary yet
+// -> No flow between boundary and non-boundary allowed.
+// To avoid sticking to walls we allow velocity away from it even though it violates continuity equations.
+
+#define correctVelocityForDirection(velocityVolume, centerGridCoord, centerPressure, centerCellType, component)                                      \
+    {                                                                                                                                                \
+        ivec3 neighborGridCoord = centerGridCoord;                                                                                                   \
+        neighborGridCoord[component] += 1;                                                                                                           \
+                                                                                                                                                     \
+        float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;                                                                   \
+        if (centerCellType == CELL_FLUID || neighborCellType == CELL_FLUID) {                                                                        \
+            float velocity = imageLoad(velocityVolume, centerGridCoord).x;                                                                           \
+                                                                                                                                                     \
+            if (neighborCellType == CELL_SOLID) {                                                                                                    \
+                velocity = min(0.0, velocity);                                                                                                       \
+            } else if (centerCellType == CELL_SOLID) {                                                                                               \
+                velocity = max(0.0, velocity);                                                                                                       \
+            } else {                                                                                                                                 \
+                velocity -= centerPressure - samplePressure(neighborGridCoord, neighborCellType);                                                    \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+            imageStore(velocityVolume, centerGridCoord, velocity.xxxx);                                                                              \
+        } else {                                                                                                                                     \
+            imageStore(velocityVolume, centerGridCoord, (0.0 / 0.0).xxxx);                                                                           \
+        }                                                                                                                                            \
+    }
+
 void main() {
-    vec3 velocityGridPosition = vec3(gl_GlobalInvocationID);
-    ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+    ivec3 centerGridCoord = ivec3(gl_GlobalInvocationID);
 
-    float cellType = texelFetch(MarkerVolume, gridCoord, 0).x;
-    if (cellType != CELL_FLUID)
-        return;
+    float centerCellType = texelFetch(MarkerVolume, centerGridCoord, 0).x;
 
-    float pressureAtCenter = texelFetch(PressureVolume, gridCoord, 0).x;
-    {
-        float velocity = imageLoad(VelocityVolumeX, gridCoord).x;
-        velocity = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 0);
-        imageStore(VelocityVolumeX, gridCoord, velocity.xxxx);
-    }
-    {
-        float velocity = imageLoad(VelocityVolumeY, gridCoord).x;
-        velocity = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 1);
-        imageStore(VelocityVolumeY, gridCoord, velocity.xxxx);
-    }
-    {
-        float velocity = imageLoad(VelocityVolumeZ, gridCoord).x;
-        velocity = computeCorrectedVelocityForDirection(gridCoord, pressureAtCenter, velocity, 2);
-        imageStore(VelocityVolumeZ, gridCoord, velocity.xxxx);
-    }
+    float centerPressure = samplePressure(centerGridCoord, centerCellType);
+    correctVelocityForDirection(VelocityVolumeX, centerGridCoord, centerPressure, centerCellType, 0);
+    correctVelocityForDirection(VelocityVolumeY, centerGridCoord, centerPressure, centerCellType, 1);
+    correctVelocityForDirection(VelocityVolumeZ, centerGridCoord, centerPressure, centerCellType, 2);
 }
