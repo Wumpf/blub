@@ -67,6 +67,23 @@ void main() {
         v_101[i] = sampleVelocity(ivec3(volumeCoordMax.x, volumeCoordMin.y, volumeCoordMax.z), i);
         v_011[i] = sampleVelocity(ivec3(volumeCoordMin.x, volumeCoordMax.yz), i);
         v_111[i] = sampleVelocity(volumeCoordMax, i);
+
+        // On the fly extrapolation.
+        // Main disadvantage of this approach is that we can't apply boundary conditions in the extrapolation.
+        float numNonNan = float(!isnan(v_000[i])) + float(!isnan(v_100[i])) + float(!isnan(v_010[i])) + float(!isnan(v_110[i])) +
+                          float(!isnan(v_001[i])) + float(!isnan(v_101[i])) + float(!isnan(v_011[i])) + float(!isnan(v_111[i]));
+        float avgVel = (isnan(v_000[i]) ? 0.0 : v_000[i]) + (isnan(v_100[i]) ? 0.0 : v_100[i]) + (isnan(v_010[i]) ? 0.0 : v_010[i]) +
+                       (isnan(v_110[i]) ? 0.0 : v_110[i]) + (isnan(v_001[i]) ? 0.0 : v_001[i]) + (isnan(v_101[i]) ? 0.0 : v_101[i]) +
+                       (isnan(v_011[i]) ? 0.0 : v_011[i]) + (isnan(v_111[i]) ? 0.0 : v_111[i]);
+        avgVel /= numNonNan;
+        v_000[i] = isnan(v_000[i]) ? avgVel : v_000[i];
+        v_100[i] = isnan(v_100[i]) ? avgVel : v_100[i];
+        v_010[i] = isnan(v_010[i]) ? avgVel : v_010[i];
+        v_110[i] = isnan(v_110[i]) ? avgVel : v_110[i];
+        v_001[i] = isnan(v_001[i]) ? avgVel : v_001[i];
+        v_101[i] = isnan(v_101[i]) ? avgVel : v_101[i];
+        v_011[i] = isnan(v_011[i]) ? avgVel : v_011[i];
+        v_111[i] = isnan(v_111[i]) ? avgVel : v_111[i];
     }
 
     // Update velocity and the APIC affine matrix.
@@ -82,6 +99,7 @@ void main() {
     vec3 v_xy1 = mix(v_x01, v_x11, interpolantsY);
     vec3 newVelocity = mix(v_xy0, v_xy1, interpolantsZ);
     // For debugging: This needs to be equal (within small floating point errors) to our interpolation! (on all axis)
+    // (if we don't do on-the-fly extrapolation)
     // newVelocity.y = texture(sampler3D(VelocityVolumeY, SamplerTrilinearClamp), offsetPositions[1] / (gridSize - vec3(1))).x;
 
     // The Apic Matrix is the jacobi matrix of the velocity for fluids.
@@ -115,7 +133,7 @@ void main() {
     // Write new LinkedList & marker grid for density projection step.
     {
         imageStore(MarkerVolume, ivec3(newPosition), vec4(CELL_FLUID, 0, 0, 0));
-        ivec3 nearestDualGridCell = ivec3(max(newPosition - vec3(0.5), vec3(0.0)));
+        ivec3 nearestDualGridCell = ivec3(newPosition - vec3(0.5));
         Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
     }
 

@@ -12,6 +12,7 @@ COMPUTE_PASS_VOLUME
 layout(push_constant) uniform PushConstants { uint PassIndex; };
 
     // Extrapolate is super racy! TODO
+    // Boundary conditions! TODO
 
 #define accumulateNeighbor(velocityVolume, dir)                                                                                                      \
     {                                                                                                                                                \
@@ -44,6 +45,9 @@ layout(push_constant) uniform PushConstants { uint PassIndex; };
     }
 
 void main() {
+    // TODO: Using on-the-fly interpolation for the moment.
+    return;
+
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
     float cellType = texelFetch(MarkerVolume, gridCoord, 0).x;
