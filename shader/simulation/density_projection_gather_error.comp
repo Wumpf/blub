@@ -131,6 +131,6 @@ void main() {
     density = clamp(density, density0 * 0.5, density0 * 1.5);
 
     // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
-    float densityError = density0 - density; // TODO: Clamping as suggested in the paper?
+    float densityError = density0 - density;
     imageStore(DensityVolume, gridCoord, densityError.xxxx);
 }

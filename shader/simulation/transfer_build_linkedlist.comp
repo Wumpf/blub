@@ -15,12 +15,12 @@ void main() {
     vec3 position = Particles[particleIndex].Position;
 
     if (VelocityTransferComponent == 0) {
-        imageStore(MarkerVolume, ivec3(position), vec4(CELL_FLUID, 0, 0, 0));
+        imageStore(MarkerVolume, ivec3(position), vec4(CELL_FLUID));
     }
 
     vec3 offset = vec3(0.5);
     offset[VelocityTransferComponent] = 1.0;
-    ivec3 nearestDualGridCell = ivec3(max(position - offset, vec3(0.0)));
+    ivec3 nearestDualGridCell = ivec3(position - offset);
 
     // Remember, indices in grid are offset by +1 for easy handling of empty cells.
     Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
