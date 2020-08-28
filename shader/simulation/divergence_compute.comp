@@ -1,4 +1,5 @@
-// Computes velocity divergence
+// Computes velocity divergence plus solid wall influence
+// (so technically not just divergence, just the right hand sight of the pressure solve)
 
 #version 460
 
@@ -13,14 +14,11 @@ layout(set = 1, binding = 4, r32f) uniform restrict image3D Divergence;
 
 COMPUTE_PASS_VOLUME
 
-float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, float oppositeWallType, const uint component) {
-    ivec3 neighborCoord = coord;
-    neighborCoord[component] -= 1;
-
-    if (oppositeWallType == CELL_FLUID)
-        return texelFetch(velocityVolume, coord, 0).x - texelFetch(velocityVolume, neighborCoord, 0).x;
-    else if (oppositeWallType == CELL_SOLID)
-        return texelFetch(velocityVolume, coord, 0).x;
+float solidWallContribution(ivec3 gridCoord, float wallVelocity) {
+    // (Moving solid will need to be treated here)
+    float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
+    if (marker == CELL_SOLID)
+        return wallVelocity;
     else
         return 0.0;
 }
@@ -36,12 +34,29 @@ void main() {
         return;
     }
 
-    float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
-    float markerY0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 1, 0), 0).x;
-    float markerZ0 = texelFetch(MarkerVolume, gridCoord - ivec3(0, 0, 1), 0).x;
+    // Since we know the cell at gridCoord is a fluid cell, we know that the velocities at the positive and negative boundary are well defined.
+    vec3 velocityPositiveBoundary;
+    velocityPositiveBoundary.x = texelFetch(VelocityVolumeX, gridCoord, 0).x;
+    velocityPositiveBoundary.y = texelFetch(VelocityVolumeY, gridCoord, 0).x;
+    velocityPositiveBoundary.z = texelFetch(VelocityVolumeZ, gridCoord, 0).x;
+    vec3 velocityNegativeBoundary;
+    velocityNegativeBoundary.x = texelFetch(VelocityVolumeX, gridCoord - ivec3(1, 0, 0), 0).x;
+    velocityNegativeBoundary.y = texelFetch(VelocityVolumeY, gridCoord - ivec3(0, 1, 0), 0).x;
+    velocityNegativeBoundary.z = texelFetch(VelocityVolumeZ, gridCoord - ivec3(0, 0, 1), 0).x;
 
-    float divergence = computeDivergenceForDirection(gridCoord, VelocityVolumeX, markerX0, 0);
-    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeY, markerY0, 1);
-    divergence += computeDivergenceForDirection(gridCoord, VelocityVolumeZ, markerZ0, 2);
+    // Actual divergence computation.
+    float divergence;
+    divergence = velocityPositiveBoundary.x - velocityNegativeBoundary.x;
+    divergence += velocityPositiveBoundary.y - velocityNegativeBoundary.y;
+    divergence += velocityPositiveBoundary.z - velocityNegativeBoundary.z;
+
+    // Account for solid walls.
+    divergence += solidWallContribution(gridCoord - ivec3(1, 0, 0), velocityNegativeBoundary.x).x;
+    divergence += solidWallContribution(gridCoord - ivec3(0, 1, 0), velocityNegativeBoundary.y).x;
+    divergence += solidWallContribution(gridCoord - ivec3(0, 0, 1), velocityNegativeBoundary.z).x;
+    divergence -= solidWallContribution(gridCoord + ivec3(1, 0, 0), velocityPositiveBoundary.x).x;
+    divergence -= solidWallContribution(gridCoord + ivec3(0, 1, 0), velocityPositiveBoundary.y).x;
+    divergence -= solidWallContribution(gridCoord + ivec3(0, 0, 1), velocityPositiveBoundary.z).x;
+
     imageStore(Divergence, gridCoord, divergence.xxxx);
 }
