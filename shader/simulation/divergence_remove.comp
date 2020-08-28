@@ -9,9 +9,10 @@
 COMPUTE_PASS_VOLUME
 
 float samplePressure(ivec3 gridCoord, float cellType) {
-    if (cellType == CELL_AIR)
+    if (cellType == CELL_FLUID)
+        return texelFetch(PressureVolume, gridCoord, 0).x;
+    else
         return 0.0;
-    return texelFetch(PressureVolume, gridCoord, 0).x;
 }
 
 // Macro because image3D can't be passed to functions

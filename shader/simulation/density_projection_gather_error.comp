@@ -90,7 +90,7 @@ void main() {
 
     // To simplify we set the volume of a cell and the mass of a single particle to 1.
     // Our normal density is defined by 8 evenly distributed particles in a cell. Therefore the normal density is defines as 8!
-    const float density0 = 8.0;
+    const float Density0 = 8.0;
 
     // Handle special neighbor situations.
     // For simplicity & perf looking only at 6 direct neighbors.
@@ -125,12 +125,12 @@ void main() {
     // Clamp too low pressure at the borders of the fluid to work around fluid deficiency
     if (marker_px == CELL_AIR || marker_py == CELL_AIR || marker_pz == CELL_AIR || marker_nx == CELL_AIR || marker_ny == CELL_AIR ||
         marker_nz == CELL_AIR)
-        density = max(density0, density);
+        density = max(Density0, density);
 
     // Clamp density as suggested in paper to avoid displacement of more than one particle at a time
-    density = clamp(density, density0 * 0.5, density0 * 1.5);
+    density = clamp(density, Density0 * 0.5, Density0 * 1.5);
 
     // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
-    float densityError = density0 - density;
+    float densityError = Density0 - density;
     imageStore(DensityVolume, gridCoord, densityError.xxxx);
 }
