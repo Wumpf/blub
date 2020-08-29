@@ -1,5 +1,4 @@
 // Extrapolates velocity into air and solid for easy access in particle update
-// Note that we can run the extrapolation pass only once since we don't double buffer markers.
 
 #version 450
 
@@ -7,51 +6,85 @@
 
 COMPUTE_PASS_VOLUME
 
-// Total of 2 passes
-// Don't need to update markers on last pass!
-layout(push_constant) uniform PushConstants { uint PassIndex; };
+bool isValidVelocity(ivec3 coord, int component) {
+    if (texelFetch(MarkerVolume, coord, 0).x == CELL_FLUID)
+        return true;
+    coord[component] += 1;
+    return texelFetch(MarkerVolume, coord, 0).x == CELL_FLUID;
+}
 
-    // Extrapolate is super racy! TODO
-    // Boundary conditions! TODO
-
-#define accumulateNeighbor(velocityVolume, dir)                                                                                                      \
+// Macro since can't pass images.
+#define velocityContribution(velocityVolume, component, gridCoord, offset, numV, avgV)                                                               \
     {                                                                                                                                                \
-        ivec3 neighborCoord = gridCoord + dir;                                                                                                       \
-        if (all(greaterThanEqual(neighborCoord, ivec3(0))) && all(lessThan(neighborCoord, imageSize(velocityVolume)))) {                             \
-            float v = imageLoad(velocityVolume, neighborCoord).x;                                                                                    \
-            if (!isnan(v)) {                                                                                                                         \
-                weight += 1.0;                                                                                                                       \
-                velocity += v;                                                                                                                       \
-            }                                                                                                                                        \
-        }                                                                                                                                            \
-    }
-
-#define extrapolateInDirection(velocityVolume, dir, cellType, gridCoord)                                                                             \
-    {                                                                                                                                                \
-        float cellTypePos = texelFetch(MarkerVolume, gridCoord + dir, 0).x;                                                                          \
-        if (cellType != CELL_FLUID && cellTypePos != CELL_FLUID) {                                                                                   \
-            float velocity = 0.0;                                                                                                                    \
-            float weight = 0.0;                                                                                                                      \
-            accumulateNeighbor(velocityVolume, ivec3(1, 0, 0));                                                                                      \
-            accumulateNeighbor(velocityVolume, ivec3(0, 1, 0));                                                                                      \
-            accumulateNeighbor(velocityVolume, ivec3(0, 0, 1));                                                                                      \
-            accumulateNeighbor(velocityVolume, ivec3(-1, 0, 0));                                                                                     \
-            accumulateNeighbor(velocityVolume, ivec3(0, -1, 0));                                                                                     \
-            accumulateNeighbor(velocityVolume, ivec3(0, 0, -1));                                                                                     \
-            if (weight > 0.0) {                                                                                                                      \
-                imageStore(velocityVolume, gridCoord, velocity.xxxx / weight);                                                                       \
-            }                                                                                                                                        \
+        ivec3 c = gridCoord + offset;                                                                                                                \
+        if (isValidVelocity(c, component)) {                                                                                                         \
+            numV += 1;                                                                                                                               \
+            avgV += imageLoad(velocityVolume, c).x;                                                                                                  \
         }                                                                                                                                            \
     }
 
 void main() {
-    // TODO: Using on-the-fly interpolation for the moment.
-    return;
-
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
     float cellType = texelFetch(MarkerVolume, gridCoord, 0).x;
-    extrapolateInDirection(VelocityVolumeX, ivec3(1, 0, 0), cellType, gridCoord);
-    extrapolateInDirection(VelocityVolumeY, ivec3(0, 1, 0), cellType, gridCoord);
-    extrapolateInDirection(VelocityVolumeZ, ivec3(0, 0, 1), cellType, gridCoord);
+    if (cellType == CELL_FLUID) // Velocity in all direction is valid, nothing to do.
+        return;
+
+    // For every axis we probe direct and diagonal neighbors in its own plane.
+    // The trick here is that we know that a particle already has access to two valid velocity in each axis,
+    // around the cell the particle marked with CELL_FLUID
+
+    float cellTypeOppositeSide = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;
+    if (cellTypeOppositeSide != CELL_FLUID) // If opposite is fluid, then this already is a valid velocity, so nothing to do.
+    {
+        float numV = 0.0;
+        float avgV = 0.0;
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, -1, -1), numV, avgV);
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, 0, -1), numV, avgV);
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, 1, -1), numV, avgV);
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, -1, 0), numV, avgV);
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, 1, 0), numV, avgV);
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, -1, 1), numV, avgV);
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, 0, 1), numV, avgV);
+        velocityContribution(VelocityVolumeX, 0, gridCoord, ivec3(0, 1, 1), numV, avgV);
+        if (numV > 0) {
+            imageStore(VelocityVolumeX, gridCoord, (avgV / numV).xxxx);
+        }
+    }
+
+    cellTypeOppositeSide = texelFetch(MarkerVolume, gridCoord + ivec3(0, 1, 0), 0).x;
+    if (cellTypeOppositeSide != CELL_FLUID) // If opposite is fluid, then this already is a valid velocity, so nothing to do.
+    {
+        float numV = 0.0;
+        float avgV = 0.0;
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(-1, 0, -1), numV, avgV);
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(0, 0, -1), numV, avgV);
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(1, 0, -1), numV, avgV);
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(-1, 0, 0), numV, avgV);
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(1, 0, 0), numV, avgV);
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(-1, 0, 1), numV, avgV);
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(0, 0, 1), numV, avgV);
+        velocityContribution(VelocityVolumeY, 1, gridCoord, ivec3(1, 0, 1), numV, avgV);
+        if (numV > 0) {
+            imageStore(VelocityVolumeY, gridCoord, (avgV / numV).xxxx);
+        }
+    }
+
+    cellTypeOppositeSide = texelFetch(MarkerVolume, gridCoord + ivec3(0, 0, 1), 0).x;
+    if (cellTypeOppositeSide != CELL_FLUID) // If opposite is fluid, then this already is a valid velocity, so nothing to do.
+    {
+        float numV = 0.0;
+        float avgV = 0.0;
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(-1, -1, 0), numV, avgV);
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(0, -1, 0), numV, avgV);
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(1, -1, 0), numV, avgV);
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(-1, 0, 0), numV, avgV);
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(1, 0, 0), numV, avgV);
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(-1, 1, 0), numV, avgV);
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(0, 1, 0), numV, avgV);
+        velocityContribution(VelocityVolumeZ, 2, gridCoord, ivec3(1, 1, 0), numV, avgV);
+        if (numV > 0) {
+            imageStore(VelocityVolumeZ, gridCoord, (avgV / numV).xxxx);
+        }
+    }
 }

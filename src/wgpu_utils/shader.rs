@@ -68,7 +68,7 @@ impl ShaderDirectory {
             options.set_warnings_as_errors();
             options.set_target_env(shaderc::TargetEnv::Vulkan, 0);
             if cfg!(debug_assertions) {
-                options.set_optimization_level(shaderc::OptimizationLevel::Zero);
+                options.set_optimization_level(shaderc::OptimizationLevel::Performance);
             } else {
                 options.set_optimization_level(shaderc::OptimizationLevel::Performance);
             }

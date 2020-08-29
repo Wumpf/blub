@@ -51,8 +51,9 @@ void main() {
     }
 
     float scale = clamp(velocity * Rendering.VelocityVisualizationScale, -1.0, 1.0);
-    // if (marker != CELL_FLUID && neighborMarker != CELL_FLUID)
-    //    scale = 0.0;
+    if (marker != CELL_FLUID && neighborMarker != CELL_FLUID)
+        scale = 0.0; // Showing extrapolated velocities is a bit complicated.
+    // For debugging it can be useful to fill the velocity field with NaN and see what remains.
     if (isnan(velocity))
         scale = 0.0;
     if (gl_VertexIndex == 0) {

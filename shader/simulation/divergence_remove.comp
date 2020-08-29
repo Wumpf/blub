@@ -16,12 +16,6 @@ float samplePressure(ivec3 gridCoord, float cellType) {
 }
 
 // Macro because image3D can't be passed to functions
-
-// At boundary cells the pressure should be such that fluid_velocity * boundary_normal == boundary_velocity * boundary_normal
-// No support for non-static boundary yet
-// -> No flow between boundary and non-boundary allowed.
-// To avoid sticking to walls we allow velocity away from it even though it violates continuity equations.
-
 #define correctVelocityForDirection(velocityVolume, centerGridCoord, centerPressure, centerCellType, component)                                      \
     {                                                                                                                                                \
         ivec3 neighborGridCoord = centerGridCoord;                                                                                                   \
@@ -38,7 +32,6 @@ float samplePressure(ivec3 gridCoord, float cellType) {
             } else {                                                                                                                                 \
                 velocity -= centerPressure - samplePressure(neighborGridCoord, neighborCellType);                                                    \
             }                                                                                                                                        \
-                                                                                                                                                     \
             imageStore(velocityVolume, centerGridCoord, velocity.xxxx);                                                                              \
         } else {                                                                                                                                     \
             imageStore(velocityVolume, centerGridCoord, (0.0 / 0.0).xxxx);                                                                           \

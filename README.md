@@ -64,25 +64,6 @@ I eventually settled with three different grids, processing a single velocity co
 Note that _by far_ the biggest bottleneck in this approach is walking the particle linked list. Doing a shared memory optimization yielded >4x performance speed up:
 Every thread walks only a single linked list, stores the result to shared memory and then reads the remaining seven neighbor linked lists from shared memory. 👌
 
-### Velocity Extrapolation
-
-Typical implementations of PIC/FLIP/APIC include a velocity extrapolation step which extends velocities from fluid cells into air and (with some tweaks) solid cells.
-This is done in order to...
-* fix discrete [divergence](https://en.wikipedia.org/wiki/Divergence)
-    * think of a falling droplet, modeled as a single fluid cell with downward velocity. As there's not other forces, our tiny fluid is divergence free. If we were to take central differences of velocity with the surrounding cells as is though we would come to a different conclusion!
-* particle advection
-  * particles interpolating velocities, thus grabbing velocity from solid/fluid cells.
-  * particles leaving fluid cells during advection
-    * advection is usually done via higher order differential equation solver which may sample the velocity grid outside of the cell any particular particle started in
-* useful for some kind of renderings (I believe)
-
-Extrapolation in Blub:
-* divergence computation
-  * fix on the fly by looking into marker grid (doesn't go far, so this is rather cheap)
-* particle advection
-  * do a two pass extrapolation, each with 6 neighborhood (the direct 26 neighborhood would be needed for particle advection, but I eventually deemed that to be too much sampling for a single pass)
-* don't use anything fancy that needs velocity elsewhere 🙂
-
 ### Solver
 
 Using Preconditioned Conjugate Gradient solver for solving the poisson pressure equation (PPE). In comments and naming in the code I'm following the description in [Bridson's book](https://www.amazon.com/Simulation-Computer-Graphics-Robert-Bridson/dp/1568813260).
