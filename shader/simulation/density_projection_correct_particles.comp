@@ -12,8 +12,11 @@ layout(set = 2, binding = 2) uniform texture3D PressureFromDensity;
 COMPUTE_PASS_PARTICLES
 
 float samplePressure(ivec3 position) {
-    // TODO: Extrapolate pass?
-    return texelFetch(PressureFromDensity, position, 0).r;
+    float marker = texelFetch(MarkerVolume, position, 0).r;
+    if (marker == CELL_FLUID)
+        return texelFetch(PressureFromDensity, position, 0).r;
+    else
+        return 0.0;
 }
 
 float interpolateBilinear(float p_00, float p_10, float p_01, float p_11, vec2 interpolants) {
