@@ -79,7 +79,7 @@ void main() {
         }
 
         // Wait for shared variables to be updated.
-        barrier(); // (newer GLSL specifications clarify that this is ALSO a memoryBarrierShared)
+        barrier();
 
         // Load & apply remaining seven neighbor particles.
         if (threadWritesFluid) {
@@ -91,6 +91,9 @@ void main() {
             addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(0, 1, 1), staggeredVelocitySamplePosition);
             addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 1, 1), staggeredVelocitySamplePosition);
         }
+
+        // Wait for shared variable reads to be done.
+        barrier();
     }
     // DEBUG CHECK for single cell scene - for comparison against linked list handling
     // for (int i = 0; i < 8; ++i) {
@@ -102,7 +105,7 @@ void main() {
     //                     ivec3(0, 0, 1), ivec3(1, 0, 1), ivec3(0, 1, 1), ivec3(1, 1, 1)};
     // for (int i = 0; i < 8; ++i) {
     //     uint localParticleIndex = imageLoad(LinkedListDualGrid, gridCoord - offsets[i]).r - 1;
-    //     while (localParticleIndex != INVALID_LINKED_LIST_PTR) {
+    //     for (int i = 0; i < 12 && localParticleIndex != INVALID_LINKED_LIST_PTR; ++i) {
     //         addParticleContribution(velocityComponent, velocityWeight, Particles[localParticleIndex].Position,
     //                                 ParticleBufferVelocityComponent[localParticleIndex], staggeredVelocitySamplePosition);
     //         localParticleIndex = Particles[localParticleIndex].LinkedListNext;

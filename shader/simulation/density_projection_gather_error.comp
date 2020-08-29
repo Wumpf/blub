@@ -83,6 +83,9 @@ void main() {
             addParticleContributionFromSharedMemory(density, uvec3(0, 1, 1), samplePosition);
             addParticleContributionFromSharedMemory(density, uvec3(1, 1, 1), samplePosition);
         }
+
+        // Wait for shared variable reads to be done.
+        barrier();
     }
 
     if (!threadWritesFluid)
