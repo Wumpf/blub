@@ -283,6 +283,10 @@ impl Application {
 
         if self.simulation_controller.status() == SimulationControllerStatus::Paused {
             self.screenshot_recorder.stop_recording();
+        } else {
+            if let Some(scene) = self.scene.as_mut() {
+                scene.update();
+            }
         }
     }
 

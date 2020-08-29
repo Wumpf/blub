@@ -98,7 +98,7 @@ impl SimulationController {
         simulation_jump_length: Duration,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        scene: &Scene,
+        scene: &mut Scene,
         pipeline_manager: &PipelineManager,
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
@@ -130,6 +130,7 @@ impl SimulationController {
                     }
                 }
                 queue.submit(Some(encoder.finish()));
+                scene.update();
                 info!("simulation fast forwarding batch submitted (size {})", batch_size);
                 device.poll(wgpu::Maintain::Wait); // Seems to be necessary to do the full wait every time to avoid TDR.
             }
@@ -148,7 +149,7 @@ impl SimulationController {
 
     pub fn frame_steps(
         &mut self,
-        scene: &Scene,
+        scene: &mut Scene,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
@@ -180,7 +181,7 @@ impl SimulationController {
 
     fn single_step<'a>(
         &mut self,
-        scene: &'a Scene,
+        scene: &'a mut Scene,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &'a PipelineManager,
         queue: &wgpu::Queue,

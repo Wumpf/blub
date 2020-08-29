@@ -4,13 +4,13 @@
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0) buffer restrict DotProduct { float DotProductBuffer[]; };
+layout(set = 2, binding = 0) buffer restrict _ReduceBuffer { float ReduceBuffer[]; };
 layout(set = 2, binding = 1) uniform texture3D Search;
 
 COMPUTE_PASS_VOLUME
 
 // It seems that there is a bug that will make this function misbehave if it is declared before the thread group layout declaration
-uint GetDotProductBufferAddress() {
+uint GetReduceBufferAddress() {
     uint threadsPerWorkgroup = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
     uint threadGroupIndex = (gl_WorkGroupID.z * gl_NumWorkGroups.y + gl_WorkGroupID.y) * gl_NumWorkGroups.x + gl_WorkGroupID.x;
     return gl_LocalInvocationIndex + threadsPerWorkgroup * threadGroupIndex;
@@ -25,5 +25,5 @@ void main() {
 
     float searchValue = texelFetch(Search, gridCoord, 0).x;
     float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, searchValue);
-    DotProductBuffer[GetDotProductBufferAddress()] = searchValue * searchTimesA;
+    ReduceBuffer[GetReduceBufferAddress()] = searchValue * searchTimesA;
 }

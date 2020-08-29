@@ -1,5 +1,9 @@
 use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, shader::ShaderDirectory};
-use std::{cell::Cell, path::Path, rc::Rc};
+use futures::Future;
+use futures::*;
+use std::collections::VecDeque;
+use std::{cell::Cell, rc::Rc};
+use std::{path::Path, pin::Pin};
 
 fn create_volume_texture_desc(label: &str, grid_dimension: wgpu::Extent3d, format: wgpu::TextureFormat) -> wgpu::TextureDescriptor {
     wgpu::TextureDescriptor {
@@ -32,15 +36,32 @@ pub struct PressureSolver {
     pipeline_update_pressure_and_residual: ComputePipelineHandle,
     pipeline_update_search: ComputePipelineHandle,
 
+    dotproduct_reduce_result_buffer: wgpu::Buffer,
+
     group_layout_pressure: BindGroupLayoutWithDesc,
 
     volume_residual_view: wgpu::TextureView,
+}
+
+const NUM_PRESSURE_ERROR_BUFFER: usize = 16;
+
+struct PendingErrorBuffer {
+    copy_operation: Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>,
+    buffer: wgpu::Buffer,
 }
 
 // Pressure solver instance keeps track of pressure result from last step/frame in order to speed up the solve.
 pub struct PressureField {
     bind_group_pressure: wgpu::BindGroup,
     volume_pressure_view: wgpu::TextureView,
+
+    unused_error_buffers: Vec<wgpu::Buffer>,
+    pending_error_buffers: Vec<wgpu::Buffer>,
+    pending_error_readbacks: VecDeque<PendingErrorBuffer>,
+
+    min_num_iterations: u32,
+    max_num_iterations: u32,
+
     is_first_step: Cell<bool>,
 }
 
@@ -57,15 +78,67 @@ impl PressureField {
             .texture(&volume_pressure_view)
             .create(device, &format!("BindGroup: Pressure - {}", name));
 
+        let mut unused_error_buffers = Vec::new();
+        for i in 0..NUM_PRESSURE_ERROR_BUFFER {
+            unused_error_buffers.push(device.create_buffer(&wgpu::BufferDescriptor {
+                size: 4,
+                usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
+                label: Some(&format!("Buffer: Pressure error read-back buffer {} ({})", i, name)),
+                mapped_at_creation: false,
+            }));
+        }
+
         PressureField {
             bind_group_pressure,
             volume_pressure_view,
+            unused_error_buffers,
+            pending_error_buffers: Vec::new(),
+            pending_error_readbacks: VecDeque::new(),
+
+            min_num_iterations: 16,
+            max_num_iterations: 100,
+
             is_first_step: Cell::new(true),
         }
     }
 
     pub fn pressure_view(&self) -> &wgpu::TextureView {
         &self.volume_pressure_view
+    }
+
+    fn query_iteration_count(&mut self) -> u32 {
+        if let Some(mut readback) = self.pending_error_readbacks.pop_front() {
+            if (&mut readback.copy_operation).now_or_never().is_some() {
+                let mapped = readback.buffer.slice(0..4);
+
+                let buffer_data = mapped.get_mapped_range().to_vec();
+                let squared_error = bytemuck::from_bytes::<f32>(&buffer_data);
+                info!("{}", squared_error);
+
+                readback.buffer.unmap();
+                self.unused_error_buffers.push(readback.buffer);
+            } else {
+                self.pending_error_readbacks.push_front(readback);
+            }
+        }
+        self.min_num_iterations
+    }
+
+    fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer) {
+        if let Some(target_buffer) = self.unused_error_buffers.pop() {
+            encoder.copy_buffer_to_buffer(source_buffer, 0, &target_buffer, 0, 4);
+            self.pending_error_buffers.push(target_buffer);
+        } else {
+            warn!("No more error buffer available for async copy of pressure solve error");
+        }
+    }
+
+    // Call this once all command
+    pub fn start_error_buffer_readbacks(&mut self) {
+        for buffer in self.pending_error_buffers.drain(..) {
+            let copy_operation = buffer.slice(..).map_async(wgpu::MapMode::Read).boxed();
+            self.pending_error_readbacks.push_back(PendingErrorBuffer { buffer, copy_operation });
+        }
     }
 }
 
@@ -115,6 +188,7 @@ impl PressureSolver {
             .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: Pressure solver preconditioner");
         let group_layout_update_volume = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::buffer(false))
             .next_binding_compute(binding_glsl::image3d(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::texture3D())
             .next_binding_compute(binding_glsl::uniform())
@@ -204,7 +278,7 @@ impl PressureSolver {
         let dotproduct_reduce_result_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Buffer: DotProduct Result"),
             size: 4 * std::mem::size_of::<f32>() as u64,
-            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::UNIFORM,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_SRC,
             mapped_at_creation: false,
         });
 
@@ -265,11 +339,13 @@ impl PressureSolver {
         ];
 
         let bind_group_update_pressure_and_residual = BindGroupBuilder::new(&group_layout_update_volume)
+            .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
             .texture(&volume_residual_view)
             .texture(&volume_search_view)
             .resource(dotproduct_reduce_result_buffer.as_entire_binding())
             .create(device, "BindGroup: Pressure update pressure and residual");
         let bind_group_update_search = BindGroupBuilder::new(&group_layout_update_volume)
+            .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
             .texture(&volume_search_view)
             .texture(&volume_auxiliary_view)
             .resource(dotproduct_reduce_result_buffer.as_entire_binding())
@@ -346,6 +422,8 @@ impl PressureSolver {
 
             group_layout_pressure,
 
+            dotproduct_reduce_result_buffer,
+
             volume_residual_view,
         }
     }
@@ -388,8 +466,17 @@ impl PressureSolver {
         });
     }
 
-    pub fn solve<'a, 'b: 'a>(&'b self, pressure_field: &'a PressureField, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager) {
-        wgpu_scope!(cpass, "PressureSolver.solve");
+    pub fn solve<'a, 'b: 'a>(
+        &'b self,
+        pressure_field: &'a mut PressureField,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline_manager: &'a PipelineManager,
+    ) {
+        wgpu_scope!(encoder, "PressureSolver.solve");
+
+        pressure_field.query_iteration_count();
+
+        let mut cpass = encoder.begin_compute_pass();
 
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_VOLUME);
 
@@ -448,17 +535,22 @@ impl PressureSolver {
                 // finish dotproduct of auxiliary field (z) and search field (s)
                 self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_ALPHA);
 
-                // update pressure field (p) and residual field (r)
-                const PRUPDATE_LAST_ITERATION: u32 = 1;
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
+                wgpu_scope!(cpass, "update pressure field (p) and residual field (r)", || {
+                    const PRUPDATE_LAST_ITERATION: u32 = 1;
+                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
+                    if i == NUM_ITERATIONS {
+                        cpass.set_push_constants(0, &[PRUPDATE_LAST_ITERATION]);
+                    } else {
+                        cpass.set_push_constants(0, &[0]);
+                    }
+                    cpass.set_bind_group(2, &self.bind_group_update_pressure_and_residual, &[]);
+                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                });
+
+                // Was this the last update?
                 if i == NUM_ITERATIONS {
-                    cpass.set_push_constants(0, &[PRUPDATE_LAST_ITERATION]);
-                } else {
-                    cpass.set_push_constants(0, &[0]);
-                }
-                cpass.set_bind_group(2, &self.bind_group_update_pressure_and_residual, &[]);
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-                if i == NUM_ITERATIONS {
+                    // Compute remaining error, we use this later to feedback to the number of iterations.
+                    self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_REDUCE);
                     return false;
                 }
 
@@ -483,6 +575,8 @@ impl PressureSolver {
             }) {}
         });
 
+        drop(cpass);
+        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_buffer);
         pressure_field.is_first_step.set(false);
     }
 }

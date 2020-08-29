@@ -1,6 +1,7 @@
 // Builds density grid from particles and llgrid
 // Uses shepard interpolation on particles.
 // TODO: Similar to transfer_gather_velocity.comp - can share more code?
+// Just like in divergence_compute the error value here - and the pressure value - is premultiplied with density/dTime
 
 #version 450
 

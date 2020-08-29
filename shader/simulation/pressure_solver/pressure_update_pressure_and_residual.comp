@@ -4,13 +4,21 @@
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
-layout(set = 2, binding = 1) uniform texture3D Search;
-layout(set = 2, binding = 2) uniform PcgScalars_ { PcgScalars Scalars; };
+layout(set = 2, binding = 0) buffer restrict _ReduceBuffer { float ReduceBuffer[]; };
+layout(set = 2, binding = 1, r32f) uniform restrict image3D Residual;
+layout(set = 2, binding = 2) uniform texture3D Search;
+layout(set = 2, binding = 3) uniform PcgScalars_ { PcgScalars Scalars; };
 
 #define PRUPDATE_LAST_ITERATION 1
 
 COMPUTE_PASS_VOLUME
+
+// It seems that there is a bug that will make this function misbehave if it is declared before the thread group layout declaration
+uint GetReduceBufferAddress() {
+    uint threadsPerWorkgroup = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+    uint threadGroupIndex = (gl_WorkGroupID.z * gl_NumWorkGroups.y + gl_WorkGroupID.y) * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+    return gl_LocalInvocationIndex + threadsPerWorkgroup * threadGroupIndex;
+}
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
@@ -28,9 +36,6 @@ void main() {
         imageStore(Pressure, gridCoord, (pressureBefore + alpha * search).xxxx);
     }
 
-    if (PushConstants.Mode == PRUPDATE_LAST_ITERATION)
-        return;
-
     // Update residual
     // This is usually r = r - a * z, but we didn't store z!
     // So it's r = r - a * As
@@ -39,8 +44,13 @@ void main() {
     // by merging initial dotproduct calculation (scalar multiply) into calculating As earlier.
     // (empirically confirmed)
     {
-        float residualBefore = imageLoad(Residual, gridCoord).x;
+        float residual = imageLoad(Residual, gridCoord).x;
         float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, search); // The auxillary z!
-        imageStore(Residual, gridCoord, (residualBefore - alpha * searchTimesA).xxxx);
+        residual -= alpha * searchTimesA;
+
+        if (PushConstants.Mode == PRUPDATE_LAST_ITERATION)
+            ReduceBuffer[GetReduceBufferAddress()] = residual * residual;
+        else
+            imageStore(Residual, gridCoord, residual.xxxx);
     }
 }
