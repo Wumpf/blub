@@ -55,14 +55,16 @@ void main() {
 
     case VISUALIZE_PRESSURE_VELOCITY:
         float pressureV = marker == CELL_FLUID ? texelFetch(PressureVolume_Velocity, volumeCoordinate, 0).x : 0.0;
-        scale = saturate(pressureV * pressureV * Rendering.FluidGridToWorldScale * 0.01);
-        out_Tint = colormapHeat(scale).grb;
+        // pressureV *= 0.1;
+        scale = pressureV * Rendering.FluidGridToWorldScale;
+        out_Tint = colormapCoolToWarm(pressureV).rgb;
         break;
 
     case VISUALIZE_PRESSURE_DENSITY:
         float pressureD = marker == CELL_FLUID ? texelFetch(PressureVolume_Density, volumeCoordinate, 0).x : 0.0;
-        scale = saturate(pressureD * pressureD * Rendering.FluidGridToWorldScale);
-        out_Tint = colormapHeat(scale).grb;
+        pressureD *= 2.0;
+        scale = pressureD * Rendering.FluidGridToWorldScale;
+        out_Tint = colormapCoolToWarm(pressureD).rgb;
         break;
 
     case VISUALIZE_MARKER:
@@ -74,7 +76,7 @@ void main() {
             out_Tint = vec3(0.0, 0.0, 1.0);
         break;
     }
-    scale = abs(scale);
+    scale = saturate(abs(scale));
 
     out_ParticleWorldPosition = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
     out_Radius = scale * 0.5 * Rendering.FluidGridToWorldScale;
