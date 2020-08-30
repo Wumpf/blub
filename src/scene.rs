@@ -104,18 +104,16 @@ impl Scene {
         self.hybrid_fluid = Self::create_fluid_from_config(&self.config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
     }
 
-    pub fn update(&mut self) {
-        self.hybrid_fluid.update_statistics();
-    }
+    pub fn step(&mut self, device: &wgpu::Device, pipeline_manager: &PipelineManager, queue: &wgpu::Queue, per_frame_bind_group: &wgpu::BindGroup) {
+        // Poll device to update mapped buffers which may feed back into what a step does.
+        device.poll(wgpu::Maintain::Poll);
 
-    pub fn step(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        pipeline_manager: &PipelineManager,
-        queue: &wgpu::Queue,
-        per_frame_bind_group: &wgpu::BindGroup,
-    ) {
-        self.hybrid_fluid.step(encoder, pipeline_manager, queue, per_frame_bind_group);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Encoder: Scene Step"),
+        });
+        self.hybrid_fluid.step(&mut encoder, pipeline_manager, queue, per_frame_bind_group);
+        queue.submit(Some(encoder.finish()));
+        self.hybrid_fluid.update_statistics();
     }
 
     pub fn fluid(&self) -> &HybridFluid {

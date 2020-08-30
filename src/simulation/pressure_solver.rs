@@ -43,7 +43,7 @@ pub struct PressureSolver {
     volume_residual_view: wgpu::TextureView,
 }
 
-const NUM_PRESSURE_ERROR_BUFFER: usize = 16;
+const NUM_PRESSURE_ERROR_BUFFER: usize = 32;
 
 struct PendingErrorBuffer {
     copy_operation: Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>,
@@ -113,7 +113,7 @@ impl PressureField {
 
                 let buffer_data = mapped.get_mapped_range().to_vec();
                 let squared_error = bytemuck::from_bytes::<f32>(&buffer_data);
-                info!("{}", squared_error);
+                //info!("{}", squared_error);
 
                 readback.buffer.unmap();
                 self.unused_error_buffers.push(readback.buffer);

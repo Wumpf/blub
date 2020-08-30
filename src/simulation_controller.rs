@@ -102,8 +102,14 @@ impl SimulationController {
         pipeline_manager: &PipelineManager,
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
-        // TODO: Dynamic estimate to keep batches around 0.5 seconds.
-        const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 64;
+        // After every batch we wait until the gpu is done.
+        // This is not optimal for performance but is necessary because:
+        // * avoid overloading gpu/driver command queue (we typically finish recording much quicker than gpu is doing the simulation)
+        // * make it possible to readback simulation data
+        // Doing wait per step introduces too much stalling, by batching we're going a middle ground.
+        //
+        // Ideally we would like to never wait until the queue is flushed (i.e. have n steps in flight), but this is hard to do with wgpu!
+        const MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE: usize = 16;
 
         self.status = SimulationControllerStatus::FastForward(simulation_jump_length);
 
@@ -111,33 +117,32 @@ impl SimulationController {
         let previous_simulation_end = self.simulation_stop_time;
         // jump at least one simulation step, makes for easier ui code
         self.simulation_stop_time = self.timer.total_simulated_time() + simulation_jump_length.max(self.timer.simulation_delta());
+        let num_expected_steps = simulation_jump_length.max(self.timer.simulation_delta()).as_nanos() / self.timer.simulation_delta().as_nanos();
 
         self.start_simulation_frame();
         {
             let start_time = Instant::now();
+            let mut num_steps_finished = 0;
             while let SimulationControllerStatus::FastForward(..) = self.status {
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Encoder: Simulation Step Fast Forward"),
-                });
-
                 let mut batch_size = MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE;
                 {
                     for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
-                        if !self.single_step(scene, &mut encoder, pipeline_manager, queue, per_frame_bind_group) {
+                        if !self.single_step(scene, device, queue, pipeline_manager, per_frame_bind_group) {
                             batch_size = i;
                             break;
                         }
                     }
                 }
-                queue.submit(Some(encoder.finish()));
-                scene.update();
-                info!("simulation fast forwarding batch submitted (size {})", batch_size);
-                device.poll(wgpu::Maintain::Wait); // Seems to be necessary to do the full wait every time to avoid TDR.
+                device.poll(wgpu::Maintain::Wait);
+                num_steps_finished += batch_size;
+                info!(
+                    "simulation fast forwarding batch finished (progress {}/{})",
+                    num_steps_finished, num_expected_steps
+                );
             }
             self.computation_time_last_fast_forward = start_time.elapsed();
         }
         self.timer.on_frame_submitted(1.0);
-
         self.timer.force_frame_delta(Duration::from_secs(0));
         self.simulation_stop_time = previous_simulation_end;
 
@@ -150,16 +155,16 @@ impl SimulationController {
     pub fn frame_steps(
         &mut self,
         scene: &mut Scene,
-        encoder: &mut wgpu::CommandEncoder,
-        pipeline_manager: &PipelineManager,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
+        pipeline_manager: &PipelineManager,
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
         if !self.start_simulation_frame() {
             return;
         }
 
-        while self.single_step(scene, encoder, pipeline_manager, queue, per_frame_bind_group) {}
+        while self.single_step(scene, device, queue, pipeline_manager, per_frame_bind_group) {}
     }
 
     fn start_simulation_frame(&mut self) -> bool {
@@ -182,9 +187,9 @@ impl SimulationController {
     fn single_step<'a>(
         &mut self,
         scene: &'a mut Scene,
-        encoder: &mut wgpu::CommandEncoder,
-        pipeline_manager: &'a PipelineManager,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
+        pipeline_manager: &'a PipelineManager,
         per_frame_bind_group: &wgpu::BindGroup,
     ) -> bool {
         // frame drops are only relevant in realtime mode.
@@ -200,7 +205,7 @@ impl SimulationController {
         }
 
         if self.timer.simulation_frame_loop(max_total_step_per_frame) == SimulationStepResult::PerformStepAndCallAgain {
-            scene.step(encoder, pipeline_manager, queue, per_frame_bind_group);
+            scene.step(device, pipeline_manager, queue, per_frame_bind_group);
             return true;
         }
         return false;

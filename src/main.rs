@@ -251,10 +251,10 @@ impl Application {
                     self.camera.on_device_event(&event);
                 }
                 Event::MainEventsCleared => {
-                    self.update();
                     self.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
+                    self.update();
                     self.draw(&event_loop_proxy);
                 }
                 Event::LoopDestroyed => {
@@ -281,12 +281,24 @@ impl Application {
         }
         self.camera.update(self.simulation_controller.timer());
 
+        if let Some(ref mut scene) = self.scene {
+            self.per_frame_resources.update_gpu_data(
+                &self.command_queue,
+                self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
+                self.simulation_controller.timer().fill_global_uniform_buffer(),
+                self.scene_renderer.fill_global_uniform_buffer(&scene),
+            );
+            self.simulation_controller.frame_steps(
+                scene,
+                &self.device,
+                &self.command_queue,
+                &self.pipeline_manager,
+                self.per_frame_resources.bind_group(),
+            );
+        }
+
         if self.simulation_controller.status() == SimulationControllerStatus::Paused {
             self.screenshot_recorder.stop_recording();
-        } else {
-            if let Some(scene) = self.scene.as_mut() {
-                scene.update();
-            }
         }
     }
 
@@ -298,7 +310,6 @@ impl Application {
             self.window_resize(window_size);
         }
 
-        let aspect_ratio = self.screen.aspect_ratio();
         let frame = self.screen.start_frame(&self.device, &self.window_surface);
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -308,17 +319,9 @@ impl Application {
         if let Some(ref mut scene) = self.scene {
             self.per_frame_resources.update_gpu_data(
                 &self.command_queue,
-                self.camera.fill_global_uniform_buffer(aspect_ratio),
+                self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
                 self.simulation_controller.timer().fill_global_uniform_buffer(),
                 self.scene_renderer.fill_global_uniform_buffer(&scene),
-            );
-
-            self.simulation_controller.frame_steps(
-                scene,
-                &mut encoder,
-                &self.pipeline_manager,
-                &self.command_queue,
-                self.per_frame_resources.bind_group(),
             );
             self.scene_renderer.draw(
                 scene,
