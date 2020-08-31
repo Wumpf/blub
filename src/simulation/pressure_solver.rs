@@ -50,6 +50,16 @@ struct PendingErrorBuffer {
     buffer: wgpu::Buffer,
 }
 
+pub struct SolverConfig {
+    pub target_mse: f32,
+    pub min_num_iterations: u32,
+    pub max_num_iterations: u32,
+}
+pub struct SolverStatistics {
+    pub last_mse: f32,
+    pub last_iteration_count: u32,
+}
+
 // Pressure solver instance keeps track of pressure result from last step/frame in order to speed up the solve.
 pub struct PressureField {
     bind_group_pressure: wgpu::BindGroup,
@@ -59,8 +69,8 @@ pub struct PressureField {
     pending_error_buffers: Vec<wgpu::Buffer>,
     pending_error_readbacks: VecDeque<PendingErrorBuffer>,
 
-    min_num_iterations: u32,
-    max_num_iterations: u32,
+    pub config: SolverConfig,
+    pub stats: SolverStatistics,
 
     is_first_step: Cell<bool>,
 }
@@ -95,8 +105,15 @@ impl PressureField {
             pending_error_buffers: Vec::new(),
             pending_error_readbacks: VecDeque::new(),
 
-            min_num_iterations: 16,
-            max_num_iterations: 100,
+            config: SolverConfig {
+                target_mse: 0.001,
+                min_num_iterations: 4,
+                max_num_iterations: 64,
+            },
+            stats: SolverStatistics {
+                last_mse: 0.0,
+                last_iteration_count: 0,
+            },
 
             is_first_step: Cell::new(true),
         }
@@ -112,16 +129,22 @@ impl PressureField {
                 let mapped = readback.buffer.slice(0..4);
 
                 let buffer_data = mapped.get_mapped_range().to_vec();
-                let squared_error = bytemuck::from_bytes::<f32>(&buffer_data);
-                //info!("{}", squared_error);
-
+                let squared_error = *bytemuck::from_bytes::<f32>(&buffer_data);
                 readback.buffer.unmap();
+
+                // todo: divide with time squared
+                // todo: multiply with density squared
+
+                self.stats.last_mse = squared_error;
+
+                //info!("{}", squared_error);
                 self.unused_error_buffers.push(readback.buffer);
             } else {
                 self.pending_error_readbacks.push_front(readback);
             }
         }
-        self.min_num_iterations
+        self.stats.last_iteration_count = self.config.min_num_iterations;
+        self.stats.last_iteration_count
     }
 
     fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer) {

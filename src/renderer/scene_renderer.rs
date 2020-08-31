@@ -86,9 +86,9 @@ impl SceneRenderer {
     // Needs to be called whenever immutable scene properties change.
     pub fn on_new_scene(&mut self, queue: &wgpu::Queue, scene: &Scene) {
         let line_color = cgmath::vec3(0.0, 0.0, 0.0);
-        let grid_extent = scene.config.fluid.grid_dimension;
-        let min = scene.config.fluid.world_position;
-        let max = min + grid_extent.cast().unwrap().to_vec() * scene.config.fluid.grid_to_world_scale;
+        let grid_extent = scene.config().fluid.grid_dimension;
+        let min = scene.config().fluid.world_position;
+        let max = min + grid_extent.cast().unwrap().to_vec() * scene.config().fluid.grid_to_world_scale;
 
         self.bounds_line_renderer.clear_lines();
         self.bounds_line_renderer.add_lines(
@@ -127,11 +127,11 @@ impl SceneRenderer {
 
     pub fn fill_global_uniform_buffer(&self, scene: &Scene) -> GlobalRenderSettingsUniformBufferContent {
         let fluid_particle_radius =
-            scene.config.fluid.grid_to_world_scale / (HybridFluid::PARTICLES_PER_GRID_CELL as f32).powf(1.0 / 3.0) * self.particle_radius_factor;
+            scene.config().fluid.grid_to_world_scale / (HybridFluid::PARTICLES_PER_GRID_CELL as f32).powf(1.0 / 3.0) * self.particle_radius_factor;
 
         GlobalRenderSettingsUniformBufferContent {
-            fluid_origin: scene.config.fluid.world_position,
-            fluid_grid_to_world_scale: scene.config.fluid.grid_to_world_scale,
+            fluid_origin: scene.config().fluid.world_position,
+            fluid_grid_to_world_scale: scene.config().fluid.grid_to_world_scale,
             velocity_visualization_scale: self.velocity_visualization_scale,
             fluid_particle_radius,
             padding: cgmath::point2(0.0, 0.0),

@@ -1,9 +1,6 @@
 use crate::renderer::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
-use crate::{
-    render_output::screen::Screen,
-    simulation_controller::{SimulationController, SimulationControllerStatus},
-    ApplicationEvent,
-};
+use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
+use crate::{render_output::screen::Screen, scene::Scene, ApplicationEvent};
 use imgui::im_str;
 use std::{borrow::Cow, path::PathBuf, time::Duration};
 use strum::IntoEnumIterator;
@@ -27,7 +24,7 @@ fn list_scene_files() -> Vec<PathBuf> {
     files
 }
 
-struct GUIState {
+pub struct GUIState {
     fast_forward_length_seconds: f32,
     video_fps: i32,
     selected_scene_idx: usize,
@@ -73,11 +70,15 @@ impl GUI {
             state: GUIState {
                 fast_forward_length_seconds: 5.0,
                 video_fps: 60,
-                selected_scene_idx: std::usize::MAX,
+                selected_scene_idx: 0,
                 known_scene_files: list_scene_files(),
                 wait_for_vblank: Screen::DEFAULT_PRESENT_MODE == wgpu::PresentMode::Fifo,
             },
         }
+    }
+
+    pub fn selected_scene(&self) -> &PathBuf {
+        &self.state.known_scene_files[self.state.selected_scene_idx]
     }
 
     fn setup_ui(
@@ -85,6 +86,7 @@ impl GUI {
         state: &mut GUIState,
         simulation_controller: &mut SimulationController,
         scene_renderer: &mut SceneRenderer,
+        scene: &mut Scene,
         event_loop_proxy: &EventLoopProxy<ApplicationEvent>,
     ) {
         const DEFAULT_BUTTON_HEIGHT: f32 = 19.0;
@@ -135,17 +137,70 @@ impl GUI {
                         "simulated time: {:.2}",
                         simulation_controller.timer().total_simulated_time().as_secs_f64()
                     ));
+                }
+                if imgui::CollapsingHeader::new(im_str!("Solver")).build(&ui) {
+                    let fluid = scene.fluid_mut();
+
+                    let stack_token = ui.push_id(1);
+                    {
+                        let stats = fluid.pressure_solver_stats_velocity();
+                        ui.text(im_str!("pressure solver, primary (from velocity)"));
+                        ui.text(im_str!("mse: {:.4}", stats.last_mse));
+                        ui.text(im_str!("# solver iterations: {}", stats.last_iteration_count));
+
+                        let config = fluid.pressure_solver_config_velocity();
+                        ui.drag_float(im_str!("target mse"), &mut config.target_mse)
+                            .min(0.0001)
+                            .max(1.0)
+                            .speed(0.0001)
+                            .display_format(im_str!("%.4f"))
+                            .build();
+                        let mut min_iteration_count = config.min_num_iterations as i32;
+                        let mut max_iteration_count = config.max_num_iterations as i32;
+                        if ui
+                            .drag_int_range2(im_str!("min/max iteration count"), &mut min_iteration_count, &mut max_iteration_count)
+                            .min(2)
+                            .max(100)
+                            .build()
+                        {
+                            config.min_num_iterations = min_iteration_count as u32;
+                            config.max_num_iterations = max_iteration_count as u32;
+                        }
+                    }
+                    stack_token.pop(ui);
+                    ui.separator();
+                    {
+                        let stats = fluid.pressure_solver_stats_density();
+                        ui.text(im_str!("pressure solver, secondary (from density)"));
+                        ui.text(im_str!("mse: {:.4}", stats.last_mse));
+                        ui.text(im_str!("# solver iterations: {}", stats.last_iteration_count));
+
+                        let config = fluid.pressure_solver_config_density();
+                        ui.drag_float(im_str!("target mse"), &mut config.target_mse)
+                            .min(0.0001)
+                            .max(1.0)
+                            .speed(0.0001)
+                            .display_format(im_str!("%.4f"))
+                            .build();
+                        let mut min_iteration_count = config.min_num_iterations as i32;
+                        let mut max_iteration_count = config.max_num_iterations as i32;
+                        if ui
+                            .drag_int_range2(im_str!("min/max iteration count"), &mut min_iteration_count, &mut max_iteration_count)
+                            .min(2)
+                            .max(100)
+                            .build()
+                        {
+                            config.min_num_iterations = min_iteration_count as u32;
+                            config.max_num_iterations = max_iteration_count as u32;
+                        }
+                    }
+                }
+
+                if imgui::CollapsingHeader::new(im_str!("Simulation Controller & Recording")).build(&ui) {
                     ui.text(im_str!(
                         "total num simulation steps: {}",
                         simulation_controller.timer().num_simulation_steps_performed()
                     ));
-                }
-
-                //////////////////////////////////////////////////
-                // start/stop/recording
-                ui.separator();
-                //////////////////////////////////////////////////
-                {
                     let mut simulation_time_seconds = simulation_controller.simulation_stop_time.as_secs_f32();
                     ui.push_item_width(110.0);
                     if ui
@@ -232,11 +287,7 @@ impl GUI {
                     }
                 }
 
-                //////////////////////////////////////////////////
-                // scene settings
-                ui.separator();
-                //////////////////////////////////////////////////
-                {
+                if imgui::CollapsingHeader::new(im_str!("Scene Settings")).build(&ui) {
                     ui.set_next_item_width(150.0);
                     if imgui::ComboBox::new(im_str!("Load Scene")).build_simple(
                         ui,
@@ -250,11 +301,7 @@ impl GUI {
                     }
                 }
 
-                //////////////////////////////////////////////////
-                // rendering settings
-                ui.separator();
-                //////////////////////////////////////////////////
-                {
+                if imgui::CollapsingHeader::new(im_str!("Rendering Settings")).build(&ui) {
                     {
                         let mut current_fluid_rendering = scene_renderer.fluid_rendering_mode as usize;
                         imgui::ComboBox::new(im_str!("Fluid Rendering")).build_simple(
@@ -303,23 +350,17 @@ impl GUI {
         view: &wgpu::TextureView,
         simulation_controller: &mut SimulationController,
         scene_renderer: &mut SceneRenderer,
+        scene: &mut Scene,
         event_loop_proxy: &EventLoopProxy<ApplicationEvent>,
     ) {
         let context = &mut self.imgui_context;
         let state = &mut self.state;
 
-        if state.selected_scene_idx >= state.known_scene_files.len() {
-            state.selected_scene_idx = 0;
-            event_loop_proxy
-                .send_event(ApplicationEvent::LoadScene(state.known_scene_files[state.selected_scene_idx].clone()))
-                .unwrap();
-        }
-
         self.imgui_platform
             .prepare_frame(context.io_mut(), window)
             .expect("Failed to prepare imgui frame");
         let ui = context.frame();
-        Self::setup_ui(&ui, state, simulation_controller, scene_renderer, event_loop_proxy);
+        Self::setup_ui(&ui, state, simulation_controller, scene_renderer, scene, event_loop_proxy);
         self.imgui_platform.prepare_render(&ui, &window);
         self.imgui_renderer
             .render(ui.render(), &device, encoder, queue, view)

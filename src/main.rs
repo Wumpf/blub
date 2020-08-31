@@ -54,7 +54,7 @@ struct Application {
 
     shader_dir: shader::ShaderDirectory,
     pipeline_manager: pipelines::PipelineManager,
-    scene: Option<scene::Scene>,
+    scene: scene::Scene,
     scene_renderer: SceneRenderer,
     simulation_controller: simulation_controller::SimulationController,
     gui: gui::GUI,
@@ -104,7 +104,7 @@ impl Application {
         let hdr_backbuffer = HdrBackbuffer::new(&device, screen.resolution(), &shader_dir);
         let per_frame_resources = PerFrameResources::new(&device);
         let simulation_controller = simulation_controller::SimulationController::new();
-        let scene_renderer = SceneRenderer::new(
+        let mut scene_renderer = SceneRenderer::new(
             &device,
             &shader_dir,
             &mut pipeline_manager,
@@ -112,6 +112,18 @@ impl Application {
             &hdr_backbuffer,
         );
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
+
+        // Load initial scene. Gui already needs to list all scenes, so we go there to grab the default selected.
+        let scene = scene::Scene::new(
+            gui.selected_scene(),
+            &device,
+            &command_queue,
+            &shader_dir,
+            &mut pipeline_manager,
+            per_frame_resources.bind_group_layout(),
+        )
+        .unwrap();
+        scene_renderer.on_new_scene(&command_queue, &scene);
 
         Application {
             window,
@@ -125,7 +137,7 @@ impl Application {
 
             shader_dir,
             pipeline_manager,
-            scene: None,
+            scene,
             scene_renderer,
             simulation_controller,
             gui,
@@ -147,8 +159,8 @@ impl Application {
 
         match new_scene {
             Ok(scene) => {
-                self.scene_renderer.on_new_scene(&self.command_queue, &scene);
-                self.scene = Some(scene);
+                self.scene = scene;
+                self.scene_renderer.on_new_scene(&self.command_queue, &self.scene);
             }
             Err(error) => {
                 error!("Failed to load scene from {:?}: {:?}", scene_path, error);
@@ -171,39 +183,33 @@ impl Application {
                         self.simulation_controller.restart();
                     }
                     ApplicationEvent::ResetScene => {
-                        if let Some(ref mut scene) = self.scene {
-                            scene.reset(
-                                &self.device,
-                                &self.command_queue,
-                                &self.shader_dir,
-                                &mut self.pipeline_manager,
-                                self.per_frame_resources.bind_group_layout(),
-                            );
-                        }
+                        self.scene.reset(
+                            &self.device,
+                            &self.command_queue,
+                            &self.shader_dir,
+                            &mut self.pipeline_manager,
+                            self.per_frame_resources.bind_group_layout(),
+                        );
                         self.simulation_controller.restart();
                     }
                     ApplicationEvent::FastForwardSimulation(simulation_jump_length) => {
-                        if let Some(ref mut scene) = self.scene {
-                            self.simulation_controller.fast_forward_steps(
-                                *simulation_jump_length,
-                                &self.device,
-                                &self.command_queue,
-                                scene,
-                                &self.pipeline_manager,
-                                self.per_frame_resources.bind_group(), // values from last draw are good enough.
-                            );
-                        }
+                        self.simulation_controller.fast_forward_steps(
+                            *simulation_jump_length,
+                            &self.device,
+                            &self.command_queue,
+                            &mut self.scene,
+                            &self.pipeline_manager,
+                            self.per_frame_resources.bind_group(), // values from last draw are good enough.
+                        );
                     }
                     ApplicationEvent::ResetAndStartRecording { recording_fps } => {
-                        if let Some(ref mut scene) = self.scene {
-                            scene.reset(
-                                &self.device,
-                                &self.command_queue,
-                                &self.shader_dir,
-                                &mut self.pipeline_manager,
-                                self.per_frame_resources.bind_group_layout(),
-                            );
-                        }
+                        self.scene.reset(
+                            &self.device,
+                            &self.command_queue,
+                            &self.shader_dir,
+                            &mut self.pipeline_manager,
+                            self.per_frame_resources.bind_group_layout(),
+                        );
                         self.simulation_controller.restart();
                         self.simulation_controller.start_recording_with_fixed_frame_length(*recording_fps);
                         self.screenshot_recorder.start_next_recording();
@@ -281,21 +287,19 @@ impl Application {
         }
         self.camera.update(self.simulation_controller.timer());
 
-        if let Some(ref mut scene) = self.scene {
-            self.per_frame_resources.update_gpu_data(
-                &self.command_queue,
-                self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
-                self.simulation_controller.timer().fill_global_uniform_buffer(),
-                self.scene_renderer.fill_global_uniform_buffer(&scene),
-            );
-            self.simulation_controller.frame_steps(
-                scene,
-                &self.device,
-                &self.command_queue,
-                &self.pipeline_manager,
-                self.per_frame_resources.bind_group(),
-            );
-        }
+        self.per_frame_resources.update_gpu_data(
+            &self.command_queue,
+            self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
+            self.simulation_controller.timer().fill_global_uniform_buffer(),
+            self.scene_renderer.fill_global_uniform_buffer(&self.scene),
+        );
+        self.simulation_controller.frame_steps(
+            &mut self.scene,
+            &self.device,
+            &self.command_queue,
+            &self.pipeline_manager,
+            self.per_frame_resources.bind_group(),
+        );
 
         if self.simulation_controller.status() == SimulationControllerStatus::Paused {
             self.screenshot_recorder.stop_recording();
@@ -316,22 +320,20 @@ impl Application {
             label: Some("Encoder: Frame Main"),
         });
 
-        if let Some(ref mut scene) = self.scene {
-            self.per_frame_resources.update_gpu_data(
-                &self.command_queue,
-                self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
-                self.simulation_controller.timer().fill_global_uniform_buffer(),
-                self.scene_renderer.fill_global_uniform_buffer(&scene),
-            );
-            self.scene_renderer.draw(
-                scene,
-                &mut encoder,
-                &self.pipeline_manager,
-                self.hdr_backbuffer.texture_view(),
-                self.screen.depthbuffer(),
-                self.per_frame_resources.bind_group(),
-            );
-        }
+        self.per_frame_resources.update_gpu_data(
+            &self.command_queue,
+            self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
+            self.simulation_controller.timer().fill_global_uniform_buffer(),
+            self.scene_renderer.fill_global_uniform_buffer(&self.scene),
+        );
+        self.scene_renderer.draw(
+            &self.scene,
+            &mut encoder,
+            &self.pipeline_manager,
+            self.hdr_backbuffer.texture_view(),
+            self.screen.depthbuffer(),
+            self.per_frame_resources.bind_group(),
+        );
 
         self.hdr_backbuffer.tonemap(&self.screen.backbuffer(), &mut encoder);
 
@@ -345,6 +347,7 @@ impl Application {
             &self.screen.backbuffer(),
             &mut self.simulation_controller,
             &mut self.scene_renderer,
+            &mut self.scene,
             event_loop_proxy,
         );
 

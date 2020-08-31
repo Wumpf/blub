@@ -37,7 +37,7 @@ pub struct SceneConfig {
 // Scene data & simulation.
 pub struct Scene {
     hybrid_fluid: HybridFluid,
-    pub config: SceneConfig,
+    config: SceneConfig,
 }
 
 impl Scene {
@@ -56,6 +56,10 @@ impl Scene {
         let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
 
         Ok(Scene { hybrid_fluid, config })
+    }
+
+    pub fn config(&self) -> &SceneConfig {
+        &self.config
     }
 
     fn create_fluid_from_config(
@@ -118,5 +122,9 @@ impl Scene {
 
     pub fn fluid(&self) -> &HybridFluid {
         &self.hybrid_fluid
+    }
+
+    pub fn fluid_mut(&mut self) -> &mut HybridFluid {
+        &mut self.hybrid_fluid
     }
 }

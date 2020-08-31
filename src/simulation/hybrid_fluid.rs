@@ -582,6 +582,22 @@ impl HybridFluid {
     };
     const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
 
+    pub fn pressure_solver_config_velocity(&mut self) -> &mut SolverConfig {
+        &mut self.pressure_field_from_velocity.config
+    }
+
+    pub fn pressure_solver_config_density(&mut self) -> &mut SolverConfig {
+        &mut self.pressure_field_from_density.config
+    }
+
+    pub fn pressure_solver_stats_velocity(&self) -> &SolverStatistics {
+        &self.pressure_field_from_velocity.stats
+    }
+
+    pub fn pressure_solver_stats_density(&self) -> &SolverStatistics {
+        &self.pressure_field_from_density.stats
+    }
+
     // Necessary to call this to update solver statistics which are important to guide its iteration count.
     // Do not call while building command buffer!
     pub fn update_statistics(&mut self) {
