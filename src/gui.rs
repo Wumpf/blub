@@ -1,8 +1,13 @@
 use crate::renderer::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
 use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
-use crate::{render_output::screen::Screen, scene::Scene, simulation::HybridFluid, ApplicationEvent};
+use crate::{
+    render_output::screen::Screen,
+    scene::Scene,
+    simulation::{HybridFluid, SolverConfig, SolverStatisticSample},
+    ApplicationEvent,
+};
 use imgui::im_str;
-use std::{borrow::Cow, path::PathBuf, time::Duration};
+use std::{borrow::Cow, collections::VecDeque, path::PathBuf, time::Duration};
 use strum::IntoEnumIterator;
 use winit::event_loop::EventLoopProxy;
 
@@ -128,59 +133,64 @@ impl GUI {
         ));
     }
 
+    fn setup_ui_solver_stats(ui: &imgui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: u32) {
+        let newest_sample = match stats.back() {
+            Some(&sample) => sample,
+            None => Default::default(),
+        };
+        ui.plot_histogram(
+            &im_str!("mse - {}", newest_sample.mse),
+            &stats.iter().map(|sample| sample.mse).collect::<Vec<f32>>(),
+        )
+        .scale_min(0.0)
+        .graph_size([300.0, 40.0])
+        .build();
+
+        ui.plot_histogram(
+            &im_str!("# solver iterations - {}", newest_sample.iteration_count),
+            &stats.iter().map(|sample| sample.iteration_count as f32).collect::<Vec<f32>>(),
+        )
+        .scale_min(0.0)
+        .scale_max(max_iterations as f32)
+        .graph_size([300.0, 40.0])
+        .build();
+    }
+
+    fn setup_ui_solver_config(ui: &imgui::Ui, config: &mut SolverConfig) {
+        ui.drag_float(im_str!("target mse"), &mut config.target_mse)
+            .min(0.0001)
+            .max(1.0)
+            .speed(0.0001)
+            .display_format(im_str!("%.4f"))
+            .build();
+        let mut min_iteration_count = config.min_num_iterations as i32;
+        let mut max_iteration_count = config.max_num_iterations as i32;
+        if ui
+            .drag_int_range2(im_str!("min/max iteration count"), &mut min_iteration_count, &mut max_iteration_count)
+            .min(2)
+            .max(100)
+            .build()
+        {
+            config.min_num_iterations = min_iteration_count as u32;
+            config.max_num_iterations = max_iteration_count as u32;
+        }
+    }
+
     fn setup_ui_solver(ui: &imgui::Ui, fluid: &mut HybridFluid) {
         let stack_token = ui.push_id(1);
         {
-            let stats = fluid.pressure_solver_stats_velocity();
             ui.text(im_str!("pressure solver, primary (from velocity)"));
-            ui.text(im_str!("mse: {:.4}", stats.last_mse));
-            ui.text(im_str!("# solver iterations: {}", stats.last_iteration_count));
-
-            let config = fluid.pressure_solver_config_velocity();
-            ui.drag_float(im_str!("target mse"), &mut config.target_mse)
-                .min(0.0001)
-                .max(1.0)
-                .speed(0.0001)
-                .display_format(im_str!("%.4f"))
-                .build();
-            let mut min_iteration_count = config.min_num_iterations as i32;
-            let mut max_iteration_count = config.max_num_iterations as i32;
-            if ui
-                .drag_int_range2(im_str!("min/max iteration count"), &mut min_iteration_count, &mut max_iteration_count)
-                .min(2)
-                .max(100)
-                .build()
-            {
-                config.min_num_iterations = min_iteration_count as u32;
-                config.max_num_iterations = max_iteration_count as u32;
-            }
+            let max_num_iterations = fluid.pressure_solver_config_velocity().max_num_iterations;
+            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_velocity(), max_num_iterations);
+            Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_velocity());
         }
         stack_token.pop(ui);
         ui.separator();
         {
-            let stats = fluid.pressure_solver_stats_density();
             ui.text(im_str!("pressure solver, secondary (from density)"));
-            ui.text(im_str!("mse: {:.4}", stats.last_mse));
-            ui.text(im_str!("# solver iterations: {}", stats.last_iteration_count));
-
-            let config = fluid.pressure_solver_config_density();
-            ui.drag_float(im_str!("target mse"), &mut config.target_mse)
-                .min(0.0001)
-                .max(1.0)
-                .speed(0.0001)
-                .display_format(im_str!("%.4f"))
-                .build();
-            let mut min_iteration_count = config.min_num_iterations as i32;
-            let mut max_iteration_count = config.max_num_iterations as i32;
-            if ui
-                .drag_int_range2(im_str!("min/max iteration count"), &mut min_iteration_count, &mut max_iteration_count)
-                .min(2)
-                .max(100)
-                .build()
-            {
-                config.min_num_iterations = min_iteration_count as u32;
-                config.max_num_iterations = max_iteration_count as u32;
-            }
+            let max_num_iterations = fluid.pressure_solver_config_density().max_num_iterations;
+            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_density(), max_num_iterations);
+            Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_density());
         }
     }
 

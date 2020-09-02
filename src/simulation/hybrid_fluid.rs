@@ -6,7 +6,7 @@ use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::uniformbuffer::*;
 use rand::prelude::*;
-use std::{cell::Cell, path::Path, rc::Rc};
+use std::{cell::Cell, collections::VecDeque, path::Path, rc::Rc, time::Duration};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -196,8 +196,28 @@ impl HybridFluid {
             .create(device, "BindGroupLayout: Correct density error");
 
         let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);
-        let pressure_field_from_velocity = PressureField::new("from velocity", device, grid_dimension, &pressure_solver);
-        let pressure_field_from_density = PressureField::new("from density", device, grid_dimension, &pressure_solver);
+        let pressure_field_from_velocity = PressureField::new(
+            "from velocity",
+            device,
+            grid_dimension,
+            &pressure_solver,
+            SolverConfig {
+                target_mse: 0.1,
+                min_num_iterations: 4,
+                max_num_iterations: 64,
+            },
+        );
+        let pressure_field_from_density = PressureField::new(
+            "from density",
+            device,
+            grid_dimension,
+            &pressure_solver,
+            SolverConfig {
+                target_mse: 0.01,
+                min_num_iterations: 4,
+                max_num_iterations: 64,
+            },
+        );
 
         // Bind groups.
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
@@ -590,11 +610,11 @@ impl HybridFluid {
         &mut self.pressure_field_from_density.config
     }
 
-    pub fn pressure_solver_stats_velocity(&self) -> &SolverStatistics {
+    pub fn pressure_solver_stats_velocity(&self) -> &VecDeque<SolverStatisticSample> {
         &self.pressure_field_from_velocity.stats
     }
 
-    pub fn pressure_solver_stats_density(&self) -> &SolverStatistics {
+    pub fn pressure_solver_stats_density(&self) -> &VecDeque<SolverStatisticSample> {
         &self.pressure_field_from_density.stats
     }
 
@@ -607,6 +627,7 @@ impl HybridFluid {
 
     pub fn step(
         &mut self,
+        simulation_delta: Duration,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
@@ -665,7 +686,7 @@ impl HybridFluid {
 
         // Solve for pressure
         self.pressure_solver
-            .solve(&mut self.pressure_field_from_velocity, &mut encoder, pipeline_manager);
+            .solve(simulation_delta, &mut self.pressure_field_from_velocity, &mut encoder, pipeline_manager);
 
         {
             let mut cpass = encoder.begin_compute_pass();
@@ -711,7 +732,7 @@ impl HybridFluid {
 
         // Compute pressure from density error.
         self.pressure_solver
-            .solve(&mut self.pressure_field_from_density, &mut encoder, pipeline_manager);
+            .solve(simulation_delta, &mut self.pressure_field_from_density, &mut encoder, pipeline_manager);
 
         {
             let mut cpass = encoder.begin_compute_pass();

@@ -2,8 +2,8 @@ use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, sh
 use futures::Future;
 use futures::*;
 use std::collections::VecDeque;
-use std::{cell::Cell, rc::Rc};
-use std::{path::Path, pin::Pin};
+use std::rc::Rc;
+use std::{path::Path, pin::Pin, time::Duration};
 
 fn create_volume_texture_desc(label: &str, grid_dimension: wgpu::Extent3d, format: wgpu::TextureFormat) -> wgpu::TextureDescriptor {
     wgpu::TextureDescriptor {
@@ -46,8 +46,9 @@ pub struct PressureSolver {
 const NUM_PRESSURE_ERROR_BUFFER: usize = 32;
 
 struct PendingErrorBuffer {
-    copy_operation: Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>,
+    copy_operation: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>>,
     buffer: wgpu::Buffer,
+    resulting_sample: SolverStatisticSample,
 }
 
 pub struct SolverConfig {
@@ -55,9 +56,11 @@ pub struct SolverConfig {
     pub min_num_iterations: u32,
     pub max_num_iterations: u32,
 }
-pub struct SolverStatistics {
-    pub last_mse: f32,
-    pub last_iteration_count: u32,
+#[derive(Default, Copy, Clone)]
+pub struct SolverStatisticSample {
+    pub mse: f32,
+    pub iteration_count: u32,
+    timestamp: Duration,
 }
 
 // Pressure solver instance keeps track of pressure result from last step/frame in order to speed up the solve.
@@ -66,17 +69,19 @@ pub struct PressureField {
     volume_pressure_view: wgpu::TextureView,
 
     unused_error_buffers: Vec<wgpu::Buffer>,
-    pending_error_buffers: Vec<wgpu::Buffer>,
+    unscheduled_error_readbacks: Vec<PendingErrorBuffer>,
     pending_error_readbacks: VecDeque<PendingErrorBuffer>,
 
     pub config: SolverConfig,
-    pub stats: SolverStatistics,
+    pub stats: VecDeque<SolverStatisticSample>,
 
-    is_first_step: Cell<bool>,
+    timestamp_last_iteration: Duration,
 }
 
 impl PressureField {
-    pub fn new(name: &'static str, device: &wgpu::Device, grid_dimension: wgpu::Extent3d, solver: &PressureSolver) -> Self {
+    const SOLVER_STATISTIC_HISTORY_LENGTH: usize = 100;
+
+    pub fn new(name: &'static str, device: &wgpu::Device, grid_dimension: wgpu::Extent3d, solver: &PressureSolver, config: SolverConfig) -> Self {
         let volume_pressure = device.create_texture(&create_volume_texture_desc(
             &format!("Pressure Volume - {}", name),
             grid_dimension,
@@ -102,20 +107,13 @@ impl PressureField {
             bind_group_pressure,
             volume_pressure_view,
             unused_error_buffers,
-            pending_error_buffers: Vec::new(),
+            unscheduled_error_readbacks: Vec::new(),
             pending_error_readbacks: VecDeque::new(),
 
-            config: SolverConfig {
-                target_mse: 0.001,
-                min_num_iterations: 4,
-                max_num_iterations: 64,
-            },
-            stats: SolverStatistics {
-                last_mse: 0.0,
-                last_iteration_count: 0,
-            },
+            config,
+            stats: VecDeque::new(),
 
-            is_first_step: Cell::new(true),
+            timestamp_last_iteration: Duration::new(0, 0),
         }
     }
 
@@ -123,34 +121,54 @@ impl PressureField {
         &self.volume_pressure_view
     }
 
-    fn query_iteration_count(&mut self) -> u32 {
-        if let Some(mut readback) = self.pending_error_readbacks.pop_front() {
-            if (&mut readback.copy_operation).now_or_never().is_some() {
+    fn query_iteration_count(&mut self, simulation_delta: Duration) -> u32 {
+        // Check if there's any new data samples
+        while let Some(mut readback) = self.pending_error_readbacks.pop_front() {
+            if (&mut readback.copy_operation.as_mut().unwrap()).now_or_never().is_some() {
                 let mapped = readback.buffer.slice(0..4);
-
                 let buffer_data = mapped.get_mapped_range().to_vec();
                 let squared_error = *bytemuck::from_bytes::<f32>(&buffer_data);
                 readback.buffer.unmap();
-
-                // todo: divide with time squared
-                // todo: multiply with density squared
-
-                self.stats.last_mse = squared_error;
-
-                //info!("{}", squared_error);
                 self.unused_error_buffers.push(readback.buffer);
+
+                // We currently always deal with 'pressure * density / dt', not with pressure.
+                // To make display more representative for different time, we adjust our error value accordingly.
+                let delta_sq = simulation_delta.as_secs_f32() * simulation_delta.as_secs_f32();
+                readback.resulting_sample.mse = squared_error * delta_sq;
+
+                self.stats.push_back(readback.resulting_sample);
+                while self.stats.len() > Self::SOLVER_STATISTIC_HISTORY_LENGTH {
+                    self.stats.pop_front();
+                }
             } else {
                 self.pending_error_readbacks.push_front(readback);
+                break;
             }
         }
-        self.stats.last_iteration_count = self.config.min_num_iterations;
-        self.stats.last_iteration_count
+
+        // estimate a suiting iteration count from the last couple of samples
+        let mut iteration_count = 10; // todo
+        if iteration_count < self.config.min_num_iterations {
+            iteration_count = self.config.min_num_iterations;
+        } else if iteration_count > self.config.max_num_iterations {
+            iteration_count = self.config.max_num_iterations
+        }
+
+        iteration_count
     }
 
-    fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer) {
+    fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer, iteration_count: u32) {
         if let Some(target_buffer) = self.unused_error_buffers.pop() {
             encoder.copy_buffer_to_buffer(source_buffer, 0, &target_buffer, 0, 4);
-            self.pending_error_buffers.push(target_buffer);
+            self.unscheduled_error_readbacks.push(PendingErrorBuffer {
+                copy_operation: None, // Filled out in start_error_buffer_readbacks
+                buffer: target_buffer,
+                resulting_sample: SolverStatisticSample {
+                    mse: 0.0,
+                    iteration_count,
+                    timestamp: self.timestamp_last_iteration,
+                },
+            });
         } else {
             warn!("No more error buffer available for async copy of pressure solve error");
         }
@@ -158,9 +176,9 @@ impl PressureField {
 
     // Call this once all command
     pub fn start_error_buffer_readbacks(&mut self) {
-        for buffer in self.pending_error_buffers.drain(..) {
-            let copy_operation = buffer.slice(..).map_async(wgpu::MapMode::Read).boxed();
-            self.pending_error_readbacks.push_back(PendingErrorBuffer { buffer, copy_operation });
+        for mut readback in self.unscheduled_error_readbacks.drain(..) {
+            readback.copy_operation = Some(readback.buffer.slice(..).map_async(wgpu::MapMode::Read).boxed());
+            self.pending_error_readbacks.push_back(readback);
         }
     }
 }
@@ -491,13 +509,12 @@ impl PressureSolver {
 
     pub fn solve<'a, 'b: 'a>(
         &'b self,
+        simulation_delta: Duration,
         pressure_field: &'a mut PressureField,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &'a PipelineManager,
     ) {
         wgpu_scope!(encoder, "PressureSolver.solve");
-
-        pressure_field.query_iteration_count();
 
         let mut cpass = encoder.begin_compute_pass();
 
@@ -507,6 +524,7 @@ impl PressureSolver {
         const PRECONDITIONER_PASS1: u32 = 1;
         const PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO: u32 = 3;
 
+        let num_iterations = pressure_field.query_iteration_count(simulation_delta);
         cpass.set_bind_group(0, &self.bind_group_general, &[]);
         cpass.set_bind_group(1, &pressure_field.bind_group_pressure, &[]);
 
@@ -524,7 +542,7 @@ impl PressureSolver {
             // wgpu-rs doesn't zero initialize yet (bug/missing feature impl)
             // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
             // https://github.com/gfx-rs/wgpu/issues/563
-            if pressure_field.is_first_step.get() {
+            if pressure_field.timestamp_last_iteration == Duration::new(0, 0) {
                 cpass.set_push_constants(0, &[FIRST_STEP]);
             } else {
                 cpass.set_push_constants(0, &[NOT_FIRST_STEP]);
@@ -547,7 +565,6 @@ impl PressureSolver {
         });
 
         wgpu_scope!(cpass, "solver iterations", || {
-            const NUM_ITERATIONS: u32 = 16;
             let mut i = 0;
             while wgpu_scope!(cpass, &format!("iteration {}", i), || {
                 // Apply cell relationships to search vector (i.e. multiply s with A)
@@ -561,7 +578,7 @@ impl PressureSolver {
                 wgpu_scope!(cpass, "update pressure field (p) and residual field (r)", || {
                     const PRUPDATE_LAST_ITERATION: u32 = 1;
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
-                    if i == NUM_ITERATIONS {
+                    if i == num_iterations {
                         cpass.set_push_constants(0, &[PRUPDATE_LAST_ITERATION]);
                     } else {
                         cpass.set_push_constants(0, &[0]);
@@ -571,7 +588,7 @@ impl PressureSolver {
                 });
 
                 // Was this the last update?
-                if i == NUM_ITERATIONS {
+                if i == num_iterations {
                     // Compute remaining error, we use this later to feedback to the number of iterations.
                     self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_REDUCE);
                     return false;
@@ -599,7 +616,7 @@ impl PressureSolver {
         });
 
         drop(cpass);
-        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_buffer);
-        pressure_field.is_first_step.set(false);
+        pressure_field.timestamp_last_iteration += simulation_delta;
+        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_buffer, num_iterations);
     }
 }
