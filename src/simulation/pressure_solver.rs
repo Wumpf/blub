@@ -53,13 +53,14 @@ struct PendingErrorBuffer {
 
 pub struct SolverConfig {
     pub target_mse: f32,
-    pub min_num_iterations: u32,
-    pub max_num_iterations: u32,
+    pub min_num_iterations: i32,
+    pub max_num_iterations: i32,
+    pub pid_config: (f32, f32, f32),
 }
 #[derive(Default, Copy, Clone)]
 pub struct SolverStatisticSample {
     pub mse: f32,
-    pub iteration_count: u32,
+    pub iteration_count: i32,
     timestamp: Duration,
 }
 
@@ -80,6 +81,7 @@ pub struct PressureField {
 
 impl PressureField {
     const SOLVER_STATISTIC_HISTORY_LENGTH: usize = 100;
+    const SOLVER_PID_INTEGRAL_HISTORY_LENGTH: usize = 8;
 
     pub fn new(name: &'static str, device: &wgpu::Device, grid_dimension: wgpu::Extent3d, solver: &PressureSolver, config: SolverConfig) -> Self {
         let volume_pressure = device.create_texture(&create_volume_texture_desc(
@@ -121,7 +123,7 @@ impl PressureField {
         &self.volume_pressure_view
     }
 
-    fn query_iteration_count(&mut self, simulation_delta: Duration) -> u32 {
+    fn retrieve_new_error_samples(&mut self, simulation_delta: Duration) {
         // Check if there's any new data samples
         while let Some(mut readback) = self.pending_error_readbacks.pop_front() {
             if (&mut readback.copy_operation.as_mut().unwrap()).now_or_never().is_some() {
@@ -145,9 +147,46 @@ impl PressureField {
                 break;
             }
         }
+    }
 
-        // estimate a suiting iteration count from the last couple of samples
-        let mut iteration_count = 10; // todo
+    fn mse_to_error(&self, mse: f32) -> f32 {
+        mse - self.config.target_mse
+    }
+
+    // use a PID controller to correct the solver iteration count.
+    fn compute_pid_controlled_iteration_count(&self, timestep_current: Duration) -> i32 {
+        let fallback_sample = SolverStatisticSample {
+            iteration_count: (self.config.max_num_iterations + self.config.min_num_iterations) / 2,
+            mse: self.config.target_mse,
+            timestamp: Duration::new(0, 0),
+        };
+        let newest_sample = self.stats.back().unwrap_or(&fallback_sample);
+
+        // integral over the last Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH deviations from target.
+        let error_integral = self
+            .stats
+            .iter()
+            .rev()
+            .take(Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH)
+            .map(|s| self.mse_to_error(s.mse))
+            .sum::<f32>()
+            / (self.stats.len().min(Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH).max(1) as f32);
+
+        // derivative of the deviation from target.
+        let previous_to_newest_sample = self.stats.iter().nth_back(1).unwrap_or(&fallback_sample);
+        let error_dt = (self.mse_to_error(newest_sample.mse) - self.mse_to_error(previous_to_newest_sample.mse))
+            / (newest_sample.timestamp - previous_to_newest_sample.timestamp).as_secs_f32();
+        let time_since_last_sample = timestep_current - newest_sample.timestamp;
+
+        // all components of the pid together
+        let mut iteration_count = newest_sample.iteration_count;
+        iteration_count += (self.config.pid_config.0
+            * (self.mse_to_error(newest_sample.mse)
+                + self.config.pid_config.1 * error_integral
+                + self.config.pid_config.2 * time_since_last_sample.as_secs_f32() * error_dt))
+            .round() as i32;
+
+        // clamp to range
         if iteration_count < self.config.min_num_iterations {
             iteration_count = self.config.min_num_iterations;
         } else if iteration_count > self.config.max_num_iterations {
@@ -157,7 +196,7 @@ impl PressureField {
         iteration_count
     }
 
-    fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer, iteration_count: u32) {
+    fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer, iteration_count: i32) {
         if let Some(target_buffer) = self.unused_error_buffers.pop() {
             encoder.copy_buffer_to_buffer(source_buffer, 0, &target_buffer, 0, 4);
             self.unscheduled_error_readbacks.push(PendingErrorBuffer {
@@ -524,7 +563,8 @@ impl PressureSolver {
         const PRECONDITIONER_PASS1: u32 = 1;
         const PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO: u32 = 3;
 
-        let num_iterations = pressure_field.query_iteration_count(simulation_delta);
+        pressure_field.retrieve_new_error_samples(simulation_delta);
+        let num_iterations = pressure_field.compute_pid_controlled_iteration_count(pressure_field.timestamp_last_iteration + simulation_delta);
         cpass.set_bind_group(0, &self.bind_group_general, &[]);
         cpass.set_bind_group(1, &pressure_field.bind_group_pressure, &[]);
 

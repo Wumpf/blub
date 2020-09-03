@@ -133,7 +133,7 @@ impl GUI {
         ));
     }
 
-    fn setup_ui_solver_stats(ui: &imgui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: u32) {
+    fn setup_ui_solver_stats(ui: &imgui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: i32) {
         let newest_sample = match stats.back() {
             Some(&sample) => sample,
             None => Default::default(),
@@ -163,6 +163,20 @@ impl GUI {
             .speed(0.0001)
             .display_format(im_str!("%.4f"))
             .build();
+
+        let mut pid_config = [config.pid_config.0, config.pid_config.1, config.pid_config.2];
+        if ui
+            .drag_float3(im_str!("PID error -> #iterations"), &mut pid_config)
+            .min(0.0)
+            .max(20.0)
+            .speed(0.01)
+            .build()
+        {
+            config.pid_config.0 = pid_config[0];
+            config.pid_config.1 = pid_config[1];
+            config.pid_config.2 = pid_config[2];
+        }
+
         let mut min_iteration_count = config.min_num_iterations as i32;
         let mut max_iteration_count = config.max_num_iterations as i32;
         if ui
@@ -171,8 +185,8 @@ impl GUI {
             .max(100)
             .build()
         {
-            config.min_num_iterations = min_iteration_count as u32;
-            config.max_num_iterations = max_iteration_count as u32;
+            config.min_num_iterations = min_iteration_count as i32;
+            config.max_num_iterations = max_iteration_count as i32;
         }
     }
 
