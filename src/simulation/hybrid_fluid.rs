@@ -202,10 +202,10 @@ impl HybridFluid {
             grid_dimension,
             &pressure_solver,
             SolverConfig {
-                target_mse: 0.5,
-                min_num_iterations: 4,
-                max_num_iterations: 64,
-                pid_config: (4.0, 1.0, 2.0),
+                target_mse: 0.1,
+                min_num_iterations: 8,
+                max_num_iterations: 128,
+                pid_config: (10.0, 1.0, 2.0),
             },
         );
         let pressure_field_from_density = PressureField::new(
@@ -215,9 +215,9 @@ impl HybridFluid {
             &pressure_solver,
             SolverConfig {
                 target_mse: 0.01,
-                min_num_iterations: 4,
+                min_num_iterations: 8,
                 max_num_iterations: 64,
-                pid_config: (4.0, 1.0, 2.0),
+                pid_config: (10.0, 1.0, 2.0),
             },
         );
 

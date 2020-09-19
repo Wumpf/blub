@@ -150,7 +150,7 @@ impl PressureField {
     }
 
     fn mse_to_error(&self, mse: f32) -> f32 {
-        mse - self.config.target_mse
+        mse.sqrt() - self.config.target_mse.sqrt()
     }
 
     // use a PID controller to correct the solver iteration count.
@@ -162,29 +162,36 @@ impl PressureField {
         };
         let newest_sample = self.stats.back().unwrap_or(&fallback_sample);
 
-        // integral over the last Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH deviations from target.
-        let error_integral = self
-            .stats
-            .iter()
-            .rev()
-            .take(Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH)
-            .map(|s| self.mse_to_error(s.mse))
-            .sum::<f32>()
-            / (self.stats.len().min(Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH).max(1) as f32);
+        // // integral over the last Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH deviations from target.
+        // let error_integral = self
+        //     .stats
+        //     .iter()
+        //     .rev()
+        //     .take(Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH)
+        //     .map(|s| self.mse_to_error(s.mse))
+        //     .sum::<f32>()
+        //     / (self.stats.len().min(Self::SOLVER_PID_INTEGRAL_HISTORY_LENGTH).max(1) as f32);
 
-        // derivative of the deviation from target.
-        let previous_to_newest_sample = self.stats.iter().nth_back(1).unwrap_or(&fallback_sample);
-        let error_dt = (self.mse_to_error(newest_sample.mse) - self.mse_to_error(previous_to_newest_sample.mse))
-            / (newest_sample.timestamp - previous_to_newest_sample.timestamp).as_secs_f32();
-        let time_since_last_sample = timestep_current - newest_sample.timestamp;
+        // // derivative of the deviation from target.
+        // let previous_to_newest_sample = self.stats.iter().nth_back(1).unwrap_or(&fallback_sample);
+        // let error_dt = (self.mse_to_error(newest_sample.mse) - self.mse_to_error(previous_to_newest_sample.mse))
+        //     / (newest_sample.timestamp - previous_to_newest_sample.timestamp).as_secs_f32();
+        // let time_since_last_sample = timestep_current - newest_sample.timestamp;
 
-        // all components of the pid together
+        // // all components of the pid together
+        // let mut iteration_count = newest_sample.iteration_count;
+        // iteration_count += (self.config.pid_config.0
+        //     * (self.mse_to_error(newest_sample.mse)
+        //         + self.config.pid_config.1 * error_integral
+        //         + self.config.pid_config.2 * time_since_last_sample.as_secs_f32() * error_dt))
+        //     .round() as i32;
+
         let mut iteration_count = newest_sample.iteration_count;
-        iteration_count += (self.config.pid_config.0
-            * (self.mse_to_error(newest_sample.mse)
-                + self.config.pid_config.1 * error_integral
-                + self.config.pid_config.2 * time_since_last_sample.as_secs_f32() * error_dt))
-            .round() as i32;
+        if newest_sample.mse > self.config.target_mse {
+            iteration_count += ((newest_sample.mse - self.config.target_mse).sqrt() * self.config.pid_config.0).ceil() as i32;
+        } else {
+            iteration_count -= ((self.config.target_mse - newest_sample.mse).sqrt() * self.config.pid_config.0 * 0.5).ceil() as i32;
+        }
 
         // clamp to range
         if iteration_count < self.config.min_num_iterations {

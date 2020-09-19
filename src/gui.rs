@@ -133,7 +133,7 @@ impl GUI {
         ));
     }
 
-    fn setup_ui_solver_stats(ui: &imgui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: i32) {
+    fn setup_ui_solver_stats(ui: &imgui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: i32, target_mse: f32) {
         let newest_sample = match stats.back() {
             Some(&sample) => sample,
             None => Default::default(),
@@ -143,6 +143,7 @@ impl GUI {
             &stats.iter().map(|sample| sample.mse).collect::<Vec<f32>>(),
         )
         .scale_min(0.0)
+        .scale_max(target_mse * 4.0)
         .graph_size([300.0, 40.0])
         .build();
 
@@ -195,7 +196,8 @@ impl GUI {
         {
             ui.text(im_str!("pressure solver, primary (from velocity)"));
             let max_num_iterations = fluid.pressure_solver_config_velocity().max_num_iterations;
-            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_velocity(), max_num_iterations);
+            let target_mse = fluid.pressure_solver_config_velocity().target_mse;
+            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_velocity(), max_num_iterations, target_mse);
             Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_velocity());
         }
         stack_token.pop(ui);
@@ -203,7 +205,8 @@ impl GUI {
         {
             ui.text(im_str!("pressure solver, secondary (from density)"));
             let max_num_iterations = fluid.pressure_solver_config_density().max_num_iterations;
-            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_density(), max_num_iterations);
+            let target_mse = fluid.pressure_solver_config_density().target_mse;
+            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_density(), max_num_iterations, target_mse);
             Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_density());
         }
     }
