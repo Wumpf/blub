@@ -5,6 +5,10 @@
 #include "pressure.glsl"
 
 layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
+layout(set = 2, binding = 1) buffer restrict ReduceResultAndDispatchBuffers {
+    vec4 DotProductReduceResult;
+    uvec4 DispatchCommandRegular;
+};
 
 COMPUTE_PASS_VOLUME
 
@@ -13,6 +17,11 @@ COMPUTE_PASS_VOLUME
 
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
+
+    // Fill out dispatch command for all upcoming steps.
+    if (gl_GlobalInvocationID == ivec3(0)) {
+        DispatchCommandRegular = uvec4((imageSize(Residual) + gl_WorkGroupSize - uvec3(1)) / gl_WorkGroupSize, 0);
+    }
 
     // If this is the first step overall, just do a clear, nothing else.
     if (PushConstants.Mode == FIRST_STEP) {

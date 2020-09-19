@@ -10,6 +10,7 @@
 #define LOCAL_SIZE 1024
 
 layout(set = 2, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
+// In the final step this is ReduceResultAndDispatchBuffers
 layout(set = 2, binding = 1) buffer restrict DotProductDest_ { float DotProductDest[]; };
 
 // Result mode:
@@ -17,6 +18,7 @@ const uint DOTPRODUCT_RESULTMODE_REDUCE = 0;
 const uint DOTPRODUCT_RESULTMODE_INIT = 1;
 const uint DOTPRODUCT_RESULTMODE_ALPHA = 2;
 const uint DOTPRODUCT_RESULTMODE_BETA = 3;
+const uint DOTPRODUCT_RESULTMODE_MSE = 4;
 
 layout(local_size_x = LOCAL_SIZE, local_size_y = 1, local_size_z = 1) in;
 
@@ -67,9 +69,18 @@ void main() {
             DotProductDest[0] = DotProductDest[1] / (dotProductResult + (dotProductResult < 0.0 ? -EPSILON : EPSILON));
             break;
 
-        default: // case DOTPRODUCT_RESULTMODE_BETA:
+        case DOTPRODUCT_RESULTMODE_BETA:
             DotProductDest[0] = dotProductResult / (DotProductDest[1] + (DotProductDest[1] < 0.0 ? -EPSILON : EPSILON));
             DotProductDest[1] = dotProductResult;
+            break;
+
+        case DOTPRODUCT_RESULTMODE_MSE:
+            DotProductDest[0] = dotProductResult;
+
+            // If we reached the target MSE, disable all further dispatches.
+            if (dotProductResult < TargetMSE) {
+                DotProductDest[4] = 0;
+            }
             break;
         }
     }

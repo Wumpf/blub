@@ -5,6 +5,7 @@
 
 layout(set = 0, binding = 0) uniform texture3D MarkerVolume;
 layout(set = 1, binding = 0, r32f) uniform restrict image3D Pressure;
+layout(set = 1, binding = 1) uniform Config { float TargetMSE; };
 
 struct PcgScalars {
     float AlphaBeta; // after every product this is set to (sigma / dotProductResult)

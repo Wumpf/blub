@@ -9,7 +9,7 @@ layout(set = 2, binding = 1, r32f) uniform restrict image3D Residual;
 layout(set = 2, binding = 2) uniform texture3D Search;
 layout(set = 2, binding = 3) uniform PcgScalars_ { PcgScalars Scalars; };
 
-#define PRUPDATE_LAST_ITERATION 1
+#define PRUPDATE_COMPUTE_MSE 1
 
 COMPUTE_PASS_VOLUME
 
@@ -48,9 +48,8 @@ void main() {
         float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, search); // The auxillary z!
         residual -= alpha * searchTimesA;
 
-        if (PushConstants.Mode == PRUPDATE_LAST_ITERATION)
+        if (PushConstants.Mode == PRUPDATE_COMPUTE_MSE)
             ReduceBuffer[GetReduceBufferAddress()] = residual * residual;
-        else
-            imageStore(Residual, gridCoord, residual.xxxx);
+        imageStore(Residual, gridCoord, residual.xxxx);
     }
 }

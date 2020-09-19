@@ -6,7 +6,7 @@ use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::uniformbuffer::*;
 use rand::prelude::*;
-use std::{cell::Cell, collections::VecDeque, path::Path, rc::Rc, time::Duration};
+use std::{collections::VecDeque, path::Path, rc::Rc, time::Duration};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -30,7 +30,6 @@ pub struct HybridFluid {
     particles_velocity_z: wgpu::Buffer,
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
     simulation_properties: SimulationPropertiesUniformBufferContent,
-    simulation_properties_dirty: Cell<bool>,
 
     bind_group_uniform: wgpu::BindGroup,
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
@@ -202,9 +201,9 @@ impl HybridFluid {
             grid_dimension,
             &pressure_solver,
             SolverConfig {
-                target_mse: 0.1,
+                target_mse: 0.5,
                 min_num_iterations: 8,
-                max_num_iterations: 128,
+                max_num_iterations: 32,
                 pid_config: (10.0, 1.0, 2.0),
             },
         );
@@ -214,9 +213,9 @@ impl HybridFluid {
             grid_dimension,
             &pressure_solver,
             SolverConfig {
-                target_mse: 0.01,
+                target_mse: 0.05,
                 min_num_iterations: 8,
-                max_num_iterations: 64,
+                max_num_iterations: 32,
                 pid_config: (10.0, 1.0, 2.0),
             },
         );
@@ -373,7 +372,6 @@ impl HybridFluid {
                 num_particles: 0,
                 gravity_grid: cgmath::vec3(0.0, -9.81, 0.0),
             },
-            simulation_properties_dirty: Cell::new(true),
 
             bind_group_uniform,
             bind_group_transfer_velocity,
@@ -558,12 +556,10 @@ impl HybridFluid {
         queue.write_buffer(&self.particles_velocity_z, offset_velocity_buffer, &zero_velocity);
 
         self.simulation_properties.num_particles += num_new_particles;
-        self.simulation_properties_dirty.set(true);
     }
 
     pub fn set_gravity_grid(&mut self, gravity: cgmath::Vector3<f32>) {
         self.simulation_properties.gravity_grid = gravity;
-        self.simulation_properties_dirty.set(true);
     }
 
     pub fn num_particles(&self) -> u32 {
@@ -620,7 +616,7 @@ impl HybridFluid {
         &self.pressure_field_from_density.stats
     }
 
-    // Necessary to call this to update solver statistics which are important to guide its iteration count.
+    // Necessary to call this to update solver statistics and config.
     // Do not call while building command buffer!
     pub fn update_statistics(&mut self) {
         self.pressure_field_from_density.start_error_buffer_readbacks();
@@ -637,10 +633,11 @@ impl HybridFluid {
     ) {
         wgpu_scope!(encoder, "HybridFluid.step");
 
-        if self.simulation_properties_dirty.get() {
+        wgpu_scope!(encoder, "update uniforms", || {
+            self.pressure_field_from_density.update_uniforms(queue, simulation_delta);
+            self.pressure_field_from_velocity.update_uniforms(queue, simulation_delta);
             self.simulation_properties_uniformbuffer.update_content(queue, self.simulation_properties);
-            self.simulation_properties_dirty.set(false);
-        }
+        });
 
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
         let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, Self::COMPUTE_LOCAL_SIZE_PARTICLES);
