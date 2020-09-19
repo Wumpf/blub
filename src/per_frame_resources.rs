@@ -66,7 +66,7 @@ impl PerFrameResources {
     }
 
     pub fn update_gpu_data(
-        &self,
+        &mut self,
         queue: &wgpu::Queue,
         camera: camera::CameraUniformBufferContent,
         time: timer::FrameTimeUniformBufferContent,

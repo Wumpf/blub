@@ -2,7 +2,9 @@ use std::marker::PhantomData;
 
 pub struct UniformBuffer<Content> {
     buffer: wgpu::Buffer,
-    content: PhantomData<Content>,
+    content_type: PhantomData<Content>,
+    // We assume content is small, so we store the previous content to avoid unnecessary updates.
+    previous_content: Vec<u8>,
 }
 
 impl<Content: bytemuck::Pod> UniformBuffer<Content> {
@@ -22,7 +24,8 @@ impl<Content: bytemuck::Pod> UniformBuffer<Content> {
 
         UniformBuffer {
             buffer,
-            content: PhantomData,
+            content_type: PhantomData,
+            previous_content: Vec::new(),
         }
     }
 
@@ -44,8 +47,14 @@ impl<Content: bytemuck::Pod> UniformBuffer<Content> {
     //     }
     // }
 
-    pub fn update_content(&self, queue: &wgpu::Queue, content: Content) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&content));
+    pub fn update_content(&mut self, queue: &wgpu::Queue, content: Content) {
+        let new_content = bytemuck::bytes_of(&content);
+        if self.previous_content == new_content {
+            return;
+        }
+        // Could do partial updates since we know the previous state.
+        queue.write_buffer(&self.buffer, 0, new_content);
+        self.previous_content = new_content.to_vec();
     }
 
     pub fn binding_resource(&self) -> wgpu::BindingResource {
