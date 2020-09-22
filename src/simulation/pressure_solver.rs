@@ -354,7 +354,7 @@ impl PressureSolver {
         ];
         let dotproduct_reduce_result_and_dispatch_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Buffer: DotProduct Result & IndirectDispatch buffer"),
-            size: 8 * std::mem::size_of::<f32>() as u64,
+            size: 16 * std::mem::size_of::<f32>() as u64,
             usage: wgpu::BufferUsage::INDIRECT | wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_SRC,
             mapped_at_creation: false,
         });
@@ -369,7 +369,7 @@ impl PressureSolver {
             .create(device, "BindGroup: Pressure Solve general");
         let bind_group_init = BindGroupBuilder::new(&group_layout_init)
             .texture(&volume_residual_view)
-            .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
+            .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
             .create(device, "BindGroup: Compute initial residual");
         let bind_group_apply_coeff = BindGroupBuilder::new(&group_layout_apply_coeff)
             .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
@@ -408,11 +408,11 @@ impl PressureSolver {
         let bind_group_dotproduct_final = [
             BindGroupBuilder::new(&group_layout_reduce)
                 .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
-                .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
+                .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 0"),
             BindGroupBuilder::new(&group_layout_reduce)
                 .resource(dotproduct_reduce_step_buffers[1].as_entire_binding())
-                .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
+                .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
         ];
 
@@ -420,13 +420,13 @@ impl PressureSolver {
             .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
             .texture(&volume_residual_view)
             .texture(&volume_search_view)
-            .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
+            .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
             .create(device, "BindGroup: Pressure update pressure and residual");
         let bind_group_update_search = BindGroupBuilder::new(&group_layout_update_volume)
             .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
             .texture(&volume_search_view)
             .texture(&volume_auxiliary_view)
-            .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
+            .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
             .create(device, "BindGroup: Pressure update search");
 
         let shader_path = Path::new("simulation/pressure_solver");
@@ -517,25 +517,40 @@ impl PressureSolver {
         assert!(num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP);
         let mut source_buffer_index = 0;
 
-        wgpu_scope!(cpass, "reduce", || {
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_reduce));
-            while num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP {
-                cpass.set_bind_group(2, &self.bind_group_dotproduct_reduce[source_buffer_index], &[]);
-                cpass.set_push_constants(0, &[Self::REDUCE_RESULTMODE_REDUCE, num_entries_remaining]);
+        // the first few reduce steps are indirect dispatches so we can disable them if we reached some error threshold.
+        const DISPATCH_BUFFER_OFFSETS: [u64; 2] = [(4 * 4) * 2, (4 * 4) * 2];
+
+        // Reduce
+        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_reduce));
+        let mut reduce_step_idx = 0;
+        while num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP {
+            cpass.set_bind_group(2, &self.bind_group_dotproduct_reduce[source_buffer_index], &[]);
+            cpass.set_push_constants(0, &[Self::REDUCE_RESULTMODE_REDUCE, num_entries_remaining]);
+
+            if reduce_step_idx < DISPATCH_BUFFER_OFFSETS.len() {
+                cpass.dispatch_indirect(
+                    &self.dotproduct_reduce_result_and_dispatch_buffer,
+                    DISPATCH_BUFFER_OFFSETS[reduce_step_idx],
+                )
+            } else {
                 cpass.dispatch(
                     wgpu_utils::compute_group_size_1d(num_entries_remaining / Self::REDUCE_READS_PER_THREAD, Self::COMPUTE_LOCAL_SIZE_REDUCE),
                     1,
                     1,
                 );
-                source_buffer_index = 1 - source_buffer_index;
-                num_entries_remaining /= Self::REDUCE_REDUCTION_PER_STEP;
             }
-        });
-        wgpu_scope!(cpass, "final", || {
-            cpass.set_bind_group(2, &self.bind_group_dotproduct_final[source_buffer_index], &[]);
-            cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
-            cpass.dispatch(1, 1, 1);
-        });
+            source_buffer_index = 1 - source_buffer_index;
+            num_entries_remaining /= Self::REDUCE_REDUCTION_PER_STEP;
+
+            reduce_step_idx += 1;
+        }
+
+        // Final.
+        // Right now not a dispatch_indirect, so we always run it even if we decided that it is no longer necessary.
+        // It's simply a bit too tricky to turn it off - we can't write into a dispatch buffer that is in use
+        cpass.set_bind_group(2, &self.bind_group_dotproduct_final[source_buffer_index], &[]);
+        cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
+        cpass.dispatch(1, 1, 1);
     }
 
     pub fn solve<'a, 'b: 'a>(
@@ -616,7 +631,7 @@ impl PressureSolver {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_coeff));
                     cpass.set_bind_group(2, &self.bind_group_apply_coeff, &[]);
                     cpass.set_push_constants(0, &[0, reduce_pass_initial_group_size]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
                 // finish dotproduct of auxiliary field (z) and search field (s)
                 self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_ALPHA);
@@ -632,7 +647,7 @@ impl PressureSolver {
                         cpass.set_push_constants(0, &[0]);
                     }
                     cpass.set_bind_group(2, &self.bind_group_update_pressure_and_residual, &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
                 // Was this the last update?
@@ -650,10 +665,10 @@ impl PressureSolver {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
                     cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
                     cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                     cpass.set_push_constants(0, &[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]);
                     cpass.set_bind_group(2, &self.bind_group_preconditioner[1], &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
                 // finish dotproduct of auxiliary field (z) and residual field (r)
@@ -662,7 +677,7 @@ impl PressureSolver {
                 wgpu_scope!(cpass, "Update search vector", || {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_search));
                     cpass.set_bind_group(2, &self.bind_group_update_search, &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
                 i += 1;
@@ -672,6 +687,6 @@ impl PressureSolver {
 
         drop(cpass);
         pressure_field.timestamp_last_iteration += simulation_delta;
-        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_and_main_dispatch_buffer, num_iterations);
+        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_and_dispatch_buffer, num_iterations);
     }
 }

@@ -7,11 +7,6 @@
 
 #include "pressure.glsl"
 
-// Properties fo the reduce pass.
-#define LOCAL_SIZE_REDUCE 1024
-// 32 was distinctively slower, 16 about same as than 8, 4 clearly slower (gtx1070 ti)
-#define REDUCE_READS_PER_THREAD 16
-
 layout(set = 2, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
 // In the final step this is ReduceResultAndMainDispatchBuffer
 layout(set = 2, binding = 1) buffer restrict DotProductDest_ { float DotProductDest[]; };
@@ -82,6 +77,8 @@ void main() {
             // If we reached the target MSE, disable all further dispatches.
             if (dotProductResult < TargetMSE) {
                 DotProductDest[4] = 0;
+                DotProductDest[8] = 0;
+                DotProductDest[16] = 0;
             }
             break;
         }

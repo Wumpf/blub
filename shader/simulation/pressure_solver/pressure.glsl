@@ -3,6 +3,11 @@
 #include "simulation/hybrid_fluid.glsl"
 #include "utilities.glsl"
 
+// Properties fo the reduce pass.
+#define LOCAL_SIZE_REDUCE 1024
+// 32 was distinctively slower, 16 about same as than 8, 4 clearly slower (gtx1070 ti)
+#define REDUCE_READS_PER_THREAD 16
+
 layout(set = 0, binding = 0) uniform texture3D MarkerVolume;
 layout(set = 1, binding = 0, r32f) uniform restrict image3D Pressure;
 layout(set = 1, binding = 1) uniform Config { float TargetMSE; };

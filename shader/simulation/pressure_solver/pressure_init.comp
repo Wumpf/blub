@@ -8,6 +8,8 @@ layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
 layout(set = 2, binding = 1) buffer restrict ReduceResultAndMainDispatchBuffer {
     vec4 DotProductReduceResult;
     uvec4 DispatchCommandRegular;
+    uvec4 DispatchCommandReduce0;
+    uvec4 DispatchCommandReduce1;
 };
 
 COMPUTE_PASS_VOLUME
@@ -20,7 +22,13 @@ void main() {
 
     // Fill out dispatch command for all upcoming steps.
     if (gl_GlobalInvocationID == ivec3(0)) {
-        DispatchCommandRegular = uvec4((imageSize(Residual) + gl_WorkGroupSize - uvec3(1)) / gl_WorkGroupSize, 0);
+        uvec3 gridSize = imageSize(Residual);
+        DispatchCommandRegular = uvec4((gridSize + gl_WorkGroupSize - uvec3(1)) / gl_WorkGroupSize, 0);
+
+        uint numElements = gridSize.x * gridSize.y * gridSize.z;
+        DispatchCommandReduce0 = uvec4((numElements / REDUCE_READS_PER_THREAD + (LOCAL_SIZE_REDUCE - 1)) / LOCAL_SIZE_REDUCE, 1, 1, 0);
+        numElements /= REDUCE_READS_PER_THREAD * LOCAL_SIZE_REDUCE;
+        DispatchCommandReduce1 = uvec4((numElements / REDUCE_READS_PER_THREAD + (LOCAL_SIZE_REDUCE - 1)) / LOCAL_SIZE_REDUCE, 1, 1, 0);
     }
 
     // If this is the first step overall, just do a clear, nothing else.
