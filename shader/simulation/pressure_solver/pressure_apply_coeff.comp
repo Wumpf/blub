@@ -19,11 +19,12 @@ uint GetReduceBufferAddress() {
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
-    if (marker != CELL_FLUID) {
-        return;
-    }
 
-    float searchValue = texelFetch(Search, gridCoord, 0).x;
-    float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, searchValue);
-    ReduceBuffer[GetReduceBufferAddress()] = searchValue * searchTimesA;
+    float dotProductValue = 0.0;
+    if (marker == CELL_FLUID) {
+        float searchValue = texelFetch(Search, gridCoord, 0).x;
+        float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, searchValue);
+        dotProductValue = searchValue * searchTimesA;
+    }
+    ReduceBuffer[GetReduceBufferAddress()] = dotProductValue;
 }

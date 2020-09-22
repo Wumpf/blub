@@ -209,20 +209,20 @@ impl PressureField {
 }
 
 impl PressureSolver {
-    const DOTPRODUCT_RESULTMODE_REDUCE: u32 = 0;
-    const DOTPRODUCT_RESULTMODE_INIT: u32 = 1;
-    const DOTPRODUCT_RESULTMODE_ALPHA: u32 = 2;
-    const DOTPRODUCT_RESULTMODE_BETA: u32 = 3;
-    const DOTPRODUCT_RESULTMODE_MSE: u32 = 4;
+    const REDUCE_RESULTMODE_REDUCE: u32 = 0;
+    const REDUCE_RESULTMODE_INIT: u32 = 1;
+    const REDUCE_RESULTMODE_ALPHA: u32 = 2;
+    const REDUCE_RESULTMODE_BETA: u32 = 3;
+    const REDUCE_RESULTMODE_MSE: u32 = 4;
 
     const COMPUTE_LOCAL_SIZE_VOLUME: wgpu::Extent3d = wgpu::Extent3d {
         width: 8,
         height: 8,
         depth: 8,
     };
-    const COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE: u32 = 1024;
-    const DOTPRODUCT_READS_PER_STEP: u32 = 16; // 32 was distinctively slower, 16 about same as than 8, 4 clearly slower (gtx1070 ti)
-    const DOTPRODUCT_REDUCE_REDUCTION_PER_STEP: u32 = Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE * Self::DOTPRODUCT_READS_PER_STEP;
+    const COMPUTE_LOCAL_SIZE_REDUCE: u32 = 1024;
+    const REDUCE_READS_PER_THREAD: u32 = 16; // 32 was distinctively slower, 16 about same as than 8, 4 clearly slower (gtx1070 ti)
+    const REDUCE_REDUCTION_PER_STEP: u32 = Self::COMPUTE_LOCAL_SIZE_REDUCE * Self::REDUCE_READS_PER_THREAD;
 
     pub fn new(
         device: &wgpu::Device,
@@ -347,7 +347,7 @@ impl PressureSolver {
             }),
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Buffer: DotProduct Reduce 1"),
-                size: num_cells * std::mem::size_of::<f32>() as u64 / Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP as u64,
+                size: num_cells * std::mem::size_of::<f32>() as u64 / Self::REDUCE_REDUCTION_PER_STEP as u64,
                 usage: wgpu::BufferUsage::STORAGE,
                 mapped_at_creation: false,
             }),
@@ -369,7 +369,7 @@ impl PressureSolver {
             .create(device, "BindGroup: Pressure Solve general");
         let bind_group_init = BindGroupBuilder::new(&group_layout_init)
             .texture(&volume_residual_view)
-            .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
+            .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
             .create(device, "BindGroup: Compute initial residual");
         let bind_group_apply_coeff = BindGroupBuilder::new(&group_layout_apply_coeff)
             .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
@@ -408,11 +408,11 @@ impl PressureSolver {
         let bind_group_dotproduct_final = [
             BindGroupBuilder::new(&group_layout_reduce)
                 .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
-                .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
+                .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 0"),
             BindGroupBuilder::new(&group_layout_reduce)
                 .resource(dotproduct_reduce_step_buffers[1].as_entire_binding())
-                .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
+                .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
                 .create(device, "BindGroup: Pressure Solve, Reduce Final 1"),
         ];
 
@@ -420,13 +420,13 @@ impl PressureSolver {
             .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
             .texture(&volume_residual_view)
             .texture(&volume_search_view)
-            .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
+            .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
             .create(device, "BindGroup: Pressure update pressure and residual");
         let bind_group_update_search = BindGroupBuilder::new(&group_layout_update_volume)
             .resource(dotproduct_reduce_step_buffers[0].as_entire_binding())
             .texture(&volume_search_view)
             .texture(&volume_auxiliary_view)
-            .resource(dotproduct_reduce_result_and_dispatch_buffer.as_entire_binding())
+            .resource(dotproduct_reduce_result_and_main_dispatch_buffer.as_entire_binding())
             .create(device, "BindGroup: Pressure update search");
 
         let shader_path = Path::new("simulation/pressure_solver");
@@ -514,33 +514,27 @@ impl PressureSolver {
         wgpu_scope!(cpass, &format!("PressureSolver.reduce_add - mode {}", result_mode));
 
         let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
+        assert!(num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP);
         let mut source_buffer_index = 0;
 
         wgpu_scope!(cpass, "reduce", || {
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_reduce));
-            while num_entries_remaining > Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP {
+            while num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP {
                 cpass.set_bind_group(2, &self.bind_group_dotproduct_reduce[source_buffer_index], &[]);
-                cpass.set_push_constants(0, &[Self::DOTPRODUCT_RESULTMODE_REDUCE, num_entries_remaining]);
+                cpass.set_push_constants(0, &[Self::REDUCE_RESULTMODE_REDUCE, num_entries_remaining]);
                 cpass.dispatch(
-                    wgpu_utils::compute_group_size_1d(
-                        num_entries_remaining / Self::DOTPRODUCT_READS_PER_STEP,
-                        Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE,
-                    ),
+                    wgpu_utils::compute_group_size_1d(num_entries_remaining / Self::REDUCE_READS_PER_THREAD, Self::COMPUTE_LOCAL_SIZE_REDUCE),
                     1,
                     1,
                 );
                 source_buffer_index = 1 - source_buffer_index;
-                num_entries_remaining /= Self::DOTPRODUCT_REDUCE_REDUCTION_PER_STEP;
+                num_entries_remaining /= Self::REDUCE_REDUCTION_PER_STEP;
             }
         });
         wgpu_scope!(cpass, "final", || {
             cpass.set_bind_group(2, &self.bind_group_dotproduct_final[source_buffer_index], &[]);
             cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
-            cpass.dispatch(
-                wgpu_utils::compute_group_size_1d(num_entries_remaining, Self::COMPUTE_LOCAL_SIZE_DOTPRODUCT_REDUCE),
-                1,
-                1,
-            );
+            cpass.dispatch(1, 1, 1);
         });
     }
 
@@ -557,7 +551,6 @@ impl PressureSolver {
 
         const PRECONDITIONER_PASS0: u32 = 0;
         const PRECONDITIONER_PASS1: u32 = 1;
-        const PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO: u32 = 3;
         const COMPUTE_MSE_FREQUENCY: i32 = 4;
 
         pressure_field.retrieve_new_error_samples(simulation_delta);
@@ -566,12 +559,16 @@ impl PressureSolver {
             panic!("Number of solver iterations needs to be a multiple of {}", COMPUTE_MSE_FREQUENCY)
         }
 
+        let reduce_pass_initial_group_size = wgpu_utils::compute_group_size_1d(
+            (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32 / Self::REDUCE_READS_PER_THREAD,
+            Self::COMPUTE_LOCAL_SIZE_REDUCE,
+        );
+
         cpass.set_bind_group(0, &self.bind_group_general, &[]);
         cpass.set_bind_group(1, &pressure_field.bind_group_pressure_field, &[]);
 
         // For optimization various steps are collapsed as far as possible to avoid expensive buffer/texture read/writes
         // This makes the algorithm a lot faster but also a bit harder to read.
-
         wgpu_scope!(cpass, "init", || {
             let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_VOLUME);
 
@@ -595,28 +592,34 @@ impl PressureSolver {
 
             // Apply preconditioner on (r), store result to search vector (s) and start dotproduct of <s; r>
             // Note that we don't use the auxillary vector here as in-between storage!
-            cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
-            cpass.set_push_constants(0, &[0]);
-            cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
-            cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-            cpass.set_push_constants(0, &[PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO]);
-            cpass.set_bind_group(2, &self.bind_group_preconditioner[2], &[]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            wgpu_scope!(cpass, "preconditioner on (r), store to auxillary (z), start dotproduct of <z; r>", || {
+                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
+                cpass.set_push_constants(0, &[0]);
+                cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
+                cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.set_push_constants(0, &[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]);
+                cpass.set_bind_group(2, &self.bind_group_preconditioner[2], &[]);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            });
             // Init sigma to dotproduct of search vector (s) and residual (r)
-            self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_INIT);
+            self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_INIT);
         });
 
         wgpu_scope!(cpass, "solver iterations", || {
+            const DISPATCH_BUFFER_OFFSET: u64 = 4 * 4;
+
             let mut i = 0;
             while wgpu_scope!(cpass, &format!("iteration {}", i), || {
-                // Apply cell relationships to search vector (i.e. multiply s with A)
-                // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s), i.e. compute <s; As>
-                cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_coeff));
-                cpass.set_bind_group(2, &self.bind_group_apply_coeff, &[]);
-                cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, 4 * 4);
+                wgpu_scope!(cpass, "multiply search vector (s) with coefficients (A)", || {
+                    // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s), i.e. compute <s; As>
+                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_coeff));
+                    cpass.set_bind_group(2, &self.bind_group_apply_coeff, &[]);
+                    cpass.set_push_constants(0, &[0, reduce_pass_initial_group_size]);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
+                });
                 // finish dotproduct of auxiliary field (z) and search field (s)
-                self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_ALPHA);
+                self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_ALPHA);
 
                 let iteration_with_mse_computation = i > 0 && i % COMPUTE_MSE_FREQUENCY == 0;
 
@@ -624,19 +627,19 @@ impl PressureSolver {
                     const PRUPDATE_COMPUTE_MSE: u32 = 1;
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
                     if iteration_with_mse_computation {
-                        cpass.set_push_constants(0, &[PRUPDATE_COMPUTE_MSE]);
+                        cpass.set_push_constants(0, &[PRUPDATE_COMPUTE_MSE, reduce_pass_initial_group_size]);
                     } else {
                         cpass.set_push_constants(0, &[0]);
                     }
                     cpass.set_bind_group(2, &self.bind_group_update_pressure_and_residual, &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, 4 * 4);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
                 // Was this the last update?
                 if iteration_with_mse_computation {
                     // Compute remaining error.
                     // Used for statistics. If below target, makes all upcoming dispatch_indirect no-ops.
-                    self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_MSE);
+                    self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_MSE);
 
                     if i >= num_iterations {
                         return false;
@@ -647,19 +650,19 @@ impl PressureSolver {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
                     cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
                     cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, 4 * 4);
-                    cpass.set_push_constants(0, &[PRECONDITIONER_PASS1]);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
+                    cpass.set_push_constants(0, &[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]);
                     cpass.set_bind_group(2, &self.bind_group_preconditioner[1], &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, 4 * 4);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
                 // finish dotproduct of auxiliary field (z) and residual field (r)
-                self.reduce_add(&mut cpass, pipeline_manager, Self::DOTPRODUCT_RESULTMODE_BETA);
+                self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_BETA);
 
                 wgpu_scope!(cpass, "Update search vector", || {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_search));
                     cpass.set_bind_group(2, &self.bind_group_update_search, &[]);
-                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, 4 * 4);
+                    cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_main_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
                 i += 1;
@@ -669,6 +672,6 @@ impl PressureSolver {
 
         drop(cpass);
         pressure_field.timestamp_last_iteration += simulation_delta;
-        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_and_dispatch_buffer, num_iterations);
+        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_and_main_dispatch_buffer, num_iterations);
     }
 }

@@ -22,7 +22,6 @@ uint GetReduceBufferAddress() {
 
 #define PRECONDITIONER_PASS0 0
 #define PRECONDITIONER_PASS1 1
-#define PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO 3
 
 // Incomplete Poisson preconditioner
 // see https://software.intel.com/content/www/us/en/develop/articles/parallelized-incomplete-poisson-preconditioner-in-cloth-simulation.html
@@ -40,10 +39,8 @@ void main() {
 
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
-        // Someone needs to set the unused parts of the dot product buffer to zero.
-        // This is the first time we need it, so the fist time this is executed we do the reset!
-        if (PushConstants.Mode == PRECONDITIONER_PASS1_SET_UNUSED_TO_ZERO) {
-            ReduceBuffer[globalLinearTid] = 0.0;
+        if (PushConstants.Mode != PRECONDITIONER_PASS0) {
+            ReduceBuffer[globalLinearTid] = 0.0; // Note that ReduceBuffer is used in ping-pong style reduction, need to rezero every time!
         }
         return;
     }
