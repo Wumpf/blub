@@ -6,7 +6,9 @@
 
 layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
 layout(set = 2, binding = 1) buffer restrict ReduceResultAndMainDispatchBuffer {
-    vec4 DotProductReduceResult;
+    vec2 DotProductReduceResult;
+    float MSE;
+    float NumIterations;
     uvec4 DispatchCommandRegular;
     uvec4 DispatchCommandReduce0;
     uvec4 DispatchCommandReduce1;
@@ -22,6 +24,7 @@ void main() {
 
     // Fill out dispatch command for all upcoming steps.
     if (gl_GlobalInvocationID == ivec3(0)) {
+        NumIterations = 0.0;
         uvec3 gridSize = imageSize(Residual);
         DispatchCommandRegular = uvec4((gridSize + gl_WorkGroupSize - uvec3(1)) / gl_WorkGroupSize, 0);
 

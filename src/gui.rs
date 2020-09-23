@@ -143,7 +143,7 @@ impl GUI {
             &stats.iter().map(|sample| sample.mse).collect::<Vec<f32>>(),
         )
         .scale_min(0.0)
-        .scale_max(target_mse * 4.0)
+        .scale_max(target_mse * 3.0)
         .graph_size([300.0, 40.0])
         .build();
 
@@ -165,29 +165,23 @@ impl GUI {
             .display_format(im_str!("%.4f"))
             .build();
 
-        let mut pid_config = [config.pid_config.0, config.pid_config.1, config.pid_config.2];
-        if ui
-            .drag_float3(im_str!("PID error -> #iterations"), &mut pid_config)
-            .min(0.0)
-            .max(20.0)
-            .speed(0.01)
-            .build()
-        {
-            config.pid_config.0 = pid_config[0];
-            config.pid_config.1 = pid_config[1];
-            config.pid_config.2 = pid_config[2];
-        }
-
-        let mut min_iteration_count = config.min_num_iterations as i32;
         let mut max_iteration_count = config.max_num_iterations as i32;
         if ui
-            .drag_int_range2(im_str!("min/max iteration count"), &mut min_iteration_count, &mut max_iteration_count)
+            .drag_int(im_str!("max iteration count"), &mut max_iteration_count)
             .min(2)
-            .max(100)
+            .max(128)
             .build()
         {
-            config.min_num_iterations = min_iteration_count as i32;
             config.max_num_iterations = max_iteration_count as i32;
+        }
+        let mut mse_check_frequency = config.mse_check_frequency as i32;
+        if ui
+            .drag_int(im_str!("mse check frequency count"), &mut mse_check_frequency)
+            .min(1)
+            .max(max_iteration_count)
+            .build()
+        {
+            config.mse_check_frequency = mse_check_frequency as i32;
         }
     }
 

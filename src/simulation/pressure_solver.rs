@@ -54,15 +54,14 @@ struct PendingErrorBuffer {
 
 pub struct SolverConfig {
     pub target_mse: f32,
-    pub min_num_iterations: i32,
     pub max_num_iterations: i32,
-    pub pid_config: (f32, f32, f32),
+    pub mse_check_frequency: i32,
 }
 #[derive(Default, Copy, Clone)]
 pub struct SolverStatisticSample {
     pub mse: f32,
     pub iteration_count: i32,
-    timestamp: Duration,
+    //timestamp: Duration,
 }
 
 #[repr(C)]
@@ -71,6 +70,7 @@ struct SolverConfigUniformBufferContent {
     // We compute internally the mse for a pseudo pressure value defined as 'pressure * density / dt', not with pressure.
     // For easier handling with different timesteps the user facing parameter is about 'pressure * density'.
     target_mse_per_second: f32,
+    max_num_iterations: u32,
 }
 unsafe impl bytemuck::Pod for SolverConfigUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for SolverConfigUniformBufferContent {}
@@ -114,7 +114,7 @@ impl PressureField {
         let mut unused_error_buffers = Vec::new();
         for i in 0..NUM_PRESSURE_ERROR_BUFFER {
             unused_error_buffers.push(device.create_buffer(&wgpu::BufferDescriptor {
-                size: 4,
+                size: 8,
                 usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
                 label: Some(&format!("Buffer: Pressure error read-back buffer {} ({})", i, name)),
                 mapped_at_creation: false,
@@ -144,9 +144,10 @@ impl PressureField {
         // Check if there's any new data samples
         while let Some(mut readback) = self.pending_error_readbacks.pop_front() {
             if (&mut readback.copy_operation.as_mut().unwrap()).now_or_never().is_some() {
-                let mapped = readback.buffer.slice(0..4);
+                let mapped = readback.buffer.slice(0..8);
                 let buffer_data = mapped.get_mapped_range().to_vec();
-                let squared_error = *bytemuck::from_bytes::<f32>(&buffer_data);
+                let squared_error = *bytemuck::from_bytes::<f32>(&buffer_data[0..4]);
+                let iteration_count = *bytemuck::from_bytes::<f32>(&buffer_data[4..8]);
                 readback.buffer.unmap();
                 self.unused_error_buffers.push(readback.buffer);
 
@@ -155,6 +156,7 @@ impl PressureField {
                 // See also config.target_mse
                 let delta_sq = simulation_delta.as_secs_f32() * simulation_delta.as_secs_f32();
                 readback.resulting_sample.mse = squared_error * delta_sq;
+                readback.resulting_sample.iteration_count = iteration_count as i32;
 
                 self.stats.push_back(readback.resulting_sample);
                 while self.stats.len() > Self::SOLVER_STATISTIC_HISTORY_LENGTH {
@@ -167,21 +169,16 @@ impl PressureField {
         }
     }
 
-    // use a PID controller to correct the solver iteration count.
-    fn compute_pid_controlled_iteration_count(&self, timestep_current: Duration) -> i32 {
-        self.config.max_num_iterations
-    }
-
-    fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer, iteration_count: i32) {
+    fn enqueue_error_buffer_read(&mut self, encoder: &mut wgpu::CommandEncoder, source_buffer: &wgpu::Buffer) {
         if let Some(target_buffer) = self.unused_error_buffers.pop() {
-            encoder.copy_buffer_to_buffer(source_buffer, 0, &target_buffer, 0, 4);
+            encoder.copy_buffer_to_buffer(source_buffer, 8, &target_buffer, 0, 8);
             self.unscheduled_error_readbacks.push(PendingErrorBuffer {
                 copy_operation: None, // Filled out in start_error_buffer_readbacks
                 buffer: target_buffer,
                 resulting_sample: SolverStatisticSample {
                     mse: 0.0,
-                    iteration_count,
-                    timestamp: self.timestamp_last_iteration,
+                    iteration_count: 0,
+                    //timestamp: self.timestamp_last_iteration,
                 },
             });
         } else {
@@ -195,6 +192,7 @@ impl PressureField {
             queue,
             SolverConfigUniformBufferContent {
                 target_mse_per_second: self.config.target_mse / delta_sq,
+                max_num_iterations: self.config.max_num_iterations as u32,
             },
         );
     }
@@ -566,13 +564,8 @@ impl PressureSolver {
 
         const PRECONDITIONER_PASS0: u32 = 0;
         const PRECONDITIONER_PASS1: u32 = 1;
-        const COMPUTE_MSE_FREQUENCY: i32 = 4;
 
         pressure_field.retrieve_new_error_samples(simulation_delta);
-        let num_iterations = pressure_field.compute_pid_controlled_iteration_count(pressure_field.timestamp_last_iteration + simulation_delta);
-        if num_iterations % COMPUTE_MSE_FREQUENCY != 0 {
-            panic!("Number of solver iterations needs to be a multiple of {}", COMPUTE_MSE_FREQUENCY)
-        }
 
         let reduce_pass_initial_group_size = wgpu_utils::compute_group_size_1d(
             (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32 / Self::REDUCE_READS_PER_THREAD,
@@ -636,7 +629,8 @@ impl PressureSolver {
                 // finish dotproduct of auxiliary field (z) and search field (s)
                 self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_ALPHA);
 
-                let iteration_with_mse_computation = i > 0 && i % COMPUTE_MSE_FREQUENCY == 0;
+                let iteration_with_mse_computation =
+                    pressure_field.config.max_num_iterations == i || (i > 0 && i % pressure_field.config.mse_check_frequency == 0);
 
                 wgpu_scope!(cpass, "update pressure field (p) and residual field (r)", || {
                     const PRUPDATE_COMPUTE_MSE: u32 = 1;
@@ -650,13 +644,13 @@ impl PressureSolver {
                     cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
-                // Was this the last update?
+                // Time to check on mse?
                 if iteration_with_mse_computation {
                     // Compute remaining error.
                     // Used for statistics. If below target, makes all upcoming dispatch_indirect no-ops.
-                    self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_MSE);
+                    self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_MSE + i as u32);
 
-                    if i >= num_iterations {
+                    if pressure_field.config.max_num_iterations == i {
                         return false;
                     }
                 }
@@ -687,6 +681,6 @@ impl PressureSolver {
 
         drop(cpass);
         pressure_field.timestamp_last_iteration += simulation_delta;
-        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_and_dispatch_buffer, num_iterations);
+        pressure_field.enqueue_error_buffer_read(&mut *encoder, &self.dotproduct_reduce_result_and_dispatch_buffer);
     }
 }

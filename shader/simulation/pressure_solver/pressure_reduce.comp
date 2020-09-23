@@ -71,11 +71,14 @@ void main() {
             DotProductDest[1] = dotProductResult;
             break;
 
-        case RESULTMODE_MSE:
-            DotProductDest[0] = dotProductResult;
-
-            // If we reached the target MSE, disable all further dispatches.
-            if (dotProductResult < TargetMSE) {
+        default:
+            uint iterationIdx = PushConstants.Mode - RESULTMODE_MSE;
+            bool noStatsWrittenSoFar = DotProductDest[3] == 0;
+            if (noStatsWrittenSoFar && (MaxNumSolverIterations == iterationIdx || dotProductResult < TargetMSE)) {
+                // Statistics
+                DotProductDest[2] = dotProductResult;
+                DotProductDest[3] = float(iterationIdx);
+                // Disable all further dispatches.
                 DotProductDest[4] = 0;
                 DotProductDest[8] = 0;
                 DotProductDest[16] = 0;
