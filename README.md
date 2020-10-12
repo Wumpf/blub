@@ -75,6 +75,14 @@ I started out with Jacobi iterations - very easy to implement, but inaccurate an
 Looked into [A Multigrid Fluid Pressure SolverHandling Separating Solid Boundary Conditions, Chentanez et al. 2011](https://matthias-research.github.io/pages/publications/separatingBoundaries.pdf)
 for a while but shied away from implementing such a complex solver at the moment without any reference code and with too little personal experience in the field.
 
+#### Iteration Control
+
+Typically solvers are run until a certain error threshold is reached. This is notoriously tricky on GPU, since this means that we need to have the mean squared error (MSE) feed back to determine how many more dispatch calls for solver iterations should be issued. We can't wait for the result as this would introduce a GPU-CPU stall. Experimenting with using MSE from several iterations ago (i.e. asynchronously querying the MSE) didn't yield promising results due to strong fluctuations and varying delay. Blub follows a different strategy instead:
+
+There is a fix maximum number of iterations which determines how many compute dispatches are issued (note that there are several per iteration!), however most of these dispatches are indirect, so when evaluating the MSE, we may null out the indirect dispatch struct, making the remaining dispatches rather cheap (still not free though!).
+Since evaluating the MSE itself is costly, this is done every couple of few iterations (configurable).
+
+The last computed MSE and iteration count is queried asynchronously, in order to display a histogram in the gui and make informed choices for selecting the target MSE, max iteration & MSE evaluation frequency parameters.
 
 ## Rendering
 
