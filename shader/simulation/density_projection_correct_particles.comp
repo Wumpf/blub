@@ -7,7 +7,7 @@
 
 layout(set = 2, binding = 0) buffer restrict ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
 layout(set = 2, binding = 1) uniform texture3D MarkerVolume;
-layout(set = 2, binding = 2) uniform texture3D PressureFromDensity;
+layout(set = 2, binding = 2) uniform texture2DArray PressureFromDensity;
 
 COMPUTE_PASS_PARTICLES
 

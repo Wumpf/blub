@@ -13,7 +13,7 @@ layout(set = 1, binding = 0) uniform texture3D MarkerVolume;
 layout(set = 1, binding = 1) uniform texture3D VelocityVolumeX;
 layout(set = 1, binding = 2) uniform texture3D VelocityVolumeY;
 layout(set = 1, binding = 3) uniform texture3D VelocityVolumeZ;
-layout(set = 1, binding = 4, r32f) uniform restrict image3D Divergence;
+layout(set = 1, binding = 4, r32f) uniform restrict image2DArray Divergence;
 
 COMPUTE_PASS_VOLUME
 

@@ -5,9 +5,9 @@
 #include "pressure.glsl"
 
 layout(set = 2, binding = 0) buffer restrict _ReduceBuffer { float ReduceBuffer[]; };
-layout(set = 2, binding = 1) uniform texture3D Search;
+layout(set = 2, binding = 1) uniform texture2DArray Search;
 
-COMPUTE_PASS_VOLUME
+COMPUTE_PASS_PRESSURE
 
 // It seems that there is a bug that will make this function misbehave if it is declared before the thread group layout declaration
 uint GetReduceBufferAddress() {

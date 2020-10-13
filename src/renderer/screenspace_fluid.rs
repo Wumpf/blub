@@ -54,18 +54,18 @@ impl ScreenSpaceFluid {
         backbuffer: &HdrBackbuffer,
     ) -> ScreenSpaceFluid {
         let group_layout_narrow_range_filter = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image2d(Self::FORMAT_FLUID_DEPTH, false)) // Fluid depth target
+            .next_binding_compute(binding_glsl::image2D(Self::FORMAT_FLUID_DEPTH, false)) // Fluid depth target
             .next_binding_compute(binding_glsl::texture2D()) // Fluid depth source
             .create(device, "BindGroupLayout: Narrow Range Filter");
         let group_layout_thickness_filter = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image2d(Self::FORMAT_FLUID_THICKNESS, false)) // Fluid depth target
+            .next_binding_compute(binding_glsl::image2D(Self::FORMAT_FLUID_THICKNESS, false)) // Fluid depth target
             .next_binding_compute(binding_glsl::texture2D()) // Fluid depth source
             .create(device, "BindGroupLayout: Narrow Range Filter");
 
         let group_layout_compose = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture2D()) // Fluid depth
             .next_binding_compute(binding_glsl::texture2D()) // Fluid thickness
-            .next_binding_compute(binding_glsl::image2d(HdrBackbuffer::FORMAT, false)) // hdr backbuffer
+            .next_binding_compute(binding_glsl::image2D(HdrBackbuffer::FORMAT, false)) // hdr backbuffer
             .create(device, "BindGroupLayout: SSFluid, Final fluid/Compose");
 
         let pipeline_render_particles = pipeline_manager.create_render_pipeline(

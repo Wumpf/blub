@@ -4,7 +4,7 @@
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
+layout(set = 2, binding = 0, r32f) uniform restrict image2DArray Residual;
 layout(set = 2, binding = 1) buffer restrict ReduceResultAndMainDispatchBuffer {
     vec2 DotProductReduceResult;
     float MSE;
@@ -14,7 +14,7 @@ layout(set = 2, binding = 1) buffer restrict ReduceResultAndMainDispatchBuffer {
     uvec4 DispatchCommandReduce1;
 };
 
-COMPUTE_PASS_VOLUME
+COMPUTE_PASS_PRESSURE
 
 #define FIRST_STEP 0
 #define NOT_FIRST_STEP 1
