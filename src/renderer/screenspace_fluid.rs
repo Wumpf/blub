@@ -419,11 +419,11 @@ impl ScreenSpaceFluid {
 
                     // Filter Y
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
-                    cpass.set_push_constants(0, &[1]);
+                    cpass.set_push_constants(0, &bytemuck::bytes_of(&[1 as u32]));
                     cpass.dispatch(work_group_filter_1d_y.width, work_group_filter_1d_y.height, work_group_filter_1d_y.depth);
                     // Filter X - note that since filter is not really separable, order makes a difference. Found this order visually more pleasing.
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[1], &[]);
-                    cpass.set_push_constants(0, &[0]);
+                    cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
                     cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
                 });
                 wgpu_scope!(cpass, "filter 2D", || {
@@ -443,11 +443,11 @@ impl ScreenSpaceFluid {
 
                 // Filter Y
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[0], &[]);
-                cpass.set_push_constants(0, &[1]);
+                cpass.set_push_constants(0, &bytemuck::bytes_of(&[1 as u32]));
                 cpass.dispatch(work_group_filter_1d_y.width, work_group_filter_1d_y.height, work_group_filter_1d_y.depth);
                 // Filter X
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[1], &[]);
-                cpass.set_push_constants(0, &[0]);
+                cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
                 cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
             });
 

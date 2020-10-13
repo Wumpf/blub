@@ -158,28 +158,23 @@ impl GUI {
     }
 
     fn setup_ui_solver_config(ui: &imgui::Ui, config: &mut SolverConfig) {
-        ui.drag_float(im_str!("target mse"), &mut config.target_mse)
-            .min(0.0001)
-            .max(1.0)
+        imgui::Drag::new(im_str!("target mse"))
+            .range(0.0001..=1.0)
             .speed(0.0001)
             .display_format(im_str!("%.4f"))
-            .build();
+            .build(&ui, &mut config.target_mse);
 
         let mut max_iteration_count = config.max_num_iterations as i32;
-        if ui
-            .drag_int(im_str!("max iteration count"), &mut max_iteration_count)
-            .min(2)
-            .max(128)
-            .build()
+        if imgui::Drag::new(im_str!("max iteration count"))
+            .range(2..=128)
+            .build(&ui, &mut max_iteration_count)
         {
             config.max_num_iterations = max_iteration_count as i32;
         }
         let mut mse_check_frequency = config.mse_check_frequency as i32;
-        if ui
-            .drag_int(im_str!("mse check frequency count"), &mut mse_check_frequency)
-            .min(1)
-            .max(max_iteration_count)
-            .build()
+        if imgui::Drag::new(im_str!("mse check frequency count"))
+            .range(1..=max_iteration_count)
+            .build(&ui, &mut mse_check_frequency)
         {
             config.mse_check_frequency = mse_check_frequency as i32;
         }
@@ -265,12 +260,11 @@ impl GUI {
             let min_jump = 1.0 / simulation_controller.simulation_steps_per_second() as f32;
             state.fast_forward_length_seconds = state.fast_forward_length_seconds.max(min_jump);
             ui.set_next_item_width(50.0);
-            ui.drag_float(im_str!(""), &mut state.fast_forward_length_seconds)
-                .min(min_jump)
-                .max(120.0)
+            imgui::Drag::new(im_str!(""))
+                .range(min_jump..=120.0)
                 .speed(0.005)
                 .display_format(im_str!("%.2f"))
-                .build();
+                .build(&ui, &mut state.fast_forward_length_seconds);
             ui.same_line(0.0);
             if ui.button(im_str!("Fast Forward"), [150.0, Self::DEFAULT_BUTTON_HEIGHT]) {
                 event_loop_proxy
@@ -297,7 +291,8 @@ impl GUI {
             }
             ui.same_line(0.0);
             ui.set_next_item_width(40.0);
-            ui.drag_int(im_str!("video fps"), &mut state.video_fps).min(10).max(300).build();
+
+            imgui::Drag::new(im_str!("video fps")).range(10..=300).build(&ui, &mut state.video_fps);
         }
     }
 
@@ -313,12 +308,11 @@ impl GUI {
             scene_renderer.fluid_rendering_mode = FluidRenderingMode::iter().skip(current_fluid_rendering).next().unwrap();
         }
         {
-            ui.drag_float(im_str!("Particle Radius Factor"), &mut scene_renderer.particle_radius_factor)
-                .min(0.0)
-                .max(1.0)
+            imgui::Drag::new(im_str!("Particle Radius Factor"))
+                .range(0.0..=1.0)
                 .speed(0.01)
                 .display_format(im_str!("%.2f"))
-                .build();
+                .build(&ui, &mut scene_renderer.particle_radius_factor);
         }
         {
             let mut current_volume_visualization = scene_renderer.volume_visualization as usize;
@@ -330,12 +324,12 @@ impl GUI {
             );
             scene_renderer.volume_visualization = VolumeVisualizationMode::iter().skip(current_volume_visualization).next().unwrap();
         }
-        ui.drag_float(im_str!("Velocity Visualization Scale"), &mut scene_renderer.velocity_visualization_scale)
-            .min(0.001)
-            .max(5.0)
+
+        imgui::Drag::new(im_str!("Velocity Visualization Scale"))
+            .range(0.001..=5.0)
             .speed(0.0001)
             .display_format(im_str!("%.3f"))
-            .build();
+            .build(&ui, &mut scene_renderer.velocity_visualization_scale);
         ui.checkbox(im_str!("Show Fluid Domain Bounds"), &mut scene_renderer.enable_box_lines);
     }
 

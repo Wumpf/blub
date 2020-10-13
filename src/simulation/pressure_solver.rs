@@ -523,7 +523,7 @@ impl PressureSolver {
         let mut reduce_step_idx = 0;
         while num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP {
             cpass.set_bind_group(2, &self.bind_group_dotproduct_reduce[source_buffer_index], &[]);
-            cpass.set_push_constants(0, &[Self::REDUCE_RESULTMODE_REDUCE, num_entries_remaining]);
+            cpass.set_push_constants(0, &bytemuck::bytes_of(&[Self::REDUCE_RESULTMODE_REDUCE, num_entries_remaining]));
 
             if reduce_step_idx < DISPATCH_BUFFER_OFFSETS.len() {
                 cpass.dispatch_indirect(
@@ -547,7 +547,7 @@ impl PressureSolver {
         // Right now not a dispatch_indirect, so we always run it even if we decided that it is no longer necessary.
         // It's simply a bit too tricky to turn it off - we can't write into a dispatch buffer that is in use
         cpass.set_bind_group(2, &self.bind_group_dotproduct_final[source_buffer_index], &[]);
-        cpass.set_push_constants(0, &[result_mode, num_entries_remaining]);
+        cpass.set_push_constants(0, &bytemuck::bytes_of(&[result_mode, num_entries_remaining]));
         cpass.dispatch(1, 1, 1);
     }
 
@@ -591,9 +591,9 @@ impl PressureSolver {
             // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
             // https://github.com/gfx-rs/wgpu/issues/563
             if pressure_field.timestamp_last_iteration == Duration::new(0, 0) {
-                cpass.set_push_constants(0, &[FIRST_STEP]);
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[FIRST_STEP]));
             } else {
-                cpass.set_push_constants(0, &[NOT_FIRST_STEP]);
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[NOT_FIRST_STEP]));
             }
             cpass.set_bind_group(2, &self.bind_group_init, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
@@ -602,11 +602,11 @@ impl PressureSolver {
             // Note that we don't use the auxillary vector here as in-between storage!
             wgpu_scope!(cpass, "preconditioner on (r), store to auxillary (z), start dotproduct of <z; r>", || {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
-                cpass.set_push_constants(0, &[0]);
-                cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
+                cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
+                cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
                 cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-                cpass.set_push_constants(0, &[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]);
+                cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]));
                 cpass.set_bind_group(2, &self.bind_group_preconditioner[2], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             });
@@ -623,7 +623,7 @@ impl PressureSolver {
                     // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s), i.e. compute <s; As>
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_coeff));
                     cpass.set_bind_group(2, &self.bind_group_apply_coeff, &[]);
-                    cpass.set_push_constants(0, &[0, reduce_pass_initial_group_size]);
+                    cpass.set_push_constants(0, &bytemuck::bytes_of(&[0, reduce_pass_initial_group_size]));
                     cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
                 // finish dotproduct of auxiliary field (z) and search field (s)
@@ -636,9 +636,9 @@ impl PressureSolver {
                     const PRUPDATE_COMPUTE_MSE: u32 = 1;
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
                     if iteration_with_mse_computation {
-                        cpass.set_push_constants(0, &[PRUPDATE_COMPUTE_MSE, reduce_pass_initial_group_size]);
+                        cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRUPDATE_COMPUTE_MSE, reduce_pass_initial_group_size]));
                     } else {
-                        cpass.set_push_constants(0, &[0]);
+                        cpass.set_push_constants(0, &bytemuck::bytes_of(&[0]));
                     }
                     cpass.set_bind_group(2, &self.bind_group_update_pressure_and_residual, &[]);
                     cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
@@ -657,10 +657,10 @@ impl PressureSolver {
 
                 wgpu_scope!(cpass, "preconditioner on (r), store to auxillary (z), start dotproduct of <z; r>", || {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
-                    cpass.set_push_constants(0, &[PRECONDITIONER_PASS0]);
+                    cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
                     cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
                     cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
-                    cpass.set_push_constants(0, &[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]);
+                    cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]));
                     cpass.set_bind_group(2, &self.bind_group_preconditioner[1], &[]);
                     cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
