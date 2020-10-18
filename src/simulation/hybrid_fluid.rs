@@ -161,14 +161,14 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // velocityX
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
-            .next_binding_compute(binding_glsl::image2DArray(wgpu::TextureFormat::R32Float, false)) // divergence / initial residual
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // divergence / initial residual
             .create(device, "BindGroupLayout: Compute Divergence");
         let group_layout_write_velocity_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture3D()) // marker volume
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityX
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityY
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityZ
-            .next_binding_compute(binding_glsl::texture2DArray()) // pressure
+            .next_binding_compute(binding_glsl::texture3D()) // pressure
             .create(device, "BindGroupLayout: Write to Velocity");
         let group_layout_advect_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture2D()) // velocityX
@@ -186,12 +186,12 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::utexture3D()) // linkedlist_volume
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, false)) // marker volume
-            .next_binding_compute(binding_glsl::image2DArray(wgpu::TextureFormat::R32Float, false)) // density volume
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // density volume
             .create(device, "BindGroupLayout: Compute density error");
         let group_layout_density_projection_correct_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::texture3D()) // marker volume
-            .next_binding_compute(binding_glsl::texture2DArray()) // pressure from density
+            .next_binding_compute(binding_glsl::texture3D()) // pressure from density
             .create(device, "BindGroupLayout: Correct density error");
 
         let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);

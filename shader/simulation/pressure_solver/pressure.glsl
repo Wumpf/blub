@@ -11,7 +11,7 @@
 #define REDUCE_READS_PER_THREAD 16
 
 layout(set = 0, binding = 0) uniform texture3D MarkerVolume;
-layout(set = 1, binding = 0, r32f) uniform restrict image2DArray Pressure;
+layout(set = 1, binding = 0, r32f) uniform restrict image3D Pressure;
 layout(set = 1, binding = 1) uniform Config {
     float TargetMSE;
     uint MaxNumSolverIterations;
@@ -31,7 +31,7 @@ PushConstants;
 
 // Result of multiplication with coefficient matrix with a texture at gridCoord.
 // Only call if gridCoord is a fluid position!
-float MultiplyWithCoefficientMatrix(ivec3 gridCoord, texture2DArray texture, float valueAtGridCoord) {
+float MultiplyWithCoefficientMatrix(ivec3 gridCoord, texture3D texture, float valueAtGridCoord) {
     float result = 0.0;
     float markerX0 = texelFetch(MarkerVolume, gridCoord - ivec3(1, 0, 0), 0).x;
     float markerX1 = texelFetch(MarkerVolume, gridCoord + ivec3(1, 0, 0), 0).x;

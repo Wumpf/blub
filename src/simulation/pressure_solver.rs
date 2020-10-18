@@ -12,7 +12,7 @@ fn create_volume_texture_desc(label: &str, grid_dimension: wgpu::Extent3d, forma
         size: grid_dimension,
         mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
+        dimension: wgpu::TextureDimension::D3,
         format,
         usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
     }
@@ -233,16 +233,16 @@ impl PressureSolver {
             .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: Pressure solver general");
         let group_layout_pressure_field = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image2DArray(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Pressure solver Pressure");
         let group_layout_init = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image2DArray(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
             .next_binding_compute(binding_glsl::buffer(false))
             .create(device, "BindGroupLayout: Pressure solver init");
         let group_layout_apply_coeff = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
-            .next_binding_compute(binding_glsl::texture2DArray())
+            .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: P. solver apply coeff matrix & start dot");
         let group_layout_reduce = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(true)) // source
@@ -250,14 +250,14 @@ impl PressureSolver {
             .create(device, "BindGroupLayout: Pressure solver dot product reduce");
         let group_layout_preconditioner = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
-            .next_binding_compute(binding_glsl::texture2DArray())
-            .next_binding_compute(binding_glsl::image2DArray(wgpu::TextureFormat::R32Float, false))
-            .next_binding_compute(binding_glsl::texture2DArray())
+            .next_binding_compute(binding_glsl::texture3D())
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: Pressure solver preconditioner");
         let group_layout_update_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
-            .next_binding_compute(binding_glsl::image2DArray(wgpu::TextureFormat::R32Float, false))
-            .next_binding_compute(binding_glsl::texture2DArray())
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::texture3D())
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Pressure solver generic volume update");
 

@@ -5,7 +5,7 @@
 #include "pressure.glsl"
 
 layout(set = 2, binding = 0) buffer restrict _ReduceBuffer { float ReduceBuffer[]; };
-layout(set = 2, binding = 1) uniform texture2DArray Search;
+layout(set = 2, binding = 1) uniform texture3D Search;
 
 COMPUTE_PASS_PRESSURE
 

@@ -4,7 +4,7 @@
 
 #include "pressure.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict image2DArray Residual;
+layout(set = 2, binding = 0, r32f) uniform restrict image3D Residual;
 layout(set = 2, binding = 1) buffer restrict ReduceResultAndMainDispatchBuffer {
     vec2 DotProductReduceResult;
     float MSE;

@@ -13,7 +13,7 @@
 layout(set = 2, binding = 0) buffer restrict readonly ParticlePositionLlBuffer { ParticlePositionLl Particles[]; };
 layout(set = 2, binding = 1) uniform utexture3D LinkedListDualGrid;
 layout(set = 2, binding = 2, r8_snorm) uniform restrict image3D MarkerVolume;
-layout(set = 2, binding = 3, r32f) uniform restrict image2DArray DensityVolume;
+layout(set = 2, binding = 3, r32f) uniform restrict image3D DensityVolume;
 // layout(push_constant) uniform PushConstants { uint VelocityTransferComponent; };
 
 // Uses a shared memory so every thread loads one particle for its current cell and then accesses remaining neighbors (a 2x2x2 environment) from

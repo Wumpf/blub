@@ -5,8 +5,8 @@
 #include "pressure.glsl"
 
 layout(set = 2, binding = 0) buffer restrict _ReduceBuffer { float ReduceBuffer[]; };
-layout(set = 2, binding = 1, r32f) uniform restrict image2DArray Residual;
-layout(set = 2, binding = 2) uniform texture2DArray Search;
+layout(set = 2, binding = 1, r32f) uniform restrict image3D Residual;
+layout(set = 2, binding = 2) uniform texture3D Search;
 layout(set = 2, binding = 3) uniform PcgScalars_ { PcgScalars Scalars; };
 
 #define PRUPDATE_COMPUTE_MSE 1

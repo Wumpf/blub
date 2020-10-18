@@ -6,10 +6,10 @@
 #include "pressure.glsl"
 
 layout(set = 2, binding = 0) buffer restrict _ReduceBuffer { float ReduceBuffer[]; };
-layout(set = 2, binding = 1) uniform texture2DArray Residual;
+layout(set = 2, binding = 1) uniform texture3D Residual;
 
-layout(set = 2, binding = 2, r32f) uniform restrict writeonly image2DArray AuxiliaryOrTemp;
-layout(set = 2, binding = 3) uniform texture2DArray ResidualOrTemp;
+layout(set = 2, binding = 2, r32f) uniform restrict writeonly image3D AuxiliaryOrTemp;
+layout(set = 2, binding = 3) uniform texture3D ResidualOrTemp;
 
 COMPUTE_PASS_PRESSURE
 
