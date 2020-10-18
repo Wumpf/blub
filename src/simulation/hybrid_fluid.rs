@@ -596,7 +596,7 @@ impl HybridFluid {
         height: 8,
         depth: 8,
     };
-    const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 512;
+    const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 64;
 
     pub fn pressure_solver_config_velocity(&mut self) -> &mut SolverConfig {
         &mut self.pressure_field_from_velocity.config
