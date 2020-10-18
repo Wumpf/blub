@@ -20,6 +20,13 @@ pub struct Screen {
     screenshot_capture: ScreenshotCapture,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ScreenUniformBufferContent {
+    resolution: cgmath::Point2<f32>,
+    resolution_inv: cgmath::Point2<f32>,
+}
+
 impl Screen {
     pub const FORMAT_BACKBUFFER: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
     const FORMAT_SWAPCHAIN: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
@@ -210,5 +217,12 @@ impl Screen {
 
     pub fn wait_for_pending_screenshots(&mut self, device: &wgpu::Device) {
         self.screenshot_capture.wait_for_pending_screenshots(device);
+    }
+
+    pub fn fill_global_uniform_buffer(&self) -> ScreenUniformBufferContent {
+        ScreenUniformBufferContent {
+            resolution: cgmath::point2(self.resolution.width as f32, self.resolution.height as f32),
+            resolution_inv: cgmath::point2(1.0 / self.resolution.width as f32, 1.0 / self.resolution.height as f32),
+        }
     }
 }

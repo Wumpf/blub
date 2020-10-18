@@ -63,15 +63,6 @@ vec3 computeReflection(vec3 normal, vec3 toCamera, vec3 toLight, vec3 lightRadia
     return evaluateNormalizedBlinnPhong(BlinnPhongExponent, normal, toCamera, toLight) * lightRadiance * dot(toLight, normal);
 }
 
-// Computes world space position from standard depth buffer depth.
-// (using "classic depth buffer", as defined in with our global camera matrices)
-vec3 reconstructWorldPositionFromViewSpaceDepth(vec2 screenUv, float depth) {
-    float x = screenUv.x * 2.0f - 1.0f;
-    float y = (1.0 - screenUv.y) * 2.0f - 1.0f;
-    vec3 viewSpace = vec3(Camera.NdcCameraSpaceProjected * vec2(x, y) * depth, depth);
-    return viewSpace.x * Camera.Right + viewSpace.y * Camera.Up + viewSpace.z * Camera.Direction + Camera.Position;
-}
-
 void reconstructNormalAndPositionFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize, out vec3 worldNormal, out vec3 worldPosition) {
     // Reconstruct normals as describe here:
     // https://wickedengine.net/2019/09/22/improved-normal-reconstruction-from-depth/

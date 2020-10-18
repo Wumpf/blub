@@ -1,6 +1,6 @@
-use crate::camera;
 use crate::timer;
 use crate::wgpu_utils::binding_builder::*;
+use crate::{camera, render_output::screen};
 use crate::{renderer, wgpu_utils::*};
 use uniformbuffer::UniformBuffer;
 
@@ -10,6 +10,7 @@ struct PerFrameUniformBufferContent {
     camera: camera::CameraUniformBufferContent,
     time: timer::FrameTimeUniformBufferContent,
     rendering: renderer::GlobalRenderSettingsUniformBufferContent,
+    screen: screen::ScreenUniformBufferContent,
 }
 unsafe impl bytemuck::Pod for PerFrameUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for PerFrameUniformBufferContent {}
@@ -71,8 +72,17 @@ impl PerFrameResources {
         camera: camera::CameraUniformBufferContent,
         time: timer::FrameTimeUniformBufferContent,
         rendering: renderer::GlobalRenderSettingsUniformBufferContent,
+        screen: screen::ScreenUniformBufferContent,
     ) {
-        self.ubo.update_content(queue, PerFrameUniformBufferContent { camera, time, rendering });
+        self.ubo.update_content(
+            queue,
+            PerFrameUniformBufferContent {
+                camera,
+                time,
+                rendering,
+                screen,
+            },
+        );
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {

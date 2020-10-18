@@ -67,11 +67,11 @@ impl ShaderDirectory {
             //options.set_hlsl_io_mapping(true);
             options.set_warnings_as_errors();
             options.set_target_env(shaderc::TargetEnv::Vulkan, 0);
-            if cfg!(debug_assertions) {
-                options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-            } else {
-                options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-            }
+            //if cfg!(debug_assertions) {
+            //    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+            //} else {
+            options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+            //}
             // Helps a lot when inspecting in ShaderDoc (will show all original source files before processing) but doesn't seem to hurt performance at all :)
             options.set_generate_debug_info();
 

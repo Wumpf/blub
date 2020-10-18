@@ -292,6 +292,7 @@ impl Application {
             self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
             self.simulation_controller.timer().fill_global_uniform_buffer(),
             self.scene_renderer.fill_global_uniform_buffer(&self.scene),
+            self.screen.fill_global_uniform_buffer(),
         );
         self.simulation_controller.frame_steps(
             &mut self.scene,
@@ -325,6 +326,7 @@ impl Application {
             self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
             self.simulation_controller.timer().fill_global_uniform_buffer(),
             self.scene_renderer.fill_global_uniform_buffer(&self.scene),
+            self.screen.fill_global_uniform_buffer(),
         );
         self.scene_renderer.draw(
             &self.scene,

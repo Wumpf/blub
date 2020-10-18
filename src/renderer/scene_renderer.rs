@@ -1,5 +1,7 @@
+use super::cubemap_renderer::CubemapRenderer;
 use super::particle_renderer::ParticleRenderer;
 use super::screenspace_fluid::ScreenSpaceFluid;
+use super::sky::Sky;
 use super::static_line_renderer::{LineVertex, StaticLineRenderer};
 use super::volume_renderer::{VolumeRenderer, VolumeVisualizationMode};
 use crate::{
@@ -33,6 +35,9 @@ pub struct SceneRenderer {
     screenspace_fluid: ScreenSpaceFluid,
     volume_renderer: VolumeRenderer,
     bounds_line_renderer: StaticLineRenderer,
+    cubemap_renderer: CubemapRenderer,
+
+    sky: Sky,
 
     pub fluid_rendering_mode: FluidRenderingMode,
     pub volume_visualization: VolumeVisualizationMode,
@@ -50,6 +55,9 @@ impl SceneRenderer {
         backbuffer: &HdrBackbuffer,
     ) -> Self {
         let fluid_renderer_group_layout = &HybridFluid::get_or_create_group_layout_renderer(device).layout;
+
+        let sky = Sky::new(device, 512);
+
         SceneRenderer {
             screenspace_fluid: ScreenSpaceFluid::new(
                 device,
@@ -74,6 +82,9 @@ impl SceneRenderer {
                 fluid_renderer_group_layout,
             ),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
+            cubemap_renderer: CubemapRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, sky.cubemap_view()),
+
+            sky,
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
             volume_visualization: VolumeVisualizationMode::None,
@@ -160,12 +171,7 @@ impl SceneRenderer {
                         attachment: backbuffer,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.1,
-                                g: 0.2,
-                                b: 0.3,
-                                a: 1.0,
-                            }),
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: true,
                         },
                     }],
@@ -196,6 +202,9 @@ impl SceneRenderer {
                 if self.enable_box_lines {
                     self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
                 }
+
+                // Background.. not really opaque but we re-use the same rpass.
+                self.cubemap_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
             });
 
             // Transparent

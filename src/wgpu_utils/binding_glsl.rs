@@ -75,6 +75,14 @@ pub fn utexture3D() -> wgpu::BindingType {
     }
 }
 
+pub fn textureCube() -> wgpu::BindingType {
+    wgpu::BindingType::SampledTexture {
+        multisampled: false,
+        component_type: wgpu::TextureComponentType::Float,
+        dimension: wgpu::TextureViewDimension::Cube,
+    }
+}
+
 pub fn image2D(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         dimension: wgpu::TextureViewDimension::D2,
