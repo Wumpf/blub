@@ -1,6 +1,5 @@
 use futures::*;
 use std::collections::VecDeque;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -30,24 +29,20 @@ impl PendingScreenshot {
 
             std::thread::spawn(move || {
                 let start_time = std::time::Instant::now();
-                let mut png_encoder = png::Encoder::new(std::fs::File::create(&target_path).unwrap(), resolution.width, resolution.height);
-                png_encoder.set_depth(png::BitDepth::Eight);
-                png_encoder.set_color(png::ColorType::RGBA);
-                let mut png_writer = png_encoder
-                    .write_header()
-                    .unwrap()
-                    .into_stream_writer_with_size(ScreenshotCapture::screenshot_buffer_bytes_per_row(resolution));
 
                 let screenshot_buffer_slice = buffer.slice(..);
                 let padded_buffer = screenshot_buffer_slice.get_mapped_range().to_vec();
-                for chunk in padded_buffer.chunks(ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(resolution) as usize) {
-                    png_writer
-                        .write(&chunk[..ScreenshotCapture::screenshot_buffer_bytes_per_row(resolution)])
-                        .unwrap();
+                let padded_row_size = ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(resolution) as usize;
+                let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, std::vec::Vec<_>>::new(resolution.width, resolution.height);
+                for (image_row, buffer_chunk) in imgbuf.rows_mut().zip(padded_buffer.chunks(padded_row_size)) {
+                    for (image_pixel, buffer_pixel) in image_row.zip(buffer_chunk.chunks(4)) {
+                        *image_pixel = image::Rgb([buffer_pixel[0], buffer_pixel[1], buffer_pixel[2]]);
+                    }
                 }
+
                 buffer.unmap();
                 completion_sender_clone.send(buffer).unwrap();
-                png_writer.finish().unwrap();
+                imgbuf.save(target_path.clone()).unwrap();
 
                 info!("Wrote screenshot to {:?} (took {:?})", target_path, start_time.elapsed());
             });
