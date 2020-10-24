@@ -1,8 +1,8 @@
 #version 460
 
 #include "../brdf.glsl"
-#include "../fluid_render_info.glsl"
 #include "../per_frame_resources.glsl"
+#include "../sky.glsl"
 #include "../utilities.glsl"
 
 layout(set = 2, binding = 0) uniform texture2D FluidViewSpaceDepth;
@@ -56,11 +56,15 @@ vec3 computeRefraction(float waterDepth, vec3 toCamera, vec3 toLight, vec3 light
 
 // Evaluates the reflective part of the rendering equation.
 vec3 computeReflection(vec3 normal, vec3 toCamera, vec3 toLight, vec3 lightRadiance) {
+
+    vec3 reflected = reflect(-toCamera, normal);
+    return sampleHdrCubemap(reflected);
+
     // Using normalized blinn phong with single light direction right now.
     // Want to do something more interesting here later when having somethign to reflect.
-    // Note that water reflections are mirror like so I believe there is no point in having a more complicated BRDF.
-    const float BlinnPhongExponent = 16.0; // Maybe should vary this for foam later?
-    return evaluateNormalizedBlinnPhong(BlinnPhongExponent, normal, toCamera, toLight) * lightRadiance * dot(toLight, normal);
+    // Note that water reflections are mirror-like so I believe there is no point in having a more complicated BRDF.
+    // const float BlinnPhongExponent = 16.0; // Maybe should vary this for foam later?
+    // return evaluateNormalizedBlinnPhong(BlinnPhongExponent, normal, toCamera, toLight) * lightRadiance * dot(toLight, normal);
 }
 
 void reconstructNormalAndPositionFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize, out vec3 worldNormal, out vec3 worldPosition) {

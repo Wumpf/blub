@@ -2,9 +2,9 @@ use std::path::Path;
 
 use super::particle_renderer::ParticleRenderer;
 use super::screenspace_fluid::ScreenSpaceFluid;
+use super::sky::Sky;
 use super::static_line_renderer::{LineVertex, StaticLineRenderer};
 use super::volume_renderer::{VolumeRenderer, VolumeVisualizationMode};
-use super::{hdr_cubemap_loader::load_cubemap, hdr_cubemap_renderer::CubemapRenderer};
 use crate::{
     render_output::hdr_backbuffer::HdrBackbuffer,
     scene::Scene,
@@ -36,7 +36,7 @@ pub struct SceneRenderer {
     screenspace_fluid: ScreenSpaceFluid,
     volume_renderer: VolumeRenderer,
     bounds_line_renderer: StaticLineRenderer,
-    cubemap_renderer: CubemapRenderer,
+    sky: Sky,
 
     pub fluid_rendering_mode: FluidRenderingMode,
     pub volume_visualization: VolumeVisualizationMode,
@@ -56,6 +56,15 @@ impl SceneRenderer {
     ) -> Self {
         let fluid_renderer_group_layout = &HybridFluid::get_or_create_group_layout_renderer(device).layout;
 
+        let sky = Sky::new(
+            Path::new("textures/cubemap-rustig_koppie"),
+            device,
+            queue,
+            shader_dir,
+            pipeline_manager,
+            per_frame_bind_group_layout,
+        );
+
         SceneRenderer {
             screenspace_fluid: ScreenSpaceFluid::new(
                 device,
@@ -63,6 +72,7 @@ impl SceneRenderer {
                 pipeline_manager,
                 per_frame_bind_group_layout,
                 fluid_renderer_group_layout,
+                sky.bind_group_layout(),
                 backbuffer,
             ),
             particle_renderer: ParticleRenderer::new(
@@ -80,13 +90,7 @@ impl SceneRenderer {
                 fluid_renderer_group_layout,
             ),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
-            cubemap_renderer: CubemapRenderer::new(
-                device,
-                shader_dir,
-                pipeline_manager,
-                per_frame_bind_group_layout,
-                &load_cubemap(Path::new("textures/cubemap-rustig_koppie"), device, queue),
-            ),
+            sky,
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
             volume_visualization: VolumeVisualizationMode::None,
@@ -206,14 +210,20 @@ impl SceneRenderer {
                 }
 
                 // Background.. not really opaque but we re-use the same rpass.
-                self.cubemap_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
+                self.sky.draw(&mut rpass_backbuffer, pipeline_manager);
             });
 
             // Transparent
             wgpu_scope!(encoder, "transparent", || {
                 if let FluidRenderingMode::ScreenSpaceFluid = self.fluid_rendering_mode {
-                    self.screenspace_fluid
-                        .draw(&mut encoder, pipeline_manager, depthbuffer, per_frame_bind_group, &scene.fluid());
+                    self.screenspace_fluid.draw(
+                        &mut encoder,
+                        pipeline_manager,
+                        depthbuffer,
+                        per_frame_bind_group,
+                        self.sky.bind_group(),
+                        &scene.fluid(),
+                    );
                 }
             });
         }

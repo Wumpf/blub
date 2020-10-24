@@ -1,8 +1,7 @@
-mod hdr_cubemap_loader;
-mod hdr_cubemap_renderer;
 mod particle_renderer;
 mod scene_renderer;
 mod screenspace_fluid;
+mod sky;
 mod static_line_renderer;
 mod volume_renderer;
 
