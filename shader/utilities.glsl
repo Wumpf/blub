@@ -50,6 +50,8 @@ bool sphereIntersect(vec3 spherePosition, float radius, vec3 rayOrigin, vec3 ray
     return sphereIntersect(spherePosition, radius, rayOrigin, rayDir, sphereDistance, intersectFar);
 }
 
+vec3 decodeRGBE(vec4 hdr) { return hdr.rgb * exp2((hdr.a * 255.0) - 128.0); }
+
 // also known as 1/(2pi)
 #define INV_TAU 0.15915494309
 

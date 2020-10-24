@@ -106,6 +106,7 @@ impl Application {
         let simulation_controller = simulation_controller::SimulationController::new();
         let mut scene_renderer = SceneRenderer::new(
             &device,
+            &command_queue,
             &shader_dir,
             &mut pipeline_manager,
             per_frame_resources.bind_group_layout(),

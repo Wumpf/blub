@@ -1,9 +1,10 @@
-use super::cubemap_renderer::CubemapRenderer;
+use std::path::Path;
+
 use super::particle_renderer::ParticleRenderer;
 use super::screenspace_fluid::ScreenSpaceFluid;
-use super::sky::Sky;
 use super::static_line_renderer::{LineVertex, StaticLineRenderer};
 use super::volume_renderer::{VolumeRenderer, VolumeVisualizationMode};
+use super::{hdr_cubemap_loader::load_cubemap, hdr_cubemap_renderer::CubemapRenderer};
 use crate::{
     render_output::hdr_backbuffer::HdrBackbuffer,
     scene::Scene,
@@ -37,8 +38,6 @@ pub struct SceneRenderer {
     bounds_line_renderer: StaticLineRenderer,
     cubemap_renderer: CubemapRenderer,
 
-    sky: Sky,
-
     pub fluid_rendering_mode: FluidRenderingMode,
     pub volume_visualization: VolumeVisualizationMode,
     pub particle_radius_factor: f32,
@@ -49,14 +48,13 @@ pub struct SceneRenderer {
 impl SceneRenderer {
     pub fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
         backbuffer: &HdrBackbuffer,
     ) -> Self {
         let fluid_renderer_group_layout = &HybridFluid::get_or_create_group_layout_renderer(device).layout;
-
-        let sky = Sky::new(device, 512);
 
         SceneRenderer {
             screenspace_fluid: ScreenSpaceFluid::new(
@@ -82,9 +80,13 @@ impl SceneRenderer {
                 fluid_renderer_group_layout,
             ),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
-            cubemap_renderer: CubemapRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, sky.cubemap_view()),
-
-            sky,
+            cubemap_renderer: CubemapRenderer::new(
+                device,
+                shader_dir,
+                pipeline_manager,
+                per_frame_bind_group_layout,
+                &load_cubemap(Path::new("textures/cubemap-rustig_koppie"), device, queue),
+            ),
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
             volume_visualization: VolumeVisualizationMode::None,
