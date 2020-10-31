@@ -3,7 +3,7 @@
 
 layout(set = 1, binding = 0) uniform BackgroundAndLighting {
     vec3 DirectionalLightDirection;
-    vec3 DirectionalLightIntensity;
+    vec3 DirectionalLightRadiance;
 };
 layout(set = 1, binding = 1) uniform textureCube CubemapRgbe;
 

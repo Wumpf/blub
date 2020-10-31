@@ -12,14 +12,14 @@ use std::{fs::File, io, io::BufReader, path::Path, rc::Rc};
 #[derive(Deserialize)]
 pub struct BackgroundConfig {
     pub dir_light_direction: cgmath::Vector3<f32>,
-    pub dir_light_intensity: cgmath::Vector3<f32>,
+    pub dir_light_radiance: cgmath::Vector3<f32>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct LightingAndBackgroundUniformBufferContent {
     pub dir_light_direction: PaddedVector3,
-    pub dir_light_intensity: PaddedVector3,
+    pub dir_light_radiance: PaddedVector3,
 }
 unsafe impl bytemuck::Pod for LightingAndBackgroundUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for LightingAndBackgroundUniformBufferContent {}
@@ -119,7 +119,7 @@ impl Background {
             &device,
             &LightingAndBackgroundUniformBufferContent {
                 dir_light_direction: config.dir_light_direction.into(),
-                dir_light_intensity: config.dir_light_intensity.into(),
+                dir_light_radiance: config.dir_light_radiance.into(),
             },
         );
 
