@@ -29,5 +29,5 @@ float evaluateNormalizedBlinnPhong(float BlinnPhongExponent, vec3 normal, vec3 t
 // https://oceanopticsbook.info/view/scattering/the-henyey-greenstein-phase-function
 vec3 evaluateHenyeyGreensteinPhaseFunction(vec3 g, vec3 toCamera, vec3 toLight) {
     const vec3 gSq = g * g;
-    return (1.0f - gSq) * pow(1.0f + gSq + 2.0f * g * dot(toLight, toCamera), vec3(-3.0f / 2.0f)) * (0.5 * INV_TAU);
+    return (1.0f - gSq) * pow(1.0f + gSq - 2.0f * g * dot(toLight, toCamera), vec3(-3.0f / 2.0f)) * (0.5 * INV_TAU);
 }

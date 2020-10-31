@@ -1,8 +1,8 @@
 #version 460
 
+#include "../background.glsl"
 #include "../brdf.glsl"
 #include "../per_frame_resources.glsl"
-#include "../sky.glsl"
 #include "../utilities.glsl"
 
 layout(set = 2, binding = 0) uniform texture2D FluidViewSpaceDepth;
@@ -28,7 +28,7 @@ const vec3 ColorExtinctionCoefficient = vec3(0.46, 0.09, 0.06);
 
 // Evaluates the refractive part of the rendering equation.
 // (Technically also has lambert reflection)
-vec3 computeRefraction(float waterDepth, vec3 toCamera, vec3 toLight, vec3 lightRadiance) {
+vec3 computeRefraction(float waterDepth, vec3 toCamera) {
     // TODO: Compute proper (faked) refraction
     vec3 refractionRayResult = imageLoad(BackbufferImage, ivec2(gl_GlobalInvocationID.xy)).xyz;
     // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector goes through more water than this.
@@ -46,25 +46,21 @@ vec3 computeRefraction(float waterDepth, vec3 toCamera, vec3 toLight, vec3 light
     // but couldn't quite get my head around how to integrate over the whole volume.
     // Formula for scattering comes from "GPU Gems 2, Chapter 13. Volumetric Light Scattering as a Post-Process", formula 1
 
+    // TODO extinction is a one way thing right now
     vec3 colorExtinction = exp(-waterRefractionDepth * ColorExtinctionCoefficient); // Beer-Lambert law
     vec3 transmittedLight = colorExtinction * refractionRayResult;                  // The amount of light directly transmitted through the fluid.
-    vec3 scatteredLight = (vec3(1.0) - colorExtinction) * evaluateHenyeyGreensteinPhaseFunction(HenyeyGreensteinParameterWater, toCamera, toLight) *
-                          lightRadiance / ColorExtinctionCoefficient;
+    vec3 scatteredLight = (vec3(1.0) - colorExtinction) *
+                          evaluateHenyeyGreensteinPhaseFunction(HenyeyGreensteinParameterWater, toCamera, -DirectionalLightDirection) *
+                          DirectionalLightIntensity / ColorExtinctionCoefficient;
 
     return transmittedLight + scatteredLight;
 }
 
 // Evaluates the reflective part of the rendering equation.
-vec3 computeReflection(vec3 normal, vec3 toCamera, vec3 toLight, vec3 lightRadiance) {
+vec3 computeReflection(vec3 normal, vec3 toCamera) {
 
     vec3 reflected = reflect(-toCamera, normal);
     return sampleHdrCubemap(reflected);
-
-    // Using normalized blinn phong with single light direction right now.
-    // Want to do something more interesting here later when having somethign to reflect.
-    // Note that water reflections are mirror-like so I believe there is no point in having a more complicated BRDF.
-    // const float BlinnPhongExponent = 16.0; // Maybe should vary this for foam later?
-    // return evaluateNormalizedBlinnPhong(BlinnPhongExponent, normal, toCamera, toLight) * lightRadiance * dot(toLight, normal);
 }
 
 void reconstructNormalAndPositionFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize, out vec3 worldNormal, out vec3 worldPosition) {
@@ -119,9 +115,6 @@ void main() {
     if (waterDepth == 0.0)
         return;
 
-    vec3 GlobalDirLightDirection = normalize(vec3(-1.0, 0.5, 0.5));
-    vec3 GlobalDirLightColor = vec3(1.64, 1.27, 0.99);
-
     vec2 screenPixelSize = vec2(1.0) / textureSize(FluidViewSpaceDepth, 0).xy;
 
     // Normal/Position (world coords)
@@ -135,8 +128,8 @@ void main() {
     toCamera /= cameraDistance;
 
     // Color components.
-    vec3 refractionColor = computeRefraction(waterDepth, toCamera, GlobalDirLightDirection, GlobalDirLightColor);
-    vec3 reflectionColor = computeReflection(normal, toCamera, GlobalDirLightDirection, GlobalDirLightColor); // todo, cubemap/screenspace reflection
+    vec3 refractionColor = computeRefraction(waterDepth, toCamera);
+    vec3 reflectionColor = computeReflection(normal, toCamera);
 
     // Combine Refraction & Reflection & Specular
     float nDotV = dot(normal, toCamera);

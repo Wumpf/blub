@@ -14,7 +14,7 @@ impl<Content: bytemuck::Pod> UniformBuffer<Content> {
         &type_name[(pos + 1)..]
     }
 
-    pub fn new(device: &wgpu::Device) -> UniformBuffer<Content> {
+    pub fn new(device: &wgpu::Device) -> Self {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("UniformBuffer: {}", Self::name())),
             size: std::mem::size_of::<Content>() as u64,
@@ -29,23 +29,24 @@ impl<Content: bytemuck::Pod> UniformBuffer<Content> {
         }
     }
 
-    // pub fn new_with_data(device: &wgpu::Device, initial_content: &Content) -> UniformBuffer<Content> {
-    //     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-    //         label: Some(&format!("UniformBuffer: {}", Self::name())),
-    //         size: std::mem::size_of::<Content>() as u64,
-    //         usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-    //         mapped_at_creation: true,
-    //     });
+    pub fn new_with_data(device: &wgpu::Device, initial_content: &Content) -> Self {
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("UniformBuffer: {}", Self::name())),
+            size: std::mem::size_of::<Content>() as u64,
+            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: true,
+        });
 
-    //     let mapped_memory = buffer.slice(..);
-    //     mapped_memory.get_mapped_range_mut().clone_from_slice(bytemuck::bytes_of(initial_content));
-    //     buffer.unmap();
+        let mapped_memory = buffer.slice(..);
+        mapped_memory.get_mapped_range_mut().clone_from_slice(bytemuck::bytes_of(initial_content));
+        buffer.unmap();
 
-    //     UniformBuffer {
-    //         buffer,
-    //         content: PhantomData,
-    //     }
-    // }
+        UniformBuffer {
+            buffer,
+            content_type: PhantomData,
+            previous_content: bytemuck::bytes_of(initial_content).to_vec(),
+        }
+    }
 
     pub fn update_content(&mut self, queue: &wgpu::Queue, content: Content) {
         let new_content = bytemuck::bytes_of(&content);

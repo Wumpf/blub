@@ -2,8 +2,8 @@
 
 //#define VISUALIZE_SH_RADIANCE
 
+#include "background.glsl"
 #include "per_frame_resources.glsl"
-#include "sky.glsl"
 #include "utilities.glsl"
 
 #ifdef VISUALIZE_SH_RADIANCE

@@ -51,7 +51,7 @@ impl ScreenSpaceFluid {
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
         fluid_renderer_group_layout: &wgpu::BindGroupLayout,
-        sky_group_layout: &wgpu::BindGroupLayout,
+        background_and_lighting_group_layout: &wgpu::BindGroupLayout,
         backbuffer: &HdrBackbuffer,
     ) -> ScreenSpaceFluid {
         let group_layout_narrow_range_filter = BindGroupLayoutBuilder::new()
@@ -181,7 +181,11 @@ impl ScreenSpaceFluid {
                 "ScreenspaceFluid: Fluid/compose",
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Fluid Render Pipeline Layout"),
-                    bind_group_layouts: &[&per_frame_bind_group_layout, &sky_group_layout, &group_layout_compose.layout],
+                    bind_group_layouts: &[
+                        &per_frame_bind_group_layout,
+                        &background_and_lighting_group_layout,
+                        &group_layout_compose.layout,
+                    ],
                     push_constant_ranges,
                 })),
                 Path::new("screenspace_fluid/fluid_render.comp"),

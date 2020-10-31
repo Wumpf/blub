@@ -1,8 +1,8 @@
 use std::path::Path;
 
+use super::background::Background;
 use super::particle_renderer::ParticleRenderer;
 use super::screenspace_fluid::ScreenSpaceFluid;
-use super::sky::Sky;
 use super::static_line_renderer::{LineVertex, StaticLineRenderer};
 use super::volume_renderer::{VolumeRenderer, VolumeVisualizationMode};
 use crate::{
@@ -36,7 +36,7 @@ pub struct SceneRenderer {
     screenspace_fluid: ScreenSpaceFluid,
     volume_renderer: VolumeRenderer,
     bounds_line_renderer: StaticLineRenderer,
-    sky: Sky,
+    background: Background,
 
     pub fluid_rendering_mode: FluidRenderingMode,
     pub volume_visualization: VolumeVisualizationMode,
@@ -56,14 +56,15 @@ impl SceneRenderer {
     ) -> Self {
         let fluid_renderer_group_layout = &HybridFluid::get_or_create_group_layout_renderer(device).layout;
 
-        let sky = Sky::new(
-            Path::new("textures/cubemap-rustig_koppie"),
+        let background = Background::new(
+            Path::new("background"),
             device,
             queue,
             shader_dir,
             pipeline_manager,
             per_frame_bind_group_layout,
-        );
+        )
+        .unwrap();
 
         SceneRenderer {
             screenspace_fluid: ScreenSpaceFluid::new(
@@ -72,7 +73,7 @@ impl SceneRenderer {
                 pipeline_manager,
                 per_frame_bind_group_layout,
                 fluid_renderer_group_layout,
-                sky.bind_group_layout(),
+                background.bind_group_layout(),
                 backbuffer,
             ),
             particle_renderer: ParticleRenderer::new(
@@ -90,7 +91,7 @@ impl SceneRenderer {
                 fluid_renderer_group_layout,
             ),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
-            sky,
+            background,
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
             volume_visualization: VolumeVisualizationMode::None,
@@ -210,7 +211,7 @@ impl SceneRenderer {
                 }
 
                 // Background.. not really opaque but we re-use the same rpass.
-                self.sky.draw(&mut rpass_backbuffer, pipeline_manager);
+                self.background.draw(&mut rpass_backbuffer, pipeline_manager);
             });
 
             // Transparent
@@ -221,7 +222,7 @@ impl SceneRenderer {
                         pipeline_manager,
                         depthbuffer,
                         per_frame_bind_group,
-                        self.sky.bind_group(),
+                        self.background.bind_group(),
                         &scene.fluid(),
                     );
                 }

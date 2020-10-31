@@ -1,19 +1,39 @@
 use crate::{
     render_output::hdr_backbuffer::HdrBackbuffer,
     render_output::screen::Screen,
-    wgpu_utils::{binding_builder::*, binding_glsl, pipelines::*, shader::ShaderDirectory},
+    wgpu_utils::uniformbuffer::PaddedVector3,
+    wgpu_utils::{binding_builder::*, binding_glsl, pipelines::*, shader::ShaderDirectory, uniformbuffer::UniformBuffer},
 };
 use image::hdr::{HdrDecoder, Rgbe8Pixel};
-use std::{fs::File, io::BufReader, path::Path, rc::Rc};
+use serde::Deserialize;
+use std::{fs::File, io, io::BufReader, path::Path, rc::Rc};
 
-pub struct Sky {
+// Data describing a scene.
+#[derive(Deserialize)]
+pub struct BackgroundConfig {
+    pub dir_light_direction: cgmath::Vector3<f32>,
+    pub dir_light_intensity: cgmath::Vector3<f32>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct LightingAndBackgroundUniformBufferContent {
+    pub dir_light_direction: PaddedVector3,
+    pub dir_light_intensity: PaddedVector3,
+}
+unsafe impl bytemuck::Pod for LightingAndBackgroundUniformBufferContent {}
+unsafe impl bytemuck::Zeroable for LightingAndBackgroundUniformBufferContent {}
+
+type LightingAndBackgroundUniformBuffer = UniformBuffer<LightingAndBackgroundUniformBufferContent>;
+
+pub struct Background {
     pipeline: RenderPipelineHandle,
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 }
 
 // Loads cubemap in rgbe format
-fn load_cubemap(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::TextureView {
+fn load_cubemap(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<wgpu::TextureView, io::Error> {
     let filenames = ["px.hdr", "nx.hdr", "py.hdr", "ny.hdr", "pz.hdr", "nz.hdr"];
 
     let mut cubemap = None;
@@ -22,7 +42,7 @@ fn load_cubemap(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu
     for (i, filename) in filenames.iter().enumerate() {
         info!("loading cubemap face {}..", i);
 
-        let file_reader = BufReader::new(File::open(path.join(filename)).unwrap());
+        let file_reader = BufReader::new(File::open(path.join(filename))?);
         let decoder = HdrDecoder::new(file_reader).unwrap();
         let metadata = decoder.metadata();
 
@@ -75,31 +95,45 @@ fn load_cubemap(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu
         );
     }
 
-    cubemap.unwrap().create_view(&wgpu::TextureViewDescriptor {
+    Ok(cubemap.unwrap().create_view(&wgpu::TextureViewDescriptor {
         label: None,
         dimension: Some(wgpu::TextureViewDimension::Cube),
         ..wgpu::TextureViewDescriptor::default()
-    })
+    }))
 }
 
-impl Sky {
+impl Background {
     pub fn new(
-        hdr_cubemap_path: &Path,
+        path: &Path,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> Self {
-        let cubemap_view = load_cubemap(hdr_cubemap_path, device, queue);
+    ) -> Result<Self, io::Error> {
+        let file = File::open(path.join("config.json"))?;
+        let reader = BufReader::new(file);
+        let config: BackgroundConfig = serde_json::from_reader(reader)?;
+
+        let ubo = LightingAndBackgroundUniformBuffer::new_with_data(
+            &device,
+            &LightingAndBackgroundUniformBufferContent {
+                dir_light_direction: config.dir_light_direction.into(),
+                dir_light_intensity: config.dir_light_intensity.into(),
+            },
+        );
+
+        let cubemap_view = load_cubemap(path, device, queue)?;
 
         let bind_group_layout = BindGroupLayoutBuilder::new()
+            .next_binding(wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::FRAGMENT, binding_glsl::uniform())
             .next_binding(wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::FRAGMENT, binding_glsl::textureCube())
-            .create(device, "BindGroupLayout: Sky");
+            .create(device, "BindGroupLayout: Lighting & Background");
 
         let bind_group = BindGroupBuilder::new(&bind_group_layout)
+            .resource(ubo.binding_resource())
             .texture(&cubemap_view)
-            .create(device, "BindGroup: Sky");
+            .create(device, "BindGroup: Lighting & Background");
 
         let mut render_pipeline_desc = RenderPipelineCreationDesc::new(
             "Cubemap Renderer",
@@ -109,7 +143,7 @@ impl Sky {
                 push_constant_ranges: &[],
             })),
             Path::new("screentri.vert"),
-            Some(Path::new("background_cubemap.frag")),
+            Some(Path::new("background_render.frag")),
             HdrBackbuffer::FORMAT,
             None,
         );
@@ -120,11 +154,11 @@ impl Sky {
             stencil: Default::default(),
         });
 
-        Sky {
+        Ok(Background {
             pipeline: pipeline_manager.create_render_pipeline(device, shader_dir, render_pipeline_desc),
             bind_group_layout: bind_group_layout.layout,
             bind_group,
-        }
+        })
     }
 
     pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager) {
