@@ -16,7 +16,7 @@ void main() {
     // Too lazy to do this cleaner, also doesn't matter perf wise :)
     vec3 dir = reconstructWorldPositionFromViewSpaceDepth(gl_FragCoord.xy * Screen.ResolutionInv, 1.0) - Camera.Position;
 
-    out_Color.rgb = sampleHdrCubemap(dir);
+    out_Color.rgb = sampleBackground(Camera.Position, dir);
     out_Color.a = 1.0;
 
 #ifdef VISUALIZE_SH_RADIANCE

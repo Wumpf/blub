@@ -57,10 +57,10 @@ vec3 computeRefraction(float waterDepth, vec3 toCamera) {
 }
 
 // Evaluates the reflective part of the rendering equation.
-vec3 computeReflection(vec3 normal, vec3 toCamera) {
+vec3 computeReflection(vec3 worldPos, vec3 normal, vec3 toCamera) {
 
     vec3 reflected = reflect(-toCamera, normal);
-    return sampleHdrCubemap(reflected);
+    return sampleBackground(worldPos, reflected);
 }
 
 void reconstructNormalAndPositionFromDepthbuffer(ivec2 screenCoord, vec2 screenPixelSize, out vec3 worldNormal, out vec3 worldPosition) {
@@ -129,7 +129,7 @@ void main() {
 
     // Color components.
     vec3 refractionColor = computeRefraction(waterDepth, toCamera);
-    vec3 reflectionColor = computeReflection(normal, toCamera);
+    vec3 reflectionColor = computeReflection(position, normal, toCamera);
 
     // Combine Refraction & Reflection & Specular
     float nDotV = dot(normal, toCamera);
