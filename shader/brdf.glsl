@@ -27,7 +27,9 @@ float evaluateNormalizedBlinnPhong(float BlinnPhongExponent, vec3 normal, vec3 t
 }
 
 // https://oceanopticsbook.info/view/scattering/the-henyey-greenstein-phase-function
-vec3 evaluateHenyeyGreensteinPhaseFunction(vec3 g, vec3 toCamera, vec3 toLight) {
+// g is the average cosine between ingoing and outgoing light
+// g==0 for isotropic scattering, 1 for max forward-scattering, -1 for max back-scattering
+vec3 evaluateHenyeyGreensteinPhaseFunction(vec3 g, vec3 rayIn, vec3 rayOut) {
     const vec3 gSq = g * g;
-    return (1.0f - gSq) * pow(1.0f + gSq - 2.0f * g * dot(toLight, toCamera), vec3(-3.0f / 2.0f)) * (0.5 * INV_TAU);
+    return (1.0f - gSq) * pow(1.0f + gSq - 2.0f * g * dot(rayIn, rayOut), vec3(-3.0f / 2.0f)) * (0.5 * INV_TAU);
 }

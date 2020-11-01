@@ -50,7 +50,7 @@ vec3 computeRefraction(float waterDepth, vec3 toCamera) {
     vec3 colorExtinction = exp(-waterRefractionDepth * ColorExtinctionCoefficient); // Beer-Lambert law
     vec3 transmittedLight = colorExtinction * refractionRayResult;                  // The amount of light directly transmitted through the fluid.
     vec3 scatteredLight = (vec3(1.0) - colorExtinction) *
-                          evaluateHenyeyGreensteinPhaseFunction(HenyeyGreensteinParameterWater, toCamera, -DirectionalLightDirection) *
+                          evaluateHenyeyGreensteinPhaseFunction(HenyeyGreensteinParameterWater, toCamera, DirectionalLightDirection) *
                           DirectionalLightRadiance / ColorExtinctionCoefficient;
 
     return transmittedLight + scatteredLight;
