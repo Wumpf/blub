@@ -16,44 +16,77 @@ const float RefractionIndex_Air = 1.00029;
 const float RefractionAirToWater = RefractionIndex_Water / RefractionIndex_Air; // denoted as η (eta)
 
 // from "Acquiring Scattering Properties of Participating Media by Dilution" (https://cseweb.ucsd.edu/~ravir/dilution.pdf)
-// const vec3 HenyeyGreensteinParameterWater = vec3(0.902, 0.825, 0.914); // Pacific Ocean Surface Water
-// const vec3 HenyeyGreensteinParameterWater = vec3(0.842, 0.865, 0.912); // Mission Bay Surface Water
-const vec3 HenyeyGreensteinParameterWater = vec3(0.929, 0.910, 0.945); // Missian Bay 10ft deep
+// Note that I scaled the values back to 1 liter and exctinction per meter.
+// The paper lists values for dilutions for which single scattering is accurate - we don't compute multiple scattering so the concentrated liquids
+// will not be rendered correctly, especially when the paper lists a low volume!
+// ColorExtinctionCoefficient is already "pre-added" with the scattering coefficient since this is the form we need.
 
-// Tried using values from "Acquiring Scattering Properties of Participating Media by Dilution" (https://cseweb.ucsd.edu/~ravir/dilution.pdf), but
-// didn't work out well
-// const vec3 ColorScatteringCoefficient = vec3(0.2415, 0.2762, 0.3256) * 0.1;                              // Denoted as sigma_s in PBRT
-// const vec3 ColorExtinctionCoefficient = vec3(3.3623, 3.2929, 3.2193) * 0.1 + ColorScatteringCoefficient; // Denoted as sigma_t in PBRT
-const vec3 ColorExtinctionCoefficient = vec3(0.46, 0.09, 0.06);
+// 🍷 Wine (merlot)
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.974, 0.0, 0.0);
+// const vec3 ColorScatteringCoefficient = vec3(0.0053, 0.0, 0.0) * 10.0 * (23 - 1.5);
+// const vec3 ColorExtinctionCoefficient = vec3(0.7639, 1.6429, 1.9196) * 10.0 * (23 - 1.5) + ColorScatteringCoefficient;
+// 🥛 Milk (regular) -- doesn't work at all due to missing multiple scattering
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.750, 0.714, 0.681);
+// const vec3 ColorScatteringCoefficient = vec3(1.1873, 1.3293, 1.4589) * 10.0 * (23 - 0.016);
+// const vec3 ColorExtinctionCoefficient = vec3(1.1874, 1.3296, 1.4602) * 10.0 * (23 - 0.016) + ColorScatteringCoefficient;
+// Coke
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.965, 0.972, 0.0);
+// const vec3 ColorScatteringCoefficient = vec3(0.0177, 0.0208, 0.0000) * 10.0 * (23 - 1.6);
+// const vec3 ColorExtinctionCoefficient = vec3(0.7143, 1.1688, 1.7169) * 10.0 * (23 - 1.6) + ColorScatteringCoefficient;
+
+// Note that I dropped the *10 factor for the ocean water values - paper says all values are in 10−2mm−1,
+// but that doesn't seem to add up for the water measurements, so I assume they are m-1 instead
+// Mission Bay Surface Water
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.842, 0.865, 0.912);
+// const vec3 ColorScatteringCoefficient = vec3(0.2415, 0.2762, 0.3256);
+// const vec3 ColorExtinctionCoefficient = vec3(3.3623, 3.2929, 3.2193) + ColorScatteringCoefficient;
+// Pacific Ocean Surface Water
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.902, 0.825, 0.914);
+// const vec3 ColorScatteringCoefficient = vec3(0.1800, 0.1834, 0.2281);
+// const vec3 ColorExtinctionCoefficient = vec3(3.3645, 3.3158, 3.2428) + ColorScatteringCoefficient;
+// Mission Bay 10ft deep Water 30min
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.726, 0.820, 0.921);
+// const vec3 ColorScatteringCoefficient = vec3(0.0990, 0.1274, 0.1875);
+// const vec3 ColorExtinctionCoefficient = vec3(3.4063, 3.3410, 3.2810) + ColorScatteringCoefficient;
+// Mission Bay 10ft deep Water 8hours
+// const vec3 HenyeyGreensteinParameterWater = vec3(0.929, 0.910, 0.945);
+// const vec3 ColorScatteringCoefficient = vec3(0.1018, 0.1033, 0.1611);
+// const vec3 ColorExtinctionCoefficient = vec3(3.3997, 3.3457, 3.2928) + ColorScatteringCoefficient;
+
+// The ocean water measurements look convincing with higher depths, but none of the measured values gets the look I was looking for.
+// So here's a synthetic one!
+const vec3 HenyeyGreensteinParameterWater = vec3(0.726, 0.820, 0.921);                       // Mission Bay 10ft deep Water 30min
+const vec3 ColorScatteringCoefficient = vec3(0.0990, 0.1274, 0.1875);                        // Mission Bay 10ft deep Water 30min
+const vec3 ColorExtinctionCoefficient = vec3(0.46, 0.18, 0.06) + ColorScatteringCoefficient; // Made up completely
 
 // Evaluates the refractive part of the rendering equation.
 // (Technically also has lambert reflection)
 vec3 computeRefraction(float waterDepth, vec3 toCamera) {
-    // TODO: Compute proper (faked) refraction
-    vec3 refractionRayResult = imageLoad(BackbufferImage, ivec2(gl_GlobalInvocationID.xy)).xyz;
-    // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector goes through more water than this.
-    float waterRefractionDepth = waterDepth * 50;
-
-    // Relevant sources on the topic:
+    // Relevant/good sources on the topic:
     // * https://mtnphil.wordpress.com/2012/09/15/water-shader-follow-up/
     // * PBR Book
     // * "GPU Gems 2, Chapter 13. Volumetric Light Scattering as a Post-Process"
-    // https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-13-volumetric-light-scattering-post-process
-    // ... and others ;-).
-    //
-    // Transmittance/absorption is quite straight forward, but in-scattering I found hard to formulate:
-    // Wanted something that works with a phase function (I did volume marching on a different project with that and that worked out very well),
-    // but couldn't quite get my head around how to integrate over the whole volume.
-    // Formula for scattering comes from "GPU Gems 2, Chapter 13. Volumetric Light Scattering as a Post-Process", formula 1
+    // (https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-13-volumetric-light-scattering-post-process)
+    // * "Acquiring Scattering Properties of Participating Media by Dilution" (https://cseweb.ucsd.edu/~ravir/dilution.pdf)
 
-    // TODO extinction is a one way thing right now
-    vec3 colorExtinction = exp(-waterRefractionDepth * ColorExtinctionCoefficient); // Beer-Lambert law
-    vec3 transmittedLight = colorExtinction * refractionRayResult;                  // The amount of light directly transmitted through the fluid.
-    vec3 scatteredLight = (vec3(1.0) - colorExtinction) *
-                          evaluateHenyeyGreensteinPhaseFunction(HenyeyGreensteinParameterWater, toCamera, DirectionalLightDirection) *
-                          DirectionalLightRadiance / ColorExtinctionCoefficient;
+    // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector may go through less or more water than this.
+    float waterRefractionDepth = waterDepth * 5;
+    // TODO: Compute proper (faked) refraction
+    vec3 refractionRayResult = imageLoad(BackbufferImage, ivec2(gl_GlobalInvocationID.xy)).xyz;
+    // We assume that the "other side" was lit without shadowing from the water mass, light got there unhindered. So we need to fix that first by
+    // applying Beer-Lambert law absorption Once we make the water cast shadow, the refractionRayResult will already (more accurately) have this
+    // baked-in (waterRefractionDepth is ofc a very simplistic estimate for the distance the light travels through the water)
+    refractionRayResult *= exp(-waterRefractionDepth * ColorExtinctionCoefficient);
 
-    return transmittedLight + scatteredLight;
+    // Transmittance/absorption is quite straight forward. Just apply Beer's law.
+    // In-scattering is a bit harder to formulate:
+    // We want to describe the amount of light that hit the water at some point and was scattered back to us (simpliyfingly assuming single
+    // scattering). This can happen along the entire path the light travels and the scattered light itself is subject to absorption.
+    // Eventually this amounts to lerping between scattering and refraction ray based on Beer-Lambert law
+    vec3 scatteredLight = ColorScatteringCoefficient * DirectionalLightRadiance *
+                          evaluateHenyeyGreensteinPhaseFunction(HenyeyGreensteinParameterWater, toCamera, DirectionalLightDirection);
+
+    return mix(scatteredLight, refractionRayResult, exp(-waterRefractionDepth * ColorExtinctionCoefficient));
 }
 
 // Evaluates the reflective part of the rendering equation.
