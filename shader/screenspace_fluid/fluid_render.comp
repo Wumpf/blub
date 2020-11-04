@@ -56,12 +56,12 @@ const float RefractionAirToWater = RefractionIndex_Water / RefractionIndex_Air; 
 // The ocean water measurements look convincing with higher depths, but none of the measured values gets the look I was looking for.
 // So here's a synthetic one!
 const vec3 HenyeyGreensteinParameterWater = vec3(0.726, 0.820, 0.921);                       // Mission Bay 10ft deep Water 30min
-const vec3 ColorScatteringCoefficient = vec3(0.0990, 0.1274, 0.1875);                        // Mission Bay 10ft deep Water 30min
+const vec3 ColorScatteringCoefficient = vec3(0.2415, 0.2762, 0.3256);                        // Mission Bay Surface Water
 const vec3 ColorExtinctionCoefficient = vec3(0.46, 0.18, 0.06) + ColorScatteringCoefficient; // Made up completely
 
 // Evaluates the refractive part of the rendering equation.
 // (Technically also has lambert reflection)
-vec3 computeRefraction(float waterDepth, vec3 toCamera) {
+vec3 computeRefraction(float waterDepthAtSeenSurfacePoint, vec3 surfacePosition, vec3 surfaceNormal, vec3 toCamera) {
     // Relevant/good sources on the topic:
     // * https://mtnphil.wordpress.com/2012/09/15/water-shader-follow-up/
     // * PBR Book
@@ -69,10 +69,25 @@ vec3 computeRefraction(float waterDepth, vec3 toCamera) {
     // (https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-13-volumetric-light-scattering-post-process)
     // * "Acquiring Scattering Properties of Participating Media by Dilution" (https://cseweb.ucsd.edu/~ravir/dilution.pdf)
 
-    // TODO: can we adjust thickness value to become a "seen water depth value"? Refraction vector may go through less or more water than this.
-    float waterRefractionDepth = waterDepth * 5;
-    // TODO: Compute proper (faked) refraction
-    vec3 refractionRayResult = imageLoad(BackbufferImage, ivec2(gl_GlobalInvocationID.xy)).xyz;
+    // Estimate refraction.
+    // We use waterDepthAtSeenSurfacePoint to estimate where we end up on waterDepth & refraction texture.
+    vec3 refractionVector = refract(-toCamera, surfaceNormal, RefractionIndex_Air / RefractionIndex_Water);
+    vec3 estimatedRefractionExit = surfacePosition + waterDepthAtSeenSurfacePoint * refractionVector;
+    vec3 estimatedRefractionExitProjected = (Camera.ViewProjection * vec4(estimatedRefractionExit, 1.0)).xyw;
+    vec2 refractedTexcoord = estimatedRefractionExitProjected.xy / estimatedRefractionExitProjected.z * 0.5 + vec2(0.5);
+    refractedTexcoord.y = 1.0 - refractedTexcoord.y;
+    ivec2 refractedTexcoordInt = ivec2(Screen.Resolution * refractedTexcoord);
+    // Avoid artifacts by going with non-scattered texcoord whenever scattered degenerates
+    if (refractedTexcoordInt.y >= Screen.Resolution.y || refractedTexcoordInt.y < 0.0)
+        refractedTexcoordInt.y = int(gl_GlobalInvocationID.y);
+    if (refractedTexcoordInt.x >= Screen.Resolution.x || refractedTexcoordInt.x < 0.0)
+        refractedTexcoordInt.x = int(gl_GlobalInvocationID.x);
+    // Sample depth & refraction at the estimated coordinates
+    float waterDepth = texelFetch(WaterDepthTexture, refractedTexcoordInt, 0).x * 2;
+    float waterRefractionDepth = waterDepth;
+    vec3 refractionRayResult =
+        sampleBackground(surfacePosition, refractionVector); // imageLoad(BackbufferImage, refractedTexcoordInt).xyz; // TODO. NEED DOUBLE BUFFERING
+
     // We assume that the "other side" was lit without shadowing from the water mass, light got there unhindered. So we need to fix that first by
     // applying Beer-Lambert law absorption Once we make the water cast shadow, the refractionRayResult will already (more accurately) have this
     // baked-in (waterRefractionDepth is ofc a very simplistic estimate for the distance the light travels through the water)
@@ -144,8 +159,8 @@ void reconstructNormalAndPositionFromDepthbuffer(ivec2 screenCoord, vec2 screenP
 
 void main() {
     ivec2 screenCoord = ivec2(gl_GlobalInvocationID.xy);
-    float waterDepth = texelFetch(WaterDepthTexture, screenCoord, 0).r;
-    if (waterDepth == 0.0)
+    float waterDepthAtSeenSurfacePoint = texelFetch(WaterDepthTexture, screenCoord, 0).r;
+    if (waterDepthAtSeenSurfacePoint == 0.0)
         return;
 
     vec2 screenPixelSize = vec2(1.0) / textureSize(FluidViewSpaceDepth, 0).xy;
@@ -155,13 +170,10 @@ void main() {
     vec3 position;
     reconstructNormalAndPositionFromDepthbuffer(screenCoord, screenPixelSize, normal, position);
 
-    // vector to camera and camera distance
-    vec3 toCamera = Camera.Position - position;
-    float cameraDistance = length(toCamera);
-    toCamera /= cameraDistance;
+    vec3 toCamera = normalize(Camera.Position - position);
 
     // Color components.
-    vec3 refractionColor = computeRefraction(waterDepth, toCamera);
+    vec3 refractionColor = computeRefraction(waterDepthAtSeenSurfacePoint, position, normal, toCamera);
     vec3 reflectionColor = computeReflection(position, normal, toCamera);
 
     // Combine Refraction & Reflection & Specular
