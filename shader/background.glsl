@@ -4,13 +4,19 @@
 layout(set = 1, binding = 0) uniform BackgroundAndLighting {
     vec3 DirectionalLightDirection;
     vec3 DirectionalLightRadiance;
+
+    // Radiance SH without the sun. Bands 0-2
+    vec3 IndirectRadianceSH3[9];
 };
 layout(set = 1, binding = 1) uniform textureCube CubemapRgbe;
 
 vec3 decodeRGBE(vec4 hdr) { return hdr.rgb * exp2((hdr.a * 255.0) - 128.0); }
 
 vec3 sampleHdrCubemap(vec3 dir) {
-    vec4 rgbe = texture(samplerCube(CubemapRgbe, SamplerTrilinearClamp), dir);
+    // It seems that what we get out of https://github.com/Wumpf/hdr-cubemap-to-sh has swapped x and z.
+    // (light direction & SH directionality)
+    // Compensating this here by flipping the env map.
+    vec4 rgbe = texture(samplerCube(CubemapRgbe, SamplerTrilinearClamp), dir.zyx);
     return decodeRGBE(rgbe);
 }
 

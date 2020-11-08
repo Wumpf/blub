@@ -52,5 +52,6 @@ bool sphereIntersect(vec3 spherePosition, float radius, vec3 rayOrigin, vec3 ray
 
 // also known as 1/(2pi)
 #define INV_TAU 0.15915494309
+#define PI 3.14159265359
 
 #endif // INCLUDE_UTILITIES

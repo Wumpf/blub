@@ -21,6 +21,7 @@ impl MeshRenderer {
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        background_and_lighting_group_layout: &wgpu::BindGroupLayout,
     ) -> MeshRenderer {
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT, binding_glsl::buffer(true))
@@ -33,7 +34,11 @@ impl MeshRenderer {
                 label: "MeshRenderer",
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("MeshRenderer Pipeline Layout"),
-                    bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
+                    bind_group_layouts: &[
+                        per_frame_bind_group_layout,
+                        background_and_lighting_group_layout,
+                        &bind_group_layout.layout,
+                    ],
                     push_constant_ranges: &[wgpu::PushConstantRange {
                         stages: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                         range: 0..4,
@@ -89,12 +94,23 @@ impl MeshRenderer {
         );
     }
 
-    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager, scene_models: &'a SceneModels) {
+    pub fn draw<'a>(
+        &'a self,
+        rpass: &mut wgpu::RenderPass<'a>,
+        pipeline_manager: &'a PipelineManager,
+        background_and_lighting_bind_group: &'a wgpu::BindGroup,
+        scene_models: &'a SceneModels,
+    ) {
+        wgpu_scope!(rpass, "MeshRenderer");
+
         rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
+        rpass.set_bind_group(1, background_and_lighting_bind_group, &[]);
         let bind_group = self.bind_group.as_ref().expect("No bind group for mesh renderer, no scene loaded?");
-        rpass.set_bind_group(1, bind_group, &[]);
+        rpass.set_bind_group(2, bind_group, &[]);
+
         rpass.set_index_buffer(scene_models.index_buffer.slice(..));
         rpass.set_vertex_buffer(0, scene_models.vertex_buffer.slice(..));
+
         for (i, mesh) in scene_models.meshes.iter().enumerate() {
             rpass.set_push_constants(
                 wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,

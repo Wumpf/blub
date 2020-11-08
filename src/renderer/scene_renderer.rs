@@ -40,7 +40,7 @@ pub struct SceneRenderer {
     volume_renderer: VolumeRenderer,
     bounds_line_renderer: StaticLineRenderer,
     mesh_renderer: MeshRenderer,
-    background: Background,
+    background_and_lighting: Background,
 
     pub fluid_rendering_mode: FluidRenderingMode,
     pub volume_visualization: VolumeVisualizationMode,
@@ -60,7 +60,7 @@ impl SceneRenderer {
     ) -> Self {
         let fluid_renderer_group_layout = &HybridFluid::get_or_create_group_layout_renderer(device).layout;
 
-        let background = Background::new(
+        let background_and_lighting = Background::new(
             Path::new("background"),
             device,
             queue,
@@ -77,7 +77,7 @@ impl SceneRenderer {
                 pipeline_manager,
                 per_frame_bind_group_layout,
                 fluid_renderer_group_layout,
-                background.bind_group_layout(),
+                background_and_lighting.bind_group_layout(),
                 backbuffer,
             ),
             particle_renderer: ParticleRenderer::new(
@@ -95,8 +95,14 @@ impl SceneRenderer {
                 fluid_renderer_group_layout,
             ),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
-            mesh_renderer: MeshRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout),
-            background,
+            mesh_renderer: MeshRenderer::new(
+                device,
+                shader_dir,
+                pipeline_manager,
+                per_frame_bind_group_layout,
+                background_and_lighting.bind_group_layout(),
+            ),
+            background_and_lighting,
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
             volume_visualization: VolumeVisualizationMode::None,
@@ -210,7 +216,12 @@ impl SceneRenderer {
                     }
                 }
 
-                self.mesh_renderer.draw(&mut rpass_backbuffer, pipeline_manager, &scene.models);
+                self.mesh_renderer.draw(
+                    &mut rpass_backbuffer,
+                    pipeline_manager,
+                    self.background_and_lighting.bind_group(),
+                    &scene.models,
+                );
                 self.volume_renderer
                     .draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid(), self.volume_visualization);
 
@@ -219,7 +230,7 @@ impl SceneRenderer {
                 }
 
                 // Background.. not really opaque but we re-use the same rpass.
-                self.background.draw(&mut rpass_backbuffer, pipeline_manager);
+                self.background_and_lighting.draw(&mut rpass_backbuffer, pipeline_manager);
             });
 
             // Transparent
@@ -230,7 +241,7 @@ impl SceneRenderer {
                         pipeline_manager,
                         depthbuffer,
                         per_frame_bind_group,
-                        self.background.bind_group(),
+                        self.background_and_lighting.bind_group(),
                         &scene.fluid(),
                     );
                 }

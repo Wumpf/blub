@@ -320,7 +320,7 @@ impl ScreenSpaceFluid {
         pipeline_manager: &'a PipelineManager,
         depthbuffer: &wgpu::TextureView,
         per_frame_bind_group: &wgpu::BindGroup,
-        sky_bind_group: &wgpu::BindGroup,
+        background_and_lighting_bind_group: &wgpu::BindGroup,
         fluid: &HybridFluid,
     ) {
         wgpu_scope!(encoder, "ScreenSpaceFluid.draw");
@@ -464,7 +464,7 @@ impl ScreenSpaceFluid {
                     depth: 1,
                 };
 
-                cpass.set_bind_group(1, sky_bind_group, &[]);
+                cpass.set_bind_group(1, background_and_lighting_bind_group, &[]);
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_compose, &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_fluid));
                 let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_COMPOSE);

@@ -13,6 +13,7 @@ use std::{fs::File, io, io::BufReader, path::Path, rc::Rc};
 pub struct BackgroundConfig {
     pub dir_light_direction: cgmath::Vector3<f32>,
     pub dir_light_radiance: cgmath::Vector3<f32>,
+    pub indirect_lighting_sh: [(f32, f32, f32); 9],
 }
 
 #[repr(C)]
@@ -20,6 +21,7 @@ pub struct BackgroundConfig {
 struct LightingAndBackgroundUniformBufferContent {
     pub dir_light_direction: PaddedVector3,
     pub dir_light_radiance: PaddedVector3,
+    pub indirect_lighting_sh: [((f32, f32, f32), f32); 9],
 }
 unsafe impl bytemuck::Pod for LightingAndBackgroundUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for LightingAndBackgroundUniformBufferContent {}
@@ -120,6 +122,17 @@ impl Background {
             &LightingAndBackgroundUniformBufferContent {
                 dir_light_direction: config.dir_light_direction.into(),
                 dir_light_radiance: config.dir_light_radiance.into(),
+                indirect_lighting_sh: [
+                    (config.indirect_lighting_sh[0], 0.0),
+                    (config.indirect_lighting_sh[1], 0.0),
+                    (config.indirect_lighting_sh[2], 0.0),
+                    (config.indirect_lighting_sh[3], 0.0),
+                    (config.indirect_lighting_sh[4], 0.0),
+                    (config.indirect_lighting_sh[5], 0.0),
+                    (config.indirect_lighting_sh[6], 0.0),
+                    (config.indirect_lighting_sh[7], 0.0),
+                    (config.indirect_lighting_sh[8], 0.0),
+                ],
             },
         );
 

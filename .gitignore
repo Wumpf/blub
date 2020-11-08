@@ -19,3 +19,6 @@ Cargo.lock
 recording*/
 screenshot*.png
 *.mp4
+
+# no sun variant of background. easy to replicate with gimp
+background/no sun

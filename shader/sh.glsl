@@ -11,6 +11,12 @@
 #define SH_FACTOR_BAND3_2 2.89061141
 #define SH_FACTOR_BAND3_3 0.590043604
 
+#define SH_FACTOR_COSINE_BAND0 0.886226925 // PI / (2.0 * sqrt(PI))
+
+#define SH_FACTOR_COSINE_BAND1 1.023326708      // 2.0 * PI * sqrt(3.0) / (6.0 * sqrt(PI))
+#define SH_FACTOR_COSINE_BAND2_non0 0.858085531 // PI * sqrt(15.0) / (8.0 * sqrt(PI))
+#define SH_FACTOR_COSINE_BAND2_0 0.247707956    // PI * sqrt(5.0) / (16.0 * sqrt(PI))
+
 vec3 sh3Evaluate(vec3 dir, vec3 shCoeffs[9]) {
     vec3 result = shCoeffs[0] * SH_FACTOR_BAND0;
     result += shCoeffs[1] * (-SH_FACTOR_BAND1 * dir.y);
@@ -21,6 +27,19 @@ vec3 sh3Evaluate(vec3 dir, vec3 shCoeffs[9]) {
     result += shCoeffs[6] * (SH_FACTOR_BAND2_0 * (3.0 * dir.z * dir.z - 1.0));
     result += shCoeffs[7] * (-SH_FACTOR_BAND2_non0 * dir.x * dir.z);
     result += shCoeffs[8] * (SH_FACTOR_BAND2_non0 * 0.5 * (dir.x * dir.x - dir.y * dir.y));
+    return max(vec3(0.0), result);
+}
+
+vec3 sh3EvaluateCosine(vec3 dir, vec3 shCoeffs[9]) {
+    vec3 result = shCoeffs[0] * SH_FACTOR_COSINE_BAND0;
+    result += shCoeffs[1] * (-SH_FACTOR_COSINE_BAND1 * dir.y);
+    result += shCoeffs[2] * (SH_FACTOR_COSINE_BAND1 * dir.z);
+    result += shCoeffs[3] * (-SH_FACTOR_COSINE_BAND1 * dir.x);
+    result += shCoeffs[4] * (SH_FACTOR_COSINE_BAND2_non0 * dir.y * dir.x);
+    result += shCoeffs[5] * (-SH_FACTOR_COSINE_BAND2_non0 * dir.y * dir.z);
+    result += shCoeffs[6] * (SH_FACTOR_COSINE_BAND2_0 * (3.0 * dir.z * dir.z - 1.0));
+    result += shCoeffs[7] * (-SH_FACTOR_COSINE_BAND2_non0 * dir.x * dir.z);
+    result += shCoeffs[8] * (SH_FACTOR_COSINE_BAND2_non0 * 0.5 * (dir.x * dir.x - dir.y * dir.y));
     return max(vec3(0.0), result);
 }
 
