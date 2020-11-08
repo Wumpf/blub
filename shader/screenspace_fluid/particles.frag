@@ -29,6 +29,6 @@ void main() {
     gl_FragDepth = projected_zw.x / projected_zw.y;
 
     out_ViewSpaceDepth = dot(Camera.Direction, cameraPosToSpherePos);
-    // quadratic splats
-    out_Thickness = (cameraDistanceFar - cameraDistance);
+    // quadratic splats. Compensate a bit for particle overlap
+    out_Thickness = (cameraDistanceFar - cameraDistance) * (0.25 * Rendering.FluidGridToWorldScale / Rendering.FluidParticleRadius);
 }

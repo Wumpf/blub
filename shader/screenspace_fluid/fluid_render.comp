@@ -7,7 +7,8 @@
 
 layout(set = 2, binding = 0) uniform texture2D FluidViewSpaceDepth;
 layout(set = 2, binding = 1) uniform texture2D WaterDepthTexture;
-layout(set = 2, binding = 2, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image2D BackbufferImage;
+layout(set = 2, binding = 2) uniform texture2D BackbufferTexture;
+layout(set = 2, binding = 3, HDR_BACKBUFFER_IMAGE_FORMAT) uniform restrict image2D BackbufferImage;
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
@@ -72,27 +73,25 @@ vec3 computeRefraction(float waterDepthAtSeenSurfacePoint, vec3 surfacePosition,
     // Estimate refraction.
     // We use waterDepthAtSeenSurfacePoint to estimate where we end up on waterDepth & refraction texture.
     vec3 refractionVector = refract(-toCamera, surfaceNormal, RefractionIndex_Air / RefractionIndex_Water);
+    vec3 estimatedRefractionExit = surfacePosition + waterDepthAtSeenSurfacePoint * refractionVector;
+    vec3 estimatedRefractionExitProjected = (Camera.ViewProjection * vec4(estimatedRefractionExit, 1.0)).xyw;
+    vec2 refractedTexcoord = estimatedRefractionExitProjected.xy / estimatedRefractionExitProjected.z * 0.5 + vec2(0.5);
+    refractedTexcoord.y = 1.0 - refractedTexcoord.y;
+    ivec2 refractedTexcoordInt = ivec2(Screen.Resolution * refractedTexcoord);
+    vec4 refractedBackbuffer = texelFetch(BackbufferTexture, refractedTexcoordInt, 0);
+    vec3 refractionRayResult;
+    if (refractedBackbuffer.a == 0.0) // The background (or cleared surface) is supposed to write out alpha 0, so we can mask it here.
+        // For the background we can compute "perfect" refraction (we only refract on entry, not on exit; so it's still a pretty poor approximiation)
+        refractionRayResult = sampleBackground(surfacePosition, refractionVector);
+    else
+        refractionRayResult = refractedBackbuffer.rgb;
+    // sampleBackground(surfacePosition, refractionVector); // imageLoad(BackbufferImage, refractedTexcoordInt).xyz; // TODO. NEED DOUBLE BUFFERING
 
-    // Sampling depth with estimated refraction exit is "too wrong", has too many artifacts.
-    /*
-        vec3 estimatedRefractionExit = surfacePosition + waterDepthAtSeenSurfacePoint * refractionVector;
-        vec3 estimatedRefractionExitProjected = (Camera.ViewProjection * vec4(estimatedRefractionExit, 1.0)).xyw;
-        vec2 refractedTexcoord = estimatedRefractionExitProjected.xy / estimatedRefractionExitProjected.z * 0.5 + vec2(0.5);
-        refractedTexcoord.y = 1.0 - refractedTexcoord.y;
-        ivec2 refractedTexcoordInt = ivec2(Screen.Resolution * refractedTexcoord);
-        // Avoid artifacts by going with non-scattered texcoord whenever scattered degenerates
-        if (refractedTexcoordInt.y >= Screen.Resolution.y || refractedTexcoordInt.y < 0.0)
-            refractedTexcoordInt.y = int(gl_GlobalInvocationID.y);
-        if (refractedTexcoordInt.x >= Screen.Resolution.x || refractedTexcoordInt.x < 0.0)
-            refractedTexcoordInt.x = int(gl_GlobalInvocationID.x);
-        // Sample depth & refraction at the estimated coordinates
-        float waterDepth = texelFetch(WaterDepthTexture, refractedTexcoordInt, 0).x;
-    */
-    float waterDepth = texelFetch(WaterDepthTexture, ivec2(gl_GlobalInvocationID.xy), 0).x * 2;
-
-    float waterRefractionDepth = waterDepth;
-    vec3 refractionRayResult =
-        sampleBackground(surfacePosition, refractionVector); // imageLoad(BackbufferImage, refractedTexcoordInt).xyz; // TODO. NEED DOUBLE BUFFERING
+    // Sampling depth with estimated refraction exit is "too wrong", leads to too many artifacts.
+    // But not doing that gives us odd "shadows" in the water thickness, so we take max depth of both to work around the issue a bit.
+    float waterDepth =
+        max(texelFetch(WaterDepthTexture, ivec2(gl_GlobalInvocationID.xy), 0).x, texelFetch(WaterDepthTexture, refractedTexcoordInt, 0).x) * 2;
+    float waterRefractionDepth = waterDepth; // estimate
 
     // We assume that the "other side" was lit without shadowing from the water mass, light got there unhindered. So we need to fix that first by
     // applying Beer-Lambert law absorption Once we make the water cast shadow, the refractionRayResult will already (more accurately) have this

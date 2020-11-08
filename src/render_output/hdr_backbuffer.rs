@@ -8,7 +8,7 @@ use crate::wgpu_utils::{
 use std::path::Path;
 
 pub struct HdrBackbuffer {
-    //hdr_backbuffer: wgpu::Texture,
+    hdr_backbuffer: wgpu::Texture,
     hdr_backbuffer_view: wgpu::TextureView,
     resolution: winit::dpi::PhysicalSize<u32>,
 
@@ -33,7 +33,7 @@ impl HdrBackbuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::COPY_SRC,
         });
         let hdr_backbuffer_view = hdr_backbuffer.create_view(&Default::default());
 
@@ -77,7 +77,7 @@ impl HdrBackbuffer {
         });
 
         HdrBackbuffer {
-            //hdr_backbuffer,
+            hdr_backbuffer,
             hdr_backbuffer_view: hdr_backbuffer_view,
             resolution,
 
@@ -88,6 +88,10 @@ impl HdrBackbuffer {
 
     pub fn resolution(&self) -> winit::dpi::PhysicalSize<u32> {
         self.resolution
+    }
+
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.hdr_backbuffer
     }
 
     pub fn texture_view(&self) -> &wgpu::TextureView {

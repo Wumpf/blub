@@ -178,7 +178,7 @@ impl SceneRenderer {
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
-        backbuffer: &wgpu::TextureView,
+        backbuffer: &HdrBackbuffer,
         depthbuffer: &wgpu::TextureView,
         per_frame_bind_group: &wgpu::BindGroup,
     ) {
@@ -188,7 +188,7 @@ impl SceneRenderer {
             wgpu_scope!(encoder, "opaque", || {
                 let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: backbuffer,
+                        attachment: backbuffer.texture_view(),
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -230,6 +230,8 @@ impl SceneRenderer {
                 }
 
                 // Background.. not really opaque but we re-use the same rpass.
+                // Note that we could do all the background rendering in the ScreenSpaceFluid pass. However, we want to be able to disable it without disabling the background.
+                // Also, background rendering could be last, but for that ScreenSpaceFluid pass would need to write out depth [...]
                 self.background_and_lighting.draw(&mut rpass_backbuffer, pipeline_manager);
             });
 
@@ -243,6 +245,7 @@ impl SceneRenderer {
                         per_frame_bind_group,
                         self.background_and_lighting.bind_group(),
                         &scene.fluid(),
+                        backbuffer,
                     );
                 }
             });

@@ -16,6 +16,7 @@ use std::rc::Rc;
 struct ScreenDependentProperties {
     texture_view_fluid_view: [wgpu::TextureView; 2],
     texture_view_fluid_thickness: [wgpu::TextureView; 2],
+    backbuffer_copy: wgpu::Texture,
     bind_group_narrow_range_filter: [wgpu::BindGroup; 2],
     bind_group_thickness_filter: [wgpu::BindGroup; 2],
     bind_group_compose: wgpu::BindGroup,
@@ -66,7 +67,8 @@ impl ScreenSpaceFluid {
         let group_layout_compose = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture2D()) // Fluid depth
             .next_binding_compute(binding_glsl::texture2D()) // Fluid thickness
-            .next_binding_compute(binding_glsl::image2D(HdrBackbuffer::FORMAT, false)) // hdr backbuffer
+            .next_binding_compute(binding_glsl::texture2D()) // HdrBackbuffer copy for reading
+            .next_binding_compute(binding_glsl::image2D(HdrBackbuffer::FORMAT, false)) // hdr backbuffer, target
             .create(device, "BindGroupLayout: SSFluid, Final fluid/Compose");
 
         let pipeline_render_particles = pipeline_manager.create_render_pipeline(
@@ -244,6 +246,20 @@ impl ScreenSpaceFluid {
                 usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
             }),
         ];
+        let backbuffer_copy = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Texture: HdrBackbuffer Copy for Refraction"),
+            size: wgpu::Extent3d {
+                width: backbuffer.resolution().width,
+                height: backbuffer.resolution().height,
+                depth: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: HdrBackbuffer::FORMAT,
+            usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
+        });
+        let texture_view_backbuffer_copy = backbuffer_copy.create_view(&Default::default());
         let texture_view_fluid_view = [
             texture_fluid_depth[0].create_view(&Default::default()),
             texture_fluid_depth[1].create_view(&Default::default()),
@@ -297,12 +313,14 @@ impl ScreenSpaceFluid {
         let bind_group_compose = BindGroupBuilder::new(&screen_independent.group_layout_compose)
             .texture(&texture_view_fluid_view[1])
             .texture(&texture_view_fluid_thickness[0])
+            .texture(&texture_view_backbuffer_copy)
             .texture(&backbuffer.texture_view())
             .create(device, "BindGroup: SSFluid, Final Compose");
 
         ScreenDependentProperties {
             texture_view_fluid_view,
             texture_view_fluid_thickness,
+            backbuffer_copy,
             target_textures_resolution,
             bind_group_narrow_range_filter,
             bind_group_thickness_filter,
@@ -322,6 +340,7 @@ impl ScreenSpaceFluid {
         per_frame_bind_group: &wgpu::BindGroup,
         background_and_lighting_bind_group: &wgpu::BindGroup,
         fluid: &HybridFluid,
+        backbuffer: &HdrBackbuffer,
     ) {
         wgpu_scope!(encoder, "ScreenSpaceFluid.draw");
 
@@ -332,6 +351,24 @@ impl ScreenSpaceFluid {
             b: 999999.0,
             a: 999999.0,
         };
+
+        encoder.copy_texture_to_texture(
+            wgpu::TextureCopyView {
+                texture: backbuffer.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            wgpu::TextureCopyView {
+                texture: &self.screen_dependent.backbuffer_copy,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            wgpu::Extent3d {
+                width: backbuffer.resolution().width,
+                height: backbuffer.resolution().height,
+                depth: 1,
+            },
+        );
 
         wgpu_scope!(encoder, "particles", || {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

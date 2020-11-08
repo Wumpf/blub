@@ -18,7 +18,7 @@ void main() {
     vec3 dir = reconstructWorldPositionFromViewSpaceDepth(gl_FragCoord.xy * Screen.ResolutionInv, 1.0) - Camera.Position;
 
     out_Color.rgb = sampleBackground(Camera.Position, dir, gl_FragDepth);
-    out_Color.a = 1.0;
+    out_Color.a = 0.0; // We mark the background with alpha 0
 
 #ifdef VISUALIZE_SH_RADIANCE
     dir = normalize(dir);

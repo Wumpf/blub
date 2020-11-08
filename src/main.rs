@@ -334,7 +334,7 @@ impl Application {
             &self.scene,
             &mut encoder,
             &self.pipeline_manager,
-            self.hdr_backbuffer.texture_view(),
+            &self.hdr_backbuffer,
             self.screen.depthbuffer(),
             self.per_frame_resources.bind_group(),
         );
