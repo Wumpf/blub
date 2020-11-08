@@ -263,6 +263,13 @@ pub mod rasterization_state {
             ..Default::default()
         }
     }
+
+    pub fn culling_back() -> wgpu::RasterizationStateDescriptor {
+        wgpu::RasterizationStateDescriptor {
+            cull_mode: wgpu::CullMode::Back,
+            ..Default::default()
+        }
+    }
 }
 
 pub mod color_state {

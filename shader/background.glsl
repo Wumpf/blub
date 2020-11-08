@@ -25,7 +25,7 @@ float gridTextureGradBox(in vec2 p, in vec2 ddx, in vec2 ddy, float N) {
     return (1.0 - i.x) * (1.0 - i.y);
 }
 
-vec3 sampleBackground(vec3 position, vec3 dir) {
+vec3 sampleBackground(vec3 position, vec3 dir, out float depth) {
     float d = -(position.y / dir.y);
     if (d > 0.0) {
         vec3 planePos = position + dir * d;
@@ -43,9 +43,18 @@ vec3 sampleBackground(vec3 position, vec3 dir) {
             albedo = mix(vec3(0.6), albedo, gridTextureGradBox(planePos.xz * 10, planePosDdx * 10, planePosDdy * 10, 50));
             albedo = mix(vec3(0.2), albedo, gridTextureGradBox(planePos.xz, planePosDdx, planePosDdy, 80));
 
+            vec2 projected_zw = (Camera.ViewProjection * vec4(planePos, 1.0)).zw; // (trusting optimizer to pick the right thing ;-))
+            depth = projected_zw.x / projected_zw.y;
+
             return albedo * DirectionalLightRadiance * -DirectionalLightDirection.y;
         }
     }
 
+    depth = 1.0;
     return sampleHdrCubemap(dir);
+}
+
+vec3 sampleBackground(vec3 position, vec3 dir) {
+    float dontcare;
+    return sampleBackground(position, dir, dontcare);
 }

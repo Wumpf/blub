@@ -1,4 +1,5 @@
 mod background;
+mod mesh_renderer;
 mod particle_renderer;
 mod scene_renderer;
 mod screenspace_fluid;

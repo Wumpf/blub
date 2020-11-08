@@ -13,6 +13,7 @@ mod per_frame_resources;
 mod render_output;
 mod renderer;
 mod scene;
+mod scene_models;
 mod simulation;
 mod simulation_controller;
 mod timer;
@@ -124,7 +125,7 @@ impl Application {
             per_frame_resources.bind_group_layout(),
         )
         .unwrap();
-        scene_renderer.on_new_scene(&command_queue, &scene);
+        scene_renderer.on_new_scene(&device, &command_queue, &scene);
 
         Application {
             window,
@@ -161,7 +162,7 @@ impl Application {
         match new_scene {
             Ok(scene) => {
                 self.scene = scene;
-                self.scene_renderer.on_new_scene(&self.command_queue, &self.scene);
+                self.scene_renderer.on_new_scene(&self.device, &self.command_queue, &self.scene);
             }
             Err(error) => {
                 error!("Failed to load scene from {:?}: {:?}", scene_path, error);

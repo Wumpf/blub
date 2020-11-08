@@ -1,15 +1,11 @@
 use crate::{
+    scene_models::*,
     simulation::HybridFluid,
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
 
 use serde::Deserialize;
-use std::{
-    fs::File,
-    io::{self, BufReader},
-    path::Path,
-    time::Duration,
-};
+use std::{error, fs::File, io::BufReader, path::Path, time::Duration};
 
 #[derive(Deserialize)]
 pub struct Box {
@@ -33,12 +29,15 @@ pub struct SceneConfig {
     // global gravity (in world space)
     pub gravity: cgmath::Vector3<f32>,
     pub fluid: FluidConfig,
+    #[serde(default)]
+    pub static_objects: Vec<StaticObjectConfig>,
 }
 
 // Scene data & simulation.
 pub struct Scene {
     hybrid_fluid: HybridFluid,
     config: SceneConfig,
+    pub models: SceneModels,
 }
 
 impl Scene {
@@ -49,14 +48,19 @@ impl Scene {
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         per_frame_bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> Result<Self, io::Error> {
+    ) -> Result<Self, std::boxed::Box<dyn error::Error>> {
         let file = File::open(scene_path)?;
         let reader = BufReader::new(file);
         let config: SceneConfig = serde_json::from_reader(reader)?;
 
         let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
+        let models = SceneModels::from_config(&device, &config.static_objects)?;
 
-        Ok(Scene { hybrid_fluid, config })
+        Ok(Scene {
+            hybrid_fluid,
+            config,
+            models,
+        })
     }
 
     pub fn config(&self) -> &SceneConfig {

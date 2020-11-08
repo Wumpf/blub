@@ -150,7 +150,7 @@ impl Background {
         render_pipeline_desc.depth_stencil_state = Some(wgpu::DepthStencilStateDescriptor {
             format: Screen::FORMAT_DEPTH,
             depth_write_enabled: false,
-            depth_compare: wgpu::CompareFunction::Equal,
+            depth_compare: wgpu::CompareFunction::LessEqual,
             stencil: Default::default(),
         });
 

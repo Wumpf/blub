@@ -1,17 +1,20 @@
-use std::path::Path;
-
-use super::background::Background;
-use super::particle_renderer::ParticleRenderer;
-use super::screenspace_fluid::ScreenSpaceFluid;
-use super::static_line_renderer::{LineVertex, StaticLineRenderer};
-use super::volume_renderer::{VolumeRenderer, VolumeVisualizationMode};
+use super::{
+    background::Background,
+    mesh_renderer::MeshRenderer,
+    particle_renderer::ParticleRenderer,
+    screenspace_fluid::ScreenSpaceFluid,
+    static_line_renderer::{LineVertex, StaticLineRenderer},
+    volume_renderer::{VolumeRenderer, VolumeVisualizationMode},
+};
 use crate::{
     render_output::hdr_backbuffer::HdrBackbuffer,
     scene::Scene,
     simulation::HybridFluid,
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
+
 use cgmath::EuclideanSpace;
+use std::path::Path;
 #[derive(Clone, Copy, Debug, EnumIter)]
 pub enum FluidRenderingMode {
     None,
@@ -36,6 +39,7 @@ pub struct SceneRenderer {
     screenspace_fluid: ScreenSpaceFluid,
     volume_renderer: VolumeRenderer,
     bounds_line_renderer: StaticLineRenderer,
+    mesh_renderer: MeshRenderer,
     background: Background,
 
     pub fluid_rendering_mode: FluidRenderingMode,
@@ -91,6 +95,7 @@ impl SceneRenderer {
                 fluid_renderer_group_layout,
             ),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
+            mesh_renderer: MeshRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout),
             background,
 
             fluid_rendering_mode: FluidRenderingMode::ScreenSpaceFluid,
@@ -102,7 +107,9 @@ impl SceneRenderer {
     }
 
     // Needs to be called whenever immutable scene properties change.
-    pub fn on_new_scene(&mut self, queue: &wgpu::Queue, scene: &Scene) {
+    pub fn on_new_scene(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) {
+        self.mesh_renderer.on_new_scene(device, &scene.models);
+
         let line_color = cgmath::vec3(0.0, 0.0, 0.0);
         let grid_extent = scene.config().fluid.grid_dimension;
         let min = scene.config().fluid.world_position;
@@ -203,6 +210,7 @@ impl SceneRenderer {
                     }
                 }
 
+                self.mesh_renderer.draw(&mut rpass_backbuffer, pipeline_manager, &scene.models);
                 self.volume_renderer
                     .draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid(), self.volume_visualization);
 
