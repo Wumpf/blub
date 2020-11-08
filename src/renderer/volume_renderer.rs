@@ -91,10 +91,16 @@ impl VolumeRenderer {
                 rpass.set_pipeline(pipeline_manager.get_render(&self.volume_visualization_with_billboards_pipeline));
                 rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
                 match mode {
-                    VolumeVisualizationMode::DivergenceError => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[0]),
-                    VolumeVisualizationMode::PressureFromVelocity => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[1]),
-                    VolumeVisualizationMode::PressureFromDensity => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[2]),
-                    VolumeVisualizationMode::Marker => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, &[3]),
+                    VolumeVisualizationMode::DivergenceError => {
+                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[0 as u32]))
+                    }
+                    VolumeVisualizationMode::PressureFromVelocity => {
+                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[1 as u32]))
+                    }
+                    VolumeVisualizationMode::PressureFromDensity => {
+                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[2 as u32]))
+                    }
+                    VolumeVisualizationMode::Marker => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[3 as u32])),
                     _ => {}
                 };
                 rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));
