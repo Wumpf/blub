@@ -11,9 +11,14 @@ For SPH (pure lagrangian) fluid simulation, check out my simple 2D DFSPH fluid s
 
 ### Build & Run
 
+Requires git-lfs (for large textures & meshes).
+
 `cargo run`
-Should work on Linux/Mac/Windows. (I'm developing on Windows, so things might break at random for the others)
-Doing release mode (`cargo run --release`) gives quite a performance boost since I have shader optimizations turned off in non-optimized builds.
+Note that there are a few extra dependencies due to the `shaderc`, if your build fails check shaderc-rs' [build instructions](https://github.com/google/shaderc-rs#building-from-source).  
+Should work on Linux/Windows - I'm developing on Windows, so things might break at random for the others.  
+**Mac is not working right now #26**.
+
+Doing release mode (`cargo run --release`) can be significantly faster.
 
 ### Shaders
 
