@@ -34,17 +34,17 @@
     },
     "static_objects": [
         {
-            "model": "bunnyduck/bunnyduck.obj",
+            "model": "stanford bunny/bunny.obj",
             "world_position": {
-                "x": 0.64,
-                "y": 0.2,
+                "x": 0.9,
+                "y": 0.0,
                 "z": 0.32
             },
-            "scale": 0.6,
+            "scale": 0.2,
             "rotation_angles": {
                 "x": 0.0,
                 "y": 0.0,
-                "z": -90.0
+                "z": 0.0
             }
         }
     ]
