@@ -123,12 +123,12 @@ void main() {
     // Write out particle.
     {
         Particles[particleIndex].Position = newPosition;
-        // ParticleBufferVelocityX[particleIndex] = vec4(cx, newVelocity.x);
-        // ParticleBufferVelocityY[particleIndex] = vec4(cy, newVelocity.y);
-        // ParticleBufferVelocityZ[particleIndex] = vec4(cz, newVelocity.z);
+        ParticleBufferVelocityX[particleIndex] = vec4(cx, newVelocity.x);
+        ParticleBufferVelocityY[particleIndex] = vec4(cy, newVelocity.y);
+        ParticleBufferVelocityZ[particleIndex] = vec4(cz, newVelocity.z);
         // PIC only
-        ParticleBufferVelocityX[particleIndex] = vec4(vec3(0), newVelocity.x);
-        ParticleBufferVelocityY[particleIndex] = vec4(vec3(0), newVelocity.y);
-        ParticleBufferVelocityZ[particleIndex] = vec4(vec3(0), newVelocity.z);
+        // ParticleBufferVelocityX[particleIndex] = vec4(vec3(0), newVelocity.x);
+        // ParticleBufferVelocityY[particleIndex] = vec4(vec3(0), newVelocity.y);
+        // ParticleBufferVelocityZ[particleIndex] = vec4(vec3(0), newVelocity.z);
     }
 }
