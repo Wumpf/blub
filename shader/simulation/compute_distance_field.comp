@@ -34,10 +34,14 @@ void main() {
     // grid cell world position
     vec3 cellCenter = (gl_GlobalInvocationID + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
 
+    // TODO: This is super costly (close to TDR kind of costly!), need to...
+    // * break computation down into passes?
+    // * use shared memory to buffer some of the data access.
+
     // Compute min (absolute) distance to triangles
     float distanceSq = 1.0 / 0.0;
     for (uint meshIdx = 0; meshIdx < NumMeshes; ++meshIdx) {
-        mat4 transform = Meshes[meshIdx].Transform;
+        vec3 relativeCellCenter = vec4(cellCenter, 1.0) * Meshes[meshIdx].InverseTransform;
         uint minVertex = Meshes[meshIdx].VertexBufferRange.x;
         uvec2 indexRange = Meshes[meshIdx].IndexBufferRange;
 
@@ -46,12 +50,13 @@ void main() {
             uint i1 = minVertex + MeshIndices[indexIdx + 1];
             uint i2 = minVertex + MeshIndices[indexIdx + 2];
 
-            // TODO: Transform grid cell with inverse instead
-            vec3 p0 = (transform * vec4(MeshVertices[i0].Position, 1.0)).xyz;
-            vec3 p1 = (transform * vec4(MeshVertices[i1].Position, 1.0)).xyz;
-            vec3 p2 = (transform * vec4(MeshVertices[i2].Position, 1.0)).xyz;
+            vec3 p0 = MeshVertices[i0].Position;
+            vec3 p1 = MeshVertices[i1].Position;
+            vec3 p2 = MeshVertices[i2].Position;
 
-            distanceSq = min(distanceSq, triangleDistanceSquared(p0, p1, p2, cellCenter));
+            distanceSq = min(distanceSq, triangleDistanceSquared(p0, p1, p2, relativeCellCenter));
+
+            // TODO: Determine inside / outside
         }
     }
 

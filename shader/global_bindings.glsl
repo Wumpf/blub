@@ -61,7 +61,10 @@ layout(set = 0, binding = 2) uniform sampler SamplerPointClamp;
 // ----------------------------------------
 
 struct MeshData {
-    mat4 Transform;
+    // transposed so we can store them in 3 vec4s.
+    mat3x4 Transform;
+    mat3x4 InverseTransform;
+
     uvec2 VertexBufferRange;
     uvec2 IndexBufferRange;
 };

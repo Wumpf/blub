@@ -1,4 +1,4 @@
-use cgmath::EuclideanSpace;
+use cgmath::{EuclideanSpace, Matrix, SquareMatrix};
 use serde::Deserialize;
 use std::{error::Error, path::Path, path::PathBuf};
 use wgpu::util::DeviceExt;
@@ -25,7 +25,14 @@ pub struct MeshData {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct MeshDataGpu {
-    transform: cgmath::Matrix4<f32>, // todo: Make this a 4x3
+    transform_r0: cgmath::Vector4<f32>,
+    transform_r1: cgmath::Vector4<f32>,
+    transform_r2: cgmath::Vector4<f32>,
+
+    inverse_transform_r0: cgmath::Vector4<f32>,
+    inverse_transform_r1: cgmath::Vector4<f32>,
+    inverse_transform_r2: cgmath::Vector4<f32>,
+
     vertex_buffer_range: cgmath::Vector2<u32>,
     index_buffer_range: cgmath::Vector2<u32>,
 }
@@ -126,10 +133,21 @@ impl SceneModels {
 
         let meshes_gpu: Vec<MeshDataGpu> = meshes
             .iter()
-            .map(|mesh| MeshDataGpu {
-                transform: mesh.transform,
-                vertex_buffer_range: cgmath::vec2(mesh.vertex_buffer_range.start, mesh.vertex_buffer_range.end),
-                index_buffer_range: cgmath::vec2(mesh.index_buffer_range.start, mesh.index_buffer_range.end),
+            .map(|mesh| {
+                let transposed_transform = mesh.transform.transpose();
+                let inverse_transform = transposed_transform
+                    .invert()
+                    .expect("Mesh matrix not invertible, this should never happen");
+                MeshDataGpu {
+                    transform_r0: transposed_transform.x,
+                    transform_r1: transposed_transform.y,
+                    transform_r2: transposed_transform.z,
+                    inverse_transform_r0: inverse_transform.x,
+                    inverse_transform_r1: inverse_transform.y,
+                    inverse_transform_r2: inverse_transform.z,
+                    vertex_buffer_range: cgmath::vec2(mesh.vertex_buffer_range.start, mesh.vertex_buffer_range.end),
+                    index_buffer_range: cgmath::vec2(mesh.index_buffer_range.start, mesh.index_buffer_range.end),
+                }
             })
             .collect();
 
