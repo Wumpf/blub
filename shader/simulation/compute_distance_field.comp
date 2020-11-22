@@ -1,0 +1,10 @@
+#version 460
+
+#include "../global_bindings.glsl"
+layout(set = 1, binding = 0, r16f) uniform restrict image3D SolidSignedDistances;
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+void main() {
+    // TODO
+}

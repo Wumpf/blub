@@ -1,6 +1,6 @@
 #version 450
 
-#include "per_frame_resources.glsl"
+#include "global_bindings.glsl"
 
 layout(location = 0) in vec3 in_Position;
 layout(location = 1) in vec3 in_Color;

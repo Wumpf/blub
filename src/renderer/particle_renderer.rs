@@ -15,7 +15,7 @@ impl ParticleRenderer {
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
         fluid_renderer_group_layout: &wgpu::BindGroupLayout,
     ) -> ParticleRenderer {
         let render_pipeline = pipeline_manager.create_render_pipeline(
@@ -25,7 +25,7 @@ impl ParticleRenderer {
                 "ParticleRenderer: Render particles",
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("ParticleRenderer Pipeline Layout"),
-                    bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
+                    bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
                     push_constant_ranges: &[],
                 })),
                 Path::new("fluid_particles.vert"),

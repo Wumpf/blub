@@ -111,7 +111,7 @@ impl Background {
         queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Result<Self, io::Error> {
         let file = File::open(path.join("config.json"))?;
         let reader = BufReader::new(file);
@@ -152,7 +152,7 @@ impl Background {
             "Cubemap Renderer",
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Cubemap Renderer Pipeline Layout"),
-                bind_group_layouts: &[&per_frame_bind_group_layout, &bind_group_layout.layout],
+                bind_group_layouts: &[&global_bind_group_layout, &bind_group_layout.layout],
                 push_constant_ranges: &[],
             })),
             Path::new("screentri.vert"),

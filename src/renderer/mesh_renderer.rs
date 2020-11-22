@@ -3,14 +3,11 @@ use std::{path::PathBuf, rc::Rc};
 use crate::{
     render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen},
     scene_models::*,
-    wgpu_utils::{binding_builder::*, binding_glsl, pipelines::*, shader::ShaderDirectory},
+    wgpu_utils::{pipelines::*, shader::ShaderDirectory},
 };
 
 pub struct MeshRenderer {
     render_pipeline: RenderPipelineHandle,
-    bind_group_layout: BindGroupLayoutWithDesc,
-    // Needs to change with scene.
-    bind_group: Option<wgpu::BindGroup>,
 }
 
 const VERTEX_SIZE: wgpu::BufferAddress = std::mem::size_of::<MeshVertex>() as wgpu::BufferAddress;
@@ -20,13 +17,9 @@ impl MeshRenderer {
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
         background_and_lighting_group_layout: &wgpu::BindGroupLayout,
     ) -> MeshRenderer {
-        let bind_group_layout = BindGroupLayoutBuilder::new()
-            .next_binding(wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT, binding_glsl::buffer(true))
-            .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
-
         let render_pipeline = pipeline_manager.create_render_pipeline(
             device,
             shader_dir,
@@ -34,11 +27,7 @@ impl MeshRenderer {
                 label: "MeshRenderer",
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("MeshRenderer Pipeline Layout"),
-                    bind_group_layouts: &[
-                        per_frame_bind_group_layout,
-                        background_and_lighting_group_layout,
-                        &bind_group_layout.layout,
-                    ],
+                    bind_group_layouts: &[global_bind_group_layout, background_and_lighting_group_layout],
                     push_constant_ranges: &[wgpu::PushConstantRange {
                         stages: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                         range: 0..4,
@@ -79,21 +68,10 @@ impl MeshRenderer {
                 alpha_to_coverage_enabled: false,
             },
         );
-        MeshRenderer {
-            bind_group_layout,
-            render_pipeline,
-            bind_group: None,
-        }
+        MeshRenderer { render_pipeline }
     }
 
-    pub fn on_new_scene(&mut self, device: &wgpu::Device, scene_models: &SceneModels) {
-        self.bind_group = Some(
-            BindGroupBuilder::new(&self.bind_group_layout)
-                .resource(scene_models.mesh_desc_buffer.as_entire_binding())
-                .create(device, "BindGroup: MeshRenderer"),
-        );
-    }
-
+    // Render pass is assumed to have the global bindings set
     pub fn draw<'a>(
         &'a self,
         rpass: &mut wgpu::RenderPass<'a>,
@@ -105,8 +83,6 @@ impl MeshRenderer {
 
         rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
         rpass.set_bind_group(1, background_and_lighting_bind_group, &[]);
-        let bind_group = self.bind_group.as_ref().expect("No bind group for mesh renderer, no scene loaded?");
-        rpass.set_bind_group(2, bind_group, &[]);
 
         rpass.set_index_buffer(scene_models.index_buffer.slice(..));
         rpass.set_vertex_buffer(0, scene_models.vertex_buffer.slice(..));

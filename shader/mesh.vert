@@ -1,7 +1,7 @@
 #version 460
 
+#include "global_bindings.glsl"
 #include "mesh.glsl"
-#include "per_frame_resources.glsl"
 
 layout(location = 0) in vec3 in_Position;
 layout(location = 1) in vec3 in_Normal;

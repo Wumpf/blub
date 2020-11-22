@@ -1,4 +1,4 @@
-#include "per_frame_resources.glsl"
+#include "global_bindings.glsl"
 #include "utilities.glsl"
 
 const vec2 quadPositions[4] = vec2[4](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));

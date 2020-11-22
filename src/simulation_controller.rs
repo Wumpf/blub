@@ -100,7 +100,7 @@ impl SimulationController {
         queue: &wgpu::Queue,
         scene: &mut Scene,
         pipeline_manager: &PipelineManager,
-        per_frame_bind_group: &wgpu::BindGroup,
+        global_bind_group: &wgpu::BindGroup,
     ) {
         // After every batch we wait until the gpu is done.
         // This is not optimal for performance but is necessary because:
@@ -127,7 +127,7 @@ impl SimulationController {
                 let mut batch_size = MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE;
                 {
                     for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
-                        if !self.single_step(scene, device, queue, pipeline_manager, per_frame_bind_group) {
+                        if !self.single_step(scene, device, queue, pipeline_manager, global_bind_group) {
                             batch_size = i;
                             break;
                         }
@@ -158,13 +158,13 @@ impl SimulationController {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         pipeline_manager: &PipelineManager,
-        per_frame_bind_group: &wgpu::BindGroup,
+        global_bind_group: &wgpu::BindGroup,
     ) {
         if !self.start_simulation_frame() {
             return;
         }
 
-        while self.single_step(scene, device, queue, pipeline_manager, per_frame_bind_group) {}
+        while self.single_step(scene, device, queue, pipeline_manager, global_bind_group) {}
     }
 
     fn start_simulation_frame(&mut self) -> bool {
@@ -190,7 +190,7 @@ impl SimulationController {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         pipeline_manager: &'a PipelineManager,
-        per_frame_bind_group: &wgpu::BindGroup,
+        global_bind_group: &wgpu::BindGroup,
     ) -> bool {
         // frame drops are only relevant in realtime mode.
         let max_total_step_per_frame = if self.status == SimulationControllerStatus::Realtime {
@@ -205,7 +205,7 @@ impl SimulationController {
         }
 
         if self.timer.simulation_frame_loop(max_total_step_per_frame) == SimulationStepResult::PerformStepAndCallAgain {
-            scene.step(self.timer.simulation_delta(), device, pipeline_manager, queue, per_frame_bind_group);
+            scene.step(self.timer.simulation_delta(), device, pipeline_manager, queue, global_bind_group);
             return true;
         }
         return false;

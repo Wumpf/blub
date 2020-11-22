@@ -1,6 +1,6 @@
 #version 460
 
-#include "../per_frame_resources.glsl"
+#include "../global_bindings.glsl"
 #include "../utilities.glsl"
 
 layout(location = 0) in vec3 in_WorldPosition;

@@ -35,14 +35,14 @@ impl StaticLineRenderer {
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
         max_num_lines: usize,
     ) -> Self {
         let mut render_pipeline_desc = RenderPipelineCreationDesc::new(
             "Line Renderer",
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Static Line Renderer Pipeline Layout"),
-                bind_group_layouts: &[&per_frame_bind_group_layout],
+                bind_group_layouts: &[&global_bind_group_layout],
                 push_constant_ranges: &[],
             })),
             Path::new("lines.vert"),

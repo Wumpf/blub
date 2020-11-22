@@ -39,7 +39,7 @@ pub struct SceneRenderer {
     screenspace_fluid: ScreenSpaceFluid,
     volume_renderer: VolumeRenderer,
     bounds_line_renderer: StaticLineRenderer,
-    mesh_renderer: MeshRenderer,
+    pub mesh_renderer: MeshRenderer,
     background_and_lighting: Background,
 
     pub fluid_rendering_mode: FluidRenderingMode,
@@ -55,7 +55,7 @@ impl SceneRenderer {
         queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
         backbuffer: &HdrBackbuffer,
     ) -> Self {
         let fluid_renderer_group_layout = &HybridFluid::get_or_create_group_layout_renderer(device).layout;
@@ -66,7 +66,7 @@ impl SceneRenderer {
             queue,
             shader_dir,
             pipeline_manager,
-            per_frame_bind_group_layout,
+            global_bind_group_layout,
         )
         .unwrap();
 
@@ -75,7 +75,7 @@ impl SceneRenderer {
                 device,
                 shader_dir,
                 pipeline_manager,
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 fluid_renderer_group_layout,
                 background_and_lighting.bind_group_layout(),
                 backbuffer,
@@ -84,22 +84,22 @@ impl SceneRenderer {
                 device,
                 shader_dir,
                 pipeline_manager,
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 fluid_renderer_group_layout,
             ),
             volume_renderer: VolumeRenderer::new(
                 device,
                 shader_dir,
                 pipeline_manager,
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 fluid_renderer_group_layout,
             ),
-            bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, per_frame_bind_group_layout, 128),
+            bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, global_bind_group_layout, 128),
             mesh_renderer: MeshRenderer::new(
                 device,
                 shader_dir,
                 pipeline_manager,
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 background_and_lighting.bind_group_layout(),
             ),
             background_and_lighting,
@@ -113,9 +113,7 @@ impl SceneRenderer {
     }
 
     // Needs to be called whenever immutable scene properties change.
-    pub fn on_new_scene(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) {
-        self.mesh_renderer.on_new_scene(device, &scene.models);
-
+    pub fn on_new_scene(&mut self, queue: &wgpu::Queue, scene: &Scene) {
         let line_color = cgmath::vec3(0.0, 0.0, 0.0);
         let grid_extent = scene.config().fluid.grid_dimension;
         let min = scene.config().fluid.world_position;
@@ -180,7 +178,7 @@ impl SceneRenderer {
         pipeline_manager: &PipelineManager,
         backbuffer: &HdrBackbuffer,
         depthbuffer: &wgpu::TextureView,
-        per_frame_bind_group: &wgpu::BindGroup,
+        global_bind_group: &wgpu::BindGroup,
     ) {
         wgpu_scope!(encoder, "SceneRenderer.draw");
         {
@@ -204,7 +202,7 @@ impl SceneRenderer {
                         stencil_ops: None,
                     }),
                 });
-                rpass_backbuffer.set_bind_group(0, per_frame_bind_group, &[]);
+                rpass_backbuffer.set_bind_group(0, global_bind_group, &[]);
 
                 match self.fluid_rendering_mode {
                     FluidRenderingMode::None => {}
@@ -242,7 +240,7 @@ impl SceneRenderer {
                         &mut encoder,
                         pipeline_manager,
                         depthbuffer,
-                        per_frame_bind_group,
+                        global_bind_group,
                         self.background_and_lighting.bind_group(),
                         &scene.fluid(),
                         backbuffer,

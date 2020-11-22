@@ -1,7 +1,7 @@
 #version 450
 
 #include "../fluid_render_info.glsl"
-#include "../per_frame_resources.glsl"
+#include "../global_bindings.glsl"
 #include "../simulation/hybrid_fluid.glsl"
 #include "../utilities.glsl"
 

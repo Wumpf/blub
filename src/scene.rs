@@ -38,6 +38,7 @@ pub struct Scene {
     hybrid_fluid: HybridFluid,
     config: SceneConfig,
     pub models: SceneModels,
+    distance_field_dirty: bool,
 }
 
 impl Scene {
@@ -47,19 +48,20 @@ impl Scene {
         queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Result<Self, std::boxed::Box<dyn error::Error>> {
         let file = File::open(scene_path)?;
         let reader = BufReader::new(file);
         let config: SceneConfig = serde_json::from_reader(reader)?;
 
-        let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
+        let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, global_bind_group_layout);
         let models = SceneModels::from_config(&device, &config.static_objects)?;
 
         Ok(Scene {
             hybrid_fluid,
             config,
             models,
+            distance_field_dirty: true,
         })
     }
 
@@ -73,7 +75,7 @@ impl Scene {
         queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> HybridFluid {
         let mut hybrid_fluid = HybridFluid::new(
             device,
@@ -85,7 +87,7 @@ impl Scene {
             config.fluid.max_num_particles,
             shader_dir,
             pipeline_manager,
-            per_frame_bind_group_layout,
+            global_bind_group_layout,
         );
 
         for cube in config.fluid.fluid_cubes.iter() {
@@ -108,9 +110,10 @@ impl Scene {
         queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
     ) {
-        self.hybrid_fluid = Self::create_fluid_from_config(&self.config, device, queue, shader_dir, pipeline_manager, per_frame_bind_group_layout);
+        self.hybrid_fluid = Self::create_fluid_from_config(&self.config, device, queue, shader_dir, pipeline_manager, global_bind_group_layout);
+        self.distance_field_dirty = true;
     }
 
     pub fn step(
@@ -119,7 +122,7 @@ impl Scene {
         device: &wgpu::Device,
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
-        per_frame_bind_group: &wgpu::BindGroup,
+        global_bind_group: &wgpu::BindGroup,
     ) {
         // Poll device to update mapped buffers which may feed back into what a step does.
         device.poll(wgpu::Maintain::Poll);
@@ -127,8 +130,15 @@ impl Scene {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Scene Step"),
         });
+
+        if self.distance_field_dirty {
+            self.hybrid_fluid
+                .add_static_meshes(&mut encoder, pipeline_manager, global_bind_group, &self.models);
+            self.distance_field_dirty = false;
+        }
+
         self.hybrid_fluid
-            .step(simulation_delta, &mut encoder, pipeline_manager, queue, per_frame_bind_group);
+            .step(simulation_delta, &mut encoder, pipeline_manager, queue, global_bind_group);
         queue.submit(Some(encoder.finish()));
         self.hybrid_fluid.update_statistics();
     }

@@ -2,7 +2,7 @@
 
 #include "../background.glsl"
 #include "../brdf.glsl"
-#include "../per_frame_resources.glsl"
+#include "../global_bindings.glsl"
 #include "../utilities.glsl"
 
 layout(set = 2, binding = 0) uniform texture2D FluidViewSpaceDepth;

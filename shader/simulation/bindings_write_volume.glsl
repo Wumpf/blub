@@ -1,4 +1,4 @@
-#include "per_frame_resources.glsl"
+#include "global_bindings.glsl"
 #include "simulation/hybrid_fluid.glsl"
 #include "simulation/particles.glsl"
 #include "utilities.glsl"

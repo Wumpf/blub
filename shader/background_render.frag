@@ -3,7 +3,7 @@
 //#define VISUALIZE_SH_RADIANCE
 
 #include "background.glsl"
-#include "per_frame_resources.glsl"
+#include "global_bindings.glsl"
 #include "utilities.glsl"
 
 #ifdef VISUALIZE_SH_RADIANCE

@@ -1,6 +1,10 @@
 #ifndef INCLUDE_PERFRAMERESOURCES
 #define INCLUDE_PERFRAMERESOURCES
 
+// ----------------------------------------
+// Constants
+// ----------------------------------------
+
 struct CameraData {
     mat4 ViewProjection;
     vec3 Position;
@@ -45,8 +49,37 @@ layout(set = 0, binding = 0) uniform PerFrameConstants {
     ScreenData Screen;
 };
 
+// ----------------------------------------
+// Sampler
+// ----------------------------------------
+
 layout(set = 0, binding = 1) uniform sampler SamplerTrilinearClamp;
 layout(set = 0, binding = 2) uniform sampler SamplerPointClamp;
+
+// ----------------------------------------
+// Mesh data
+// ----------------------------------------
+
+struct MeshData {
+    mat4 Transform;
+    uvec2 VertexBufferRange;
+    uvec2 IndexBufferRange;
+};
+layout(set = 0, binding = 3) restrict readonly buffer Meshes_ { MeshData Meshes[]; };
+
+// Can't do packed layouts in glsl/spirv?
+struct Vertex {
+    vec3 Position;
+    float NormalX;
+    vec2 NormalYZ;
+    vec2 Texcoord;
+};
+layout(set = 0, binding = 4) restrict readonly buffer MeshIndices_ { uint Indices[]; };
+layout(set = 0, binding = 5) restrict readonly buffer MeshVertices_ { Vertex Vertices[]; };
+
+// ----------------------------------------
+// Other
+// ----------------------------------------
 
 // See HdrBackbuffer::FORMAT
 #define HDR_BACKBUFFER_IMAGE_FORMAT rgba16f

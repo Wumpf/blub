@@ -8,8 +8,9 @@ extern crate strum_macros;
 mod wgpu_utils;
 
 mod camera;
+mod global_bindings;
+mod global_ubo;
 mod gui;
-mod per_frame_resources;
 mod render_output;
 mod renderer;
 mod scene;
@@ -18,7 +19,8 @@ mod simulation;
 mod simulation_controller;
 mod timer;
 
-use per_frame_resources::*;
+use global_bindings::*;
+use global_ubo::*;
 use render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen, screenshot_recorder::ScreenshotRecorder};
 use renderer::SceneRenderer;
 use simulation_controller::SimulationControllerStatus;
@@ -61,7 +63,8 @@ struct Application {
     gui: gui::GUI,
 
     camera: camera::Camera,
-    per_frame_resources: PerFrameResources,
+    global_ubo: GlobalUBO,
+    global_bindings: GlobalBindings,
 }
 
 impl Application {
@@ -103,14 +106,15 @@ impl Application {
 
         let screen = Screen::new(&device, &window_surface, Screen::DEFAULT_PRESENT_MODE, window.inner_size(), &shader_dir);
         let hdr_backbuffer = HdrBackbuffer::new(&device, screen.resolution(), &shader_dir);
-        let per_frame_resources = PerFrameResources::new(&device);
+        let global_ubo = GlobalUBO::new(&device);
+        let mut global_bindings = GlobalBindings::new(&device);
         let simulation_controller = simulation_controller::SimulationController::new();
         let mut scene_renderer = SceneRenderer::new(
             &device,
             &command_queue,
             &shader_dir,
             &mut pipeline_manager,
-            per_frame_resources.bind_group_layout(),
+            global_bindings.bind_group_layout(),
             &hdr_backbuffer,
         );
         let gui = gui::GUI::new(&device, &window, &mut command_queue);
@@ -122,10 +126,11 @@ impl Application {
             &command_queue,
             &shader_dir,
             &mut pipeline_manager,
-            per_frame_resources.bind_group_layout(),
+            global_bindings.bind_group_layout(),
         )
         .unwrap();
-        scene_renderer.on_new_scene(&device, &command_queue, &scene);
+        scene_renderer.on_new_scene(&command_queue, &scene);
+        global_bindings.create_bind_group(&device, &global_ubo, &scene.models);
 
         Application {
             window,
@@ -145,7 +150,8 @@ impl Application {
             gui,
 
             camera: camera::Camera::new(),
-            per_frame_resources,
+            global_ubo,
+            global_bindings,
         }
     }
 
@@ -156,13 +162,14 @@ impl Application {
             &self.command_queue,
             &self.shader_dir,
             &mut self.pipeline_manager,
-            self.per_frame_resources.bind_group_layout(),
+            self.global_bindings.bind_group_layout(),
         );
 
         match new_scene {
             Ok(scene) => {
                 self.scene = scene;
-                self.scene_renderer.on_new_scene(&self.device, &self.command_queue, &self.scene);
+                self.scene_renderer.on_new_scene(&self.command_queue, &self.scene);
+                self.global_bindings.create_bind_group(&self.device, &self.global_ubo, &self.scene.models);
             }
             Err(error) => {
                 error!("Failed to load scene from {:?}: {:?}", scene_path, error);
@@ -190,7 +197,7 @@ impl Application {
                             &self.command_queue,
                             &self.shader_dir,
                             &mut self.pipeline_manager,
-                            self.per_frame_resources.bind_group_layout(),
+                            self.global_bindings.bind_group_layout(),
                         );
                         self.simulation_controller.restart();
                     }
@@ -201,7 +208,7 @@ impl Application {
                             &self.command_queue,
                             &mut self.scene,
                             &self.pipeline_manager,
-                            self.per_frame_resources.bind_group(), // values from last draw are good enough.
+                            self.global_bindings.bind_group(), // values from last draw are good enough.
                         );
                     }
                     ApplicationEvent::ResetAndStartRecording { recording_fps } => {
@@ -210,7 +217,7 @@ impl Application {
                             &self.command_queue,
                             &self.shader_dir,
                             &mut self.pipeline_manager,
-                            self.per_frame_resources.bind_group_layout(),
+                            self.global_bindings.bind_group_layout(),
                         );
                         self.simulation_controller.restart();
                         self.simulation_controller.start_recording_with_fixed_frame_length(*recording_fps);
@@ -289,7 +296,8 @@ impl Application {
         }
         self.camera.update(self.simulation_controller.timer());
 
-        self.per_frame_resources.update_gpu_data(
+        update_global_ubo(
+            &mut self.global_ubo,
             &self.command_queue,
             self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
             self.simulation_controller.timer().fill_global_uniform_buffer(),
@@ -301,7 +309,7 @@ impl Application {
             &self.device,
             &self.command_queue,
             &self.pipeline_manager,
-            self.per_frame_resources.bind_group(),
+            self.global_bindings.bind_group(),
         );
 
         if self.simulation_controller.status() == SimulationControllerStatus::Paused {
@@ -323,7 +331,8 @@ impl Application {
             label: Some("Encoder: Frame Main"),
         });
 
-        self.per_frame_resources.update_gpu_data(
+        update_global_ubo(
+            &mut self.global_ubo,
             &self.command_queue,
             self.camera.fill_global_uniform_buffer(self.screen.aspect_ratio()),
             self.simulation_controller.timer().fill_global_uniform_buffer(),
@@ -336,7 +345,7 @@ impl Application {
             &self.pipeline_manager,
             &self.hdr_backbuffer,
             self.screen.depthbuffer(),
-            self.per_frame_resources.bind_group(),
+            self.global_bindings.bind_group(),
         );
 
         self.hdr_backbuffer.tonemap(&self.screen.backbuffer(), &mut encoder);

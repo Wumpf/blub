@@ -1,6 +1,6 @@
 #version 450
 
-#include "../per_frame_resources.glsl"
+#include "../global_bindings.glsl"
 #include "../utilities.glsl"
 #include "hybrid_fluid.glsl"
 #include "particles.glsl"

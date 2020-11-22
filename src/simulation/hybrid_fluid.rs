@@ -1,10 +1,10 @@
 use super::pressure_solver::*;
-use crate::wgpu_utils;
 use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::binding_glsl;
 use crate::wgpu_utils::pipelines::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::uniformbuffer::*;
+use crate::{scene_models::SceneModels, wgpu_utils};
 use rand::prelude::*;
 use std::{collections::VecDeque, path::Path, rc::Rc, time::Duration};
 
@@ -32,6 +32,7 @@ pub struct HybridFluid {
     simulation_properties: SimulationPropertiesUniformBufferContent,
 
     bind_group_uniform: wgpu::BindGroup,
+    bind_group_write_signed_distance_field: wgpu::BindGroup,
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
     bind_group_divergence_compute: wgpu::BindGroup,
     bind_group_write_velocity: wgpu::BindGroup,
@@ -41,6 +42,8 @@ pub struct HybridFluid {
 
     // The interface to any renderer of the fluid. Readonly access to relevant resources
     bind_group_renderer: wgpu::BindGroup,
+
+    pipeline_compute_distance_field: ComputePipelineHandle,
 
     pipeline_transfer_clear: ComputePipelineHandle,
     pipeline_transfer_build_linkedlist: ComputePipelineHandle,
@@ -80,7 +83,7 @@ impl HybridFluid {
         max_num_particles: u32,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         // Resources
         let simulation_properties_uniformbuffer = UniformBuffer::new(device);
@@ -137,6 +140,10 @@ impl HybridFluid {
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker_primary = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
+        let volume_solid_signed_distances = device.create_texture(&create_volume_texture_desc(
+            "Signed Distance Field for Solids",
+            wgpu::TextureFormat::R16Float,
+        ));
 
         // Resource views
         let volume_velocity_view_x = volume_velocity_x.create_view(&Default::default());
@@ -144,8 +151,12 @@ impl HybridFluid {
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
         let volume_marker_view = volume_marker_primary.create_view(&Default::default());
+        let volume_solid_signed_distances_view = volume_solid_signed_distances.create_view(&Default::default());
 
         // Layouts
+        let group_layout_write_signed_distance_field = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R16Float, false))
+            .create(device, "BindGroupLayout: Signed Distance Field Write");
         let group_layout_uniform = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: HybridFluid Uniform");
@@ -155,6 +166,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::uimage3D(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, false)) // marker volume
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocity component
+            .next_binding_compute(binding_glsl::texture3D()) // marker for static objects
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
         let group_layout_divergence_compute = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture3D()) // marker volume
@@ -223,6 +235,10 @@ impl HybridFluid {
             .resource(simulation_properties_uniformbuffer.binding_resource())
             .create(device, "BindGroup: HybridFluid Uniform");
 
+        let bind_group_write_signed_distance_field = BindGroupBuilder::new(&group_layout_write_signed_distance_field)
+            .texture(&volume_solid_signed_distances_view)
+            .create(device, "BindGroup: Write Distance Field");
+
         let bind_group_transfer_velocity = [
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .resource(particles_position_llindex.as_entire_binding())
@@ -230,6 +246,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_x)
+                .texture(&volume_solid_signed_distances_view)
                 .create(device, "BindGroup: Transfer velocity to volume X"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .resource(particles_position_llindex.as_entire_binding())
@@ -237,6 +254,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_y)
+                .texture(&volume_solid_signed_distances_view)
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .resource(particles_position_llindex.as_entire_binding())
@@ -244,6 +262,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_z)
+                .texture(&volume_solid_signed_distances_view)
                 .create(device, "BindGroup: Transfer velocity to volume Z"),
         ];
         let bind_group_divergence_compute = BindGroupBuilder::new(&group_layout_divergence_compute)
@@ -303,10 +322,15 @@ impl HybridFluid {
             range: 0..8,
         }];
 
+        let layout_compute_distance_field = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("PipelineLayout: HybridFluid, Compute Distance Field"),
+            bind_group_layouts: &[global_bind_group_layout, &group_layout_write_signed_distance_field.layout],
+            push_constant_ranges,
+        }));
         let layout_transfer_velocity = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Transfer Velocity"),
             bind_group_layouts: &[
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 &group_layout_uniform.layout,
                 &group_layout_transfer_velocity.layout,
             ],
@@ -314,13 +338,13 @@ impl HybridFluid {
         }));
         let layout_divergence_compute = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Compute Divergence"),
-            bind_group_layouts: &[per_frame_bind_group_layout, &group_layout_divergence_compute.layout],
+            bind_group_layouts: &[global_bind_group_layout, &group_layout_divergence_compute.layout],
             push_constant_ranges,
         }));
         let layout_write_velocity_volume = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Write Volume"),
             bind_group_layouts: &[
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 &group_layout_uniform.layout,
                 &group_layout_write_velocity_volume.layout,
             ],
@@ -329,7 +353,7 @@ impl HybridFluid {
         let layout_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Particles"),
             bind_group_layouts: &[
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 &group_layout_uniform.layout,
                 &group_layout_advect_particles.layout,
             ],
@@ -338,7 +362,7 @@ impl HybridFluid {
         let layout_density_projection_gather_error = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Density Projection Gather"),
             bind_group_layouts: &[
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 &group_layout_uniform.layout,
                 &group_layout_density_projection_gather_error.layout,
             ],
@@ -347,7 +371,7 @@ impl HybridFluid {
         let layout_density_projection_correct_particles = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Density Projection Gather"),
             bind_group_layouts: &[
-                per_frame_bind_group_layout,
+                global_bind_group_layout,
                 &group_layout_uniform.layout,
                 &group_layout_density_projection_correct_particles.layout,
             ],
@@ -372,6 +396,7 @@ impl HybridFluid {
             },
 
             bind_group_uniform,
+            bind_group_write_signed_distance_field,
             bind_group_transfer_velocity,
             bind_group_divergence_compute,
             bind_group_write_velocity,
@@ -381,6 +406,15 @@ impl HybridFluid {
             bind_group_density_projection_gather_error,
             bind_group_density_projection_correct_particles,
 
+            pipeline_compute_distance_field: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(
+                    "Signed Distance Field from Mesh",
+                    layout_compute_distance_field.clone(),
+                    Path::new("simulation/compute_distance_field.comp"),
+                ),
+            ),
             pipeline_transfer_clear: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
@@ -556,6 +590,23 @@ impl HybridFluid {
         self.simulation_properties.num_particles += num_new_particles;
     }
 
+    pub fn add_static_meshes(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline_manager: &PipelineManager,
+        global_bind_group: &wgpu::BindGroup,
+        static_scene: &SceneModels,
+    ) {
+        wgpu_scope!(encoder, "HybridFluid.add_static_meshes");
+        let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
+        let mut compute_pass = encoder.begin_compute_pass();
+        compute_pass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_compute_distance_field));
+        compute_pass.set_push_constants(0, bytemuck::bytes_of(&[static_scene.meshes.len() as u32, 0]));
+        compute_pass.set_bind_group(0, global_bind_group, &[]);
+        compute_pass.set_bind_group(1, &self.bind_group_write_signed_distance_field, &[]);
+        compute_pass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+    }
+
     pub fn set_gravity_grid(&mut self, gravity: cgmath::Vector3<f32>) {
         self.simulation_properties.gravity_grid = gravity;
     }
@@ -627,7 +678,7 @@ impl HybridFluid {
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
-        per_frame_bind_group: &wgpu::BindGroup,
+        global_bind_group: &wgpu::BindGroup,
     ) {
         wgpu_scope!(encoder, "HybridFluid.step");
 
@@ -642,7 +693,7 @@ impl HybridFluid {
 
         {
             let mut cpass = encoder.begin_compute_pass();
-            cpass.set_bind_group(0, per_frame_bind_group, &[]);
+            cpass.set_bind_group(0, global_bind_group, &[]);
             cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
 
             wgpu_scope!(cpass, "transfer particle velocity to grid", || {
@@ -687,7 +738,7 @@ impl HybridFluid {
 
         {
             let mut cpass = encoder.begin_compute_pass();
-            cpass.set_bind_group(0, per_frame_bind_group, &[]);
+            cpass.set_bind_group(0, global_bind_group, &[]);
             cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
 
             {
@@ -734,7 +785,7 @@ impl HybridFluid {
         {
             let mut cpass = encoder.begin_compute_pass();
             wgpu_scope!(cpass, "correct particle density error", || {
-                cpass.set_bind_group(0, per_frame_bind_group, &[]);
+                cpass.set_bind_group(0, global_bind_group, &[]);
                 cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
                 cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_correct_particles));

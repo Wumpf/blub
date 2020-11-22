@@ -1,4 +1,4 @@
-#include "per_frame_resources.glsl"
+#include "global_bindings.glsl"
 #include "utilities.glsl"
 
 layout(set = 1, binding = 0) uniform BackgroundAndLighting {

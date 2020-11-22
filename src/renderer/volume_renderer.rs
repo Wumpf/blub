@@ -26,12 +26,12 @@ impl VolumeRenderer {
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
         fluid_renderer_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let layout = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Volume Renderer Pipeline Layout"),
-            bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
+            bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStage::VERTEX,
                 range: 0..4,

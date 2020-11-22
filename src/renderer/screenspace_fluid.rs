@@ -50,7 +50,7 @@ impl ScreenSpaceFluid {
         device: &wgpu::Device,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
-        per_frame_bind_group_layout: &wgpu::BindGroupLayout,
+        global_bind_group_layout: &wgpu::BindGroupLayout,
         fluid_renderer_group_layout: &wgpu::BindGroupLayout,
         background_and_lighting_group_layout: &wgpu::BindGroupLayout,
         backbuffer: &HdrBackbuffer,
@@ -78,7 +78,7 @@ impl ScreenSpaceFluid {
                 label: "ScreenspaceFluid: Render Particles",
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Particles for SS Fluid Pipeline Layout"),
-                    bind_group_layouts: &[&per_frame_bind_group_layout, &fluid_renderer_group_layout],
+                    bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
                     push_constant_ranges: &[],
                 })),
                 vertex_shader_relative_path: PathBuf::from("screenspace_fluid/particles.vert"),
@@ -132,7 +132,7 @@ impl ScreenSpaceFluid {
         let layout_narrow_range_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Narrow Range Filter Pipeline Layout"),
             bind_group_layouts: &[
-                &per_frame_bind_group_layout,
+                &global_bind_group_layout,
                 &fluid_renderer_group_layout,
                 &group_layout_narrow_range_filter.layout,
             ],
@@ -160,7 +160,7 @@ impl ScreenSpaceFluid {
         let layout_thickness_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Thickness Filter Pipeline Layout"),
             bind_group_layouts: &[
-                &per_frame_bind_group_layout,
+                &global_bind_group_layout,
                 &fluid_renderer_group_layout,
                 &group_layout_thickness_filter.layout,
             ],
@@ -184,7 +184,7 @@ impl ScreenSpaceFluid {
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Fluid Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        &per_frame_bind_group_layout,
+                        &global_bind_group_layout,
                         &background_and_lighting_group_layout,
                         &group_layout_compose.layout,
                     ],
@@ -337,7 +337,7 @@ impl ScreenSpaceFluid {
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &'a PipelineManager,
         depthbuffer: &wgpu::TextureView,
-        per_frame_bind_group: &wgpu::BindGroup,
+        global_bind_group: &wgpu::BindGroup,
         background_and_lighting_bind_group: &wgpu::BindGroup,
         fluid: &HybridFluid,
         backbuffer: &HdrBackbuffer,
@@ -399,7 +399,7 @@ impl ScreenSpaceFluid {
                     stencil_ops: None,
                 }),
             });
-            rpass.set_bind_group(0, &per_frame_bind_group, &[]);
+            rpass.set_bind_group(0, &global_bind_group, &[]);
             rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
             rpass.set_pipeline(pipeline_manager.get_render(&self.screen_independent.pipeline_render_particles));
             rpass.draw(0..4, 0..fluid.num_particles());
@@ -440,7 +440,7 @@ impl ScreenSpaceFluid {
 
         wgpu_scope!(encoder, "fluid filters & render", || {
             let mut cpass = encoder.begin_compute_pass();
-            cpass.set_bind_group(0, &per_frame_bind_group, &[]);
+            cpass.set_bind_group(0, &global_bind_group, &[]);
             cpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
 
             const LOCAL_SIZE_FILTER_1D_X: wgpu::Extent3d = wgpu::Extent3d {

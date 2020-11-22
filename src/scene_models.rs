@@ -26,6 +26,8 @@ pub struct MeshData {
 #[derive(Clone, Copy)]
 struct MeshDataGpu {
     transform: cgmath::Matrix4<f32>, // todo: Make this a 4x3
+    vertex_buffer_range: cgmath::Vector2<u32>,
+    index_buffer_range: cgmath::Vector2<u32>,
 }
 unsafe impl bytemuck::Pod for MeshDataGpu {}
 unsafe impl bytemuck::Zeroable for MeshDataGpu {}
@@ -122,18 +124,25 @@ impl SceneModels {
             }
         }
 
-        let meshes_gpu: Vec<MeshDataGpu> = meshes.iter().map(|mesh| MeshDataGpu { transform: mesh.transform }).collect();
+        let meshes_gpu: Vec<MeshDataGpu> = meshes
+            .iter()
+            .map(|mesh| MeshDataGpu {
+                transform: mesh.transform,
+                vertex_buffer_range: cgmath::vec2(mesh.vertex_buffer_range.start, mesh.vertex_buffer_range.end),
+                index_buffer_range: cgmath::vec2(mesh.index_buffer_range.start, mesh.index_buffer_range.end),
+            })
+            .collect();
 
         Ok(SceneModels {
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("SceneModel VertexBuffer"),
                 contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsage::VERTEX,
+                usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::STORAGE,
             }),
             index_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("SceneModel IndexBuffer"),
                 contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsage::INDEX,
+                usage: wgpu::BufferUsage::INDEX | wgpu::BufferUsage::STORAGE,
             }),
             mesh_desc_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("SceneModel Mesh Data"),

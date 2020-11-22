@@ -35,7 +35,7 @@ shared float sharedBuffer[LOCAL_SIZE * 2];
 #include "screenspace_fluid/filter.glsl"
 
 #include "fluid_render_info.glsl"
-#include "per_frame_resources.glsl"
+#include "global_bindings.glsl"
 #include "utilities.glsl"
 
 layout(set = 2, binding = 0, r32f) uniform restrict image2D DepthDest;
