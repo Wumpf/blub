@@ -132,8 +132,11 @@ impl Scene {
         });
 
         if self.distance_field_dirty {
+            info!(
+                "Signed distance field is computed brute force on GPU this frame. For large scenes & weak GPUs you may get TDR (i.e. driver crash)"
+            );
             self.hybrid_fluid
-                .add_static_meshes(&mut encoder, pipeline_manager, global_bind_group, &self.models);
+                .compute_distance_field_for_static(&mut encoder, pipeline_manager, global_bind_group, &self.models);
             self.distance_field_dirty = false;
         }
 

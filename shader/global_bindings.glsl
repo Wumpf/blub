@@ -74,8 +74,8 @@ struct Vertex {
     vec2 NormalYZ;
     vec2 Texcoord;
 };
-layout(set = 0, binding = 4) restrict readonly buffer MeshIndices_ { uint Indices[]; };
-layout(set = 0, binding = 5) restrict readonly buffer MeshVertices_ { Vertex Vertices[]; };
+layout(set = 0, binding = 4) restrict readonly buffer MeshIndices_ { uint MeshIndices[]; };
+layout(set = 0, binding = 5) restrict readonly buffer MeshVertices_ { Vertex MeshVertices[]; };
 
 // ----------------------------------------
 // Other

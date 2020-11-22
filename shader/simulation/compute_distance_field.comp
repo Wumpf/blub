@@ -1,10 +1,59 @@
 #version 460
 
 #include "../global_bindings.glsl"
+#include "../utilities.glsl"
+
 layout(set = 1, binding = 0, r16f) uniform restrict image3D SolidSignedDistances;
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 
+layout(push_constant) uniform PushConstants { uint NumMeshes; };
+
+// https://www.iquilezles.org/www/articles/triangledistance/triangledistance.htm
+float triangleDistanceSquared(in vec3 v1, in vec3 v2, in vec3 v3, in vec3 p) {
+    // prepare data
+    vec3 v21 = v2 - v1;
+    vec3 p1 = p - v1;
+    vec3 v32 = v3 - v2;
+    vec3 p2 = p - v2;
+    vec3 v13 = v1 - v3;
+    vec3 p3 = p - v3;
+    vec3 nor = cross(v21, v13);
+
+    bool insideOutside = sign(dot(cross(v21, nor), p1)) + sign(dot(cross(v32, nor), p2)) + sign(dot(cross(v13, nor), p3)) < 2.0;
+    return insideOutside ?
+                         // 3 edges
+               min(min(dot2(v21 * clamp(dot(v21, p1) / dot2(v21), 0.0, 1.0) - p1), dot2(v32 * clamp(dot(v32, p2) / dot2(v32), 0.0, 1.0) - p2)),
+                   dot2(v13 * clamp(dot(v13, p3) / dot2(v13), 0.0, 1.0) - p3))
+                         :
+                         // 1 face
+               dot(nor, p1) * dot(nor, p1) / dot2(nor);
+}
+
 void main() {
-    // TODO
+    // grid cell world position
+    vec3 cellCenter = (gl_GlobalInvocationID + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
+
+    // Compute min (absolute) distance to triangles
+    float distanceSq = 1.0 / 0.0;
+    for (uint meshIdx = 0; meshIdx < NumMeshes; ++meshIdx) {
+        mat4 transform = Meshes[meshIdx].Transform;
+        uint minVertex = Meshes[meshIdx].VertexBufferRange.x;
+        uvec2 indexRange = Meshes[meshIdx].IndexBufferRange;
+
+        for (uint indexIdx = indexRange.x; indexIdx < indexRange.y; indexIdx += 3) {
+            uint i0 = minVertex + MeshIndices[indexIdx];
+            uint i1 = minVertex + MeshIndices[indexIdx + 1];
+            uint i2 = minVertex + MeshIndices[indexIdx + 2];
+
+            // TODO: Transform grid cell with inverse instead
+            vec3 p0 = (transform * vec4(MeshVertices[i0].Position, 1.0)).xyz;
+            vec3 p1 = (transform * vec4(MeshVertices[i1].Position, 1.0)).xyz;
+            vec3 p2 = (transform * vec4(MeshVertices[i2].Position, 1.0)).xyz;
+
+            distanceSq = min(distanceSq, triangleDistanceSquared(p0, p1, p2, cellCenter));
+        }
+    }
+
+    imageStore(SolidSignedDistances, ivec3(gl_GlobalInvocationID), vec4(sqrt(distanceSq)));
 }

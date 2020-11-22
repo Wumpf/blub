@@ -313,6 +313,7 @@ impl HybridFluid {
             .texture(&volume_marker_view)
             .texture(&pressure_field_from_velocity.pressure_view())
             .texture(&pressure_field_from_density.pressure_view())
+            .texture(&volume_solid_signed_distances_view)
             .create(device, "BindGroup: Fluid Renderers");
 
         // pipeline layouts.
@@ -590,14 +591,14 @@ impl HybridFluid {
         self.simulation_properties.num_particles += num_new_particles;
     }
 
-    pub fn add_static_meshes(
+    pub fn compute_distance_field_for_static(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
         global_bind_group: &wgpu::BindGroup,
         static_scene: &SceneModels,
     ) {
-        wgpu_scope!(encoder, "HybridFluid.add_static_meshes");
+        wgpu_scope!(encoder, "HybridFluid.compute_distance_field_for_static");
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
         let mut compute_pass = encoder.begin_compute_pass();
         compute_pass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_compute_distance_field));
@@ -629,6 +630,7 @@ impl HybridFluid {
                     .next_binding_vertex(binding_glsl::texture3D()) // marker
                     .next_binding_vertex(binding_glsl::texture3D()) // pressure
                     .next_binding_vertex(binding_glsl::texture3D()) // density
+                    .next_binding_vertex(binding_glsl::texture3D()) // distance field
                     .create(device, "BindGroupLayout: ParticleRenderer")
             })
         }
