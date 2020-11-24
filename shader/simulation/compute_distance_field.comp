@@ -1,3 +1,9 @@
+// Brute force implementation of a signed distance field computation for closed meshes (!)
+//
+// It is chunked up into IndexBufferChunkSize chunks to deal with TDR.
+// (also only one mesh at a time for convenience)
+// Note that we have everything in a single global vertex/index which we can eating through.
+
 #version 460
 
 #include "../global_bindings.glsl"
@@ -7,10 +13,15 @@ layout(set = 1, binding = 0, r16f) uniform restrict image3D SolidSignedDistances
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 
-layout(push_constant) uniform PushConstants { uint NumMeshes; };
+const uint IndexBufferChunkSize = 16384 * 3;
+
+layout(push_constant) uniform PushConstants {
+    uint MeshIndex;
+    uint MinIndexBufferIndex;
+};
 
 // https://www.iquilezles.org/www/articles/triangledistance/triangledistance.htm
-float triangleDistanceSquared(in vec3 v1, in vec3 v2, in vec3 v3, in vec3 p) {
+float triangleDistanceSquared(in vec3 v1, in vec3 v2, in vec3 v3, in vec3 p, out vec3 normal) {
     // prepare data
     vec3 v21 = v2 - v1;
     vec3 p1 = p - v1;
@@ -18,47 +29,56 @@ float triangleDistanceSquared(in vec3 v1, in vec3 v2, in vec3 v3, in vec3 p) {
     vec3 p2 = p - v2;
     vec3 v13 = v1 - v3;
     vec3 p3 = p - v3;
-    vec3 nor = cross(v21, v13);
+    normal = cross(v21, v13);
 
-    bool insideOutside = sign(dot(cross(v21, nor), p1)) + sign(dot(cross(v32, nor), p2)) + sign(dot(cross(v13, nor), p3)) < 2.0;
+    bool insideOutside = sign(dot(cross(v21, normal), p1)) + sign(dot(cross(v32, normal), p2)) + sign(dot(cross(v13, normal), p3)) < 2.0;
     return insideOutside ?
                          // 3 edges
                min(min(dot2(v21 * clamp(dot(v21, p1) / dot2(v21), 0.0, 1.0) - p1), dot2(v32 * clamp(dot(v32, p2) / dot2(v32), 0.0, 1.0) - p2)),
                    dot2(v13 * clamp(dot(v13, p3) / dot2(v13), 0.0, 1.0) - p3))
                          :
                          // 1 face
-               dot(nor, p1) * dot(nor, p1) / dot2(nor);
+               dot(normal, p1) * dot(normal, p1) / dot2(normal);
 }
 
 void main() {
     // grid cell world position
     vec3 cellCenter = (gl_GlobalInvocationID + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
 
-    // TODO: This is super costly (close to TDR kind of costly!), need to...
-    // * break computation down into passes?
-    // * use shared memory to buffer some of the data access.
+    // clear on first run, otherwise improve on existing results.
+    float distanceSq = 1.0 / 0.0;
+    float distanceSign = 1.0;
+    if (MeshIndex != 0 || MinIndexBufferIndex != 0) {
+        float previousDistance = imageLoad(SolidSignedDistances, ivec3(gl_GlobalInvocationID)).x;
+        distanceSign = sign(previousDistance);
+        distanceSq = previousDistance * previousDistance;
+    }
 
     // Compute min (absolute) distance to triangles
-    float distanceSq = 1.0 / 0.0;
-    for (uint meshIdx = 0; meshIdx < NumMeshes; ++meshIdx) {
-        vec3 relativeCellCenter = vec4(cellCenter, 1.0) * Meshes[meshIdx].InverseTransform;
-        uint minVertex = Meshes[meshIdx].VertexBufferRange.x;
-        uvec2 indexRange = Meshes[meshIdx].IndexBufferRange;
+    uint minVertex = Meshes[MeshIndex].VertexBufferRange.x;
+    vec3 relativeCellCenter = vec4(cellCenter, 1.0) * Meshes[MeshIndex].InverseTransform;
 
-        for (uint indexIdx = indexRange.x; indexIdx < indexRange.y; indexIdx += 3) {
-            uint i0 = minVertex + MeshIndices[indexIdx];
-            uint i1 = minVertex + MeshIndices[indexIdx + 1];
-            uint i2 = minVertex + MeshIndices[indexIdx + 2];
+    uint maxIndexBufferIndex = min(MinIndexBufferIndex + IndexBufferChunkSize, Meshes[MeshIndex].IndexBufferRange.y);
+    for (uint indexIdx = MinIndexBufferIndex; indexIdx < maxIndexBufferIndex; indexIdx += 3) {
+        uint i0 = minVertex + MeshIndices[indexIdx];
+        uint i1 = minVertex + MeshIndices[indexIdx + 1];
+        uint i2 = minVertex + MeshIndices[indexIdx + 2];
 
-            vec3 p0 = MeshVertices[i0].Position;
-            vec3 p1 = MeshVertices[i1].Position;
-            vec3 p2 = MeshVertices[i2].Position;
+        vec3 p0 = MeshVertices[i0].Position;
+        vec3 p1 = MeshVertices[i1].Position;
+        vec3 p2 = MeshVertices[i2].Position;
 
-            distanceSq = min(distanceSq, triangleDistanceSquared(p0, p1, p2, relativeCellCenter));
-
-            // TODO: Determine inside / outside
+        vec3 triangleNormal;
+        float newDistanceSq = triangleDistanceSquared(p0, p1, p2, relativeCellCenter, triangleNormal);
+        if (newDistanceSq != newDistanceSq)
+            newDistanceSq = 0.0;
+        if (newDistanceSq < distanceSq) {
+            distanceSq = newDistanceSq;
+            distanceSign = dot(triangleNormal, p0 - relativeCellCenter) < 0.0 ? -1.0 : 1.0;
         }
     }
 
-    imageStore(SolidSignedDistances, ivec3(gl_GlobalInvocationID), vec4(sqrt(distanceSq)));
+    if (abs(distanceSq) < 0.0001)
+        distanceSq += distanceSign * 0.0001;
+    imageStore(SolidSignedDistances, ivec3(gl_GlobalInvocationID), vec4(sqrt(distanceSq) * distanceSign));
 }

@@ -127,19 +127,15 @@ impl Scene {
         // Poll device to update mapped buffers which may feed back into what a step does.
         device.poll(wgpu::Maintain::Poll);
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Encoder: Scene Step"),
-        });
-
         if self.distance_field_dirty {
-            info!(
-                "Signed distance field is computed brute force on GPU this frame. For large scenes & weak GPUs you may get TDR (i.e. driver crash)"
-            );
             self.hybrid_fluid
-                .compute_distance_field_for_static(&mut encoder, pipeline_manager, global_bind_group, &self.models);
+                .compute_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, &self.models.meshes);
             self.distance_field_dirty = false;
         }
 
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Encoder: Scene Step"),
+        });
         self.hybrid_fluid
             .step(simulation_delta, &mut encoder, pipeline_manager, queue, global_bind_group);
         queue.submit(Some(encoder.finish()));

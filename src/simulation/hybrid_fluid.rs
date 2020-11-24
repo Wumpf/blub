@@ -593,19 +593,49 @@ impl HybridFluid {
 
     pub fn compute_distance_field_for_static(
         &self,
-        encoder: &mut wgpu::CommandEncoder,
+        device: &wgpu::Device,
         pipeline_manager: &PipelineManager,
+        queue: &wgpu::Queue,
         global_bind_group: &wgpu::BindGroup,
-        static_scene: &SceneModels,
+        meshes: &Vec<crate::scene_models::MeshData>,
     ) {
-        wgpu_scope!(encoder, "HybridFluid.compute_distance_field_for_static");
+        // Brute force signed distance field computation.
+        // Chunked up into several operations each with full wait so we don't run into TDR.
+        info!("Static signed distance field is computed brute force on GPU...");
+        let start_time_overall = std::time::Instant::now();
+
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
-        let mut compute_pass = encoder.begin_compute_pass();
-        compute_pass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_compute_distance_field));
-        compute_pass.set_push_constants(0, bytemuck::bytes_of(&[static_scene.meshes.len() as u32, 0]));
-        compute_pass.set_bind_group(0, global_bind_group, &[]);
-        compute_pass.set_bind_group(1, &self.bind_group_write_signed_distance_field, &[]);
-        compute_pass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+
+        const INDEX_CHUNK_SIZE: u32 = 16384 * 3; // max 16384 triangles at a time.
+        for (mesh_idx, mesh) in meshes.iter().enumerate() {
+            let mut start_index = mesh.index_buffer_range.start;
+            while start_index < mesh.index_buffer_range.end {
+                let end_index = std::cmp::min(mesh.index_buffer_range.end, start_index + INDEX_CHUNK_SIZE);
+                let start_time = std::time::Instant::now();
+                info!("    adding {} triangles...", (end_index - start_index) / 3);
+
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Encoder: Distance Field Compute"),
+                });
+
+                {
+                    let mut compute_pass = encoder.begin_compute_pass();
+                    compute_pass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_compute_distance_field));
+                    compute_pass.set_bind_group(0, global_bind_group, &[]);
+                    compute_pass.set_bind_group(1, &self.bind_group_write_signed_distance_field, &[]);
+                    compute_pass.set_push_constants(0, bytemuck::bytes_of(&[mesh_idx as u32, start_index]));
+                    compute_pass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                }
+
+                queue.submit(Some(encoder.finish()));
+                device.poll(wgpu::Maintain::Wait);
+
+                info!("    (took {:?})", start_time.elapsed());
+                start_index += INDEX_CHUNK_SIZE;
+            }
+        }
+
+        info!("Static signed distance field computation took {:?}", start_time_overall.elapsed());
     }
 
     pub fn set_gravity_grid(&mut self, gravity: cgmath::Vector3<f32>) {
