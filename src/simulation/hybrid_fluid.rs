@@ -561,7 +561,7 @@ impl HybridFluid {
         scene_path: &Path,
     ) {
         let cache_filename = scene_path.parent().unwrap().join(format!(
-            ".{}.static_signed_distance_field",
+            ".{}.static_signed_distance_field.cache",
             scene_path.file_name().unwrap().to_str().unwrap()
         ));
         match self.signed_distance_field.load_signed_distance_field(&cache_filename, queue) {

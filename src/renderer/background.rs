@@ -45,7 +45,7 @@ mod cubemap_loader {
     const CUBEMAP_FORMAT_BYTES_PER_PIXEL: u32 = std::mem::size_of::<Rgbe8Pixel>() as u32;
 
     fn get_cache_filename(path: &Path) -> PathBuf {
-        path.join(format!(".cached_raw_data"))
+        path.join(format!(".raw_rgbe8_cubemap.cache"))
     }
 
     fn from_cache(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<wgpu::Texture, std::io::Error> {
