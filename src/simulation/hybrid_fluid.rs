@@ -1,10 +1,5 @@
-use super::pressure_solver::*;
-use crate::wgpu_utils::binding_builder::*;
-use crate::wgpu_utils::binding_glsl;
-use crate::wgpu_utils::pipelines::*;
-use crate::wgpu_utils::shader::*;
-use crate::wgpu_utils::uniformbuffer::*;
-use crate::{scene_models::SceneModels, wgpu_utils};
+use super::{pressure_solver::*, signed_distance_field::SignedDistanceField};
+use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, shader::*, uniformbuffer::*};
 use rand::prelude::*;
 use std::{collections::VecDeque, path::Path, rc::Rc, time::Duration};
 
@@ -24,6 +19,8 @@ pub struct HybridFluid {
     pressure_field_from_velocity: PressureField,
     pressure_field_from_density: PressureField,
 
+    signed_distance_field: SignedDistanceField,
+
     particles_position_llindex: wgpu::Buffer,
     particles_velocity_x: wgpu::Buffer,
     particles_velocity_y: wgpu::Buffer,
@@ -32,7 +29,6 @@ pub struct HybridFluid {
     simulation_properties: SimulationPropertiesUniformBufferContent,
 
     bind_group_uniform: wgpu::BindGroup,
-    bind_group_write_signed_distance_field: wgpu::BindGroup,
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
     bind_group_divergence_compute: wgpu::BindGroup,
     bind_group_write_velocity: wgpu::BindGroup,
@@ -42,8 +38,6 @@ pub struct HybridFluid {
 
     // The interface to any renderer of the fluid. Readonly access to relevant resources
     bind_group_renderer: wgpu::BindGroup,
-
-    pipeline_compute_distance_field: ComputePipelineHandle,
 
     pipeline_transfer_clear: ComputePipelineHandle,
     pipeline_transfer_build_linkedlist: ComputePipelineHandle,
@@ -112,17 +106,6 @@ impl HybridFluid {
             mapped_at_creation: false,
         });
 
-        // TODO:
-        // Various sources, old and new, claim that on Nvidia hardware 3D textures are actually 2d slices!
-        // http://www-ppl.ist.osaka-u.ac.jp/research/papers/201405_sugimoto_pc.pdf
-        // https://www.sciencedirect.com/science/article/pii/S2468502X1730027X#fig1
-        // https://forum.unity.com/threads/improving-performance-of-3d-textures-using-texture-arrays.725384/#post-4849571
-        // For Intel this is directly documented
-        // https://www.x.org/docs/intel/BYT/intel_os_gfx_prm_vol5_-_memory_views.pdf
-        // Wasn't able to find anything on AMD, but there is sources implying the layered nature
-        // ("Two bilinear fetches are required when sampling from a volume texture with bilinear
-        // filtering.")[http://amd-dev.wpengine.netdna-cdn.com/wordpress/media/2013/05/GCNPerformanceTweets.pdf]
-
         let create_volume_texture_desc = |label: &'static str, format: wgpu::TextureFormat| -> wgpu::TextureDescriptor {
             wgpu::TextureDescriptor {
                 label: Some(label),
@@ -140,10 +123,6 @@ impl HybridFluid {
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker_primary = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
-        let volume_solid_signed_distances = device.create_texture(&create_volume_texture_desc(
-            "Signed Distance Field for Solids",
-            wgpu::TextureFormat::R16Float,
-        ));
 
         // Resource views
         let volume_velocity_view_x = volume_velocity_x.create_view(&Default::default());
@@ -151,12 +130,8 @@ impl HybridFluid {
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
         let volume_marker_view = volume_marker_primary.create_view(&Default::default());
-        let volume_solid_signed_distances_view = volume_solid_signed_distances.create_view(&Default::default());
 
         // Layouts
-        let group_layout_write_signed_distance_field = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R16Float, false))
-            .create(device, "BindGroupLayout: Signed Distance Field Write");
         let group_layout_uniform = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: HybridFluid Uniform");
@@ -230,14 +205,12 @@ impl HybridFluid {
             },
         );
 
+        let signed_distance_field = SignedDistanceField::new(device, grid_dimension, shader_dir, pipeline_manager, global_bind_group_layout);
+
         // Bind groups.
         let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
             .resource(simulation_properties_uniformbuffer.binding_resource())
             .create(device, "BindGroup: HybridFluid Uniform");
-
-        let bind_group_write_signed_distance_field = BindGroupBuilder::new(&group_layout_write_signed_distance_field)
-            .texture(&volume_solid_signed_distances_view)
-            .create(device, "BindGroup: Write Distance Field");
 
         let bind_group_transfer_velocity = [
             BindGroupBuilder::new(&group_layout_transfer_velocity)
@@ -246,7 +219,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_x)
-                .texture(&volume_solid_signed_distances_view)
+                .texture(signed_distance_field.texture_view())
                 .create(device, "BindGroup: Transfer velocity to volume X"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .resource(particles_position_llindex.as_entire_binding())
@@ -254,7 +227,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_y)
-                .texture(&volume_solid_signed_distances_view)
+                .texture(signed_distance_field.texture_view())
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .resource(particles_position_llindex.as_entire_binding())
@@ -262,7 +235,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_z)
-                .texture(&volume_solid_signed_distances_view)
+                .texture(signed_distance_field.texture_view())
                 .create(device, "BindGroup: Transfer velocity to volume Z"),
         ];
         let bind_group_divergence_compute = BindGroupBuilder::new(&group_layout_divergence_compute)
@@ -313,7 +286,7 @@ impl HybridFluid {
             .texture(&volume_marker_view)
             .texture(&pressure_field_from_velocity.pressure_view())
             .texture(&pressure_field_from_density.pressure_view())
-            .texture(&volume_solid_signed_distances_view)
+            .texture(signed_distance_field.texture_view())
             .create(device, "BindGroup: Fluid Renderers");
 
         // pipeline layouts.
@@ -323,11 +296,6 @@ impl HybridFluid {
             range: 0..8,
         }];
 
-        let layout_compute_distance_field = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("PipelineLayout: HybridFluid, Compute Distance Field"),
-            bind_group_layouts: &[global_bind_group_layout, &group_layout_write_signed_distance_field.layout],
-            push_constant_ranges,
-        }));
         let layout_transfer_velocity = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Transfer Velocity"),
             bind_group_layouts: &[
@@ -386,6 +354,8 @@ impl HybridFluid {
             pressure_field_from_velocity,
             pressure_field_from_density,
 
+            signed_distance_field,
+
             particles_position_llindex,
             particles_velocity_x,
             particles_velocity_y,
@@ -397,7 +367,6 @@ impl HybridFluid {
             },
 
             bind_group_uniform,
-            bind_group_write_signed_distance_field,
             bind_group_transfer_velocity,
             bind_group_divergence_compute,
             bind_group_write_velocity,
@@ -407,15 +376,6 @@ impl HybridFluid {
             bind_group_density_projection_gather_error,
             bind_group_density_projection_correct_particles,
 
-            pipeline_compute_distance_field: pipeline_manager.create_compute_pipeline(
-                device,
-                shader_dir,
-                ComputePipelineCreationDesc::new(
-                    "Signed Distance Field from Mesh",
-                    layout_compute_distance_field.clone(),
-                    Path::new("simulation/compute_distance_field.comp"),
-                ),
-            ),
             pipeline_transfer_clear: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
@@ -591,51 +551,16 @@ impl HybridFluid {
         self.simulation_properties.num_particles += num_new_particles;
     }
 
-    pub fn compute_distance_field_for_static(
+    pub fn update_signed_distance_field_for_static(
         &self,
         device: &wgpu::Device,
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
         global_bind_group: &wgpu::BindGroup,
-        meshes: &Vec<crate::scene_models::MeshData>,
+        static_meshes: &Vec<crate::scene_models::MeshData>,
     ) {
-        // Brute force signed distance field computation.
-        // Chunked up into several operations each with full wait so we don't run into TDR.
-        info!("Static signed distance field is computed brute force on GPU...");
-        let start_time_overall = std::time::Instant::now();
-
-        let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
-
-        const INDEX_CHUNK_SIZE: u32 = 16384 * 3; // max 16384 triangles at a time.
-        for (mesh_idx, mesh) in meshes.iter().enumerate() {
-            let mut start_index = mesh.index_buffer_range.start;
-            while start_index < mesh.index_buffer_range.end {
-                let end_index = std::cmp::min(mesh.index_buffer_range.end, start_index + INDEX_CHUNK_SIZE);
-                let start_time = std::time::Instant::now();
-                info!("    adding {} triangles...", (end_index - start_index) / 3);
-
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Encoder: Distance Field Compute"),
-                });
-
-                {
-                    let mut compute_pass = encoder.begin_compute_pass();
-                    compute_pass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_compute_distance_field));
-                    compute_pass.set_bind_group(0, global_bind_group, &[]);
-                    compute_pass.set_bind_group(1, &self.bind_group_write_signed_distance_field, &[]);
-                    compute_pass.set_push_constants(0, bytemuck::bytes_of(&[mesh_idx as u32, start_index]));
-                    compute_pass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-                }
-
-                queue.submit(Some(encoder.finish()));
-                device.poll(wgpu::Maintain::Wait);
-
-                info!("    (took {:?})", start_time.elapsed());
-                start_index += INDEX_CHUNK_SIZE;
-            }
-        }
-
-        info!("Static signed distance field computation took {:?}", start_time_overall.elapsed());
+        self.signed_distance_field
+            .compute_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, static_meshes);
     }
 
     pub fn set_gravity_grid(&mut self, gravity: cgmath::Vector3<f32>) {

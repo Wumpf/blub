@@ -129,7 +129,7 @@ impl Scene {
 
         if self.distance_field_dirty {
             self.hybrid_fluid
-                .compute_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, &self.models.meshes);
+                .update_signed_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, &self.models.meshes);
             self.distance_field_dirty = false;
         }
 

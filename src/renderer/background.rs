@@ -137,7 +137,7 @@ mod cubemap_loader {
             let image_data = decoder.read_image_native().unwrap();
             let image_data_raw =
                 unsafe { std::slice::from_raw_parts(image_data.as_ptr() as *const u8, image_data.len() * std::mem::size_of::<Rgbe8Pixel>()) };
-            cache_file.write_all(image_data_raw);
+            cache_file.write_all(image_data_raw)?;
 
             queue.write_texture(
                 wgpu::TextureCopyView {
