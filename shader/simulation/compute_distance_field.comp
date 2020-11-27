@@ -78,7 +78,8 @@ void main() {
         }
     }
 
-    if (abs(distanceSq) < 0.0001)
-        distanceSq += distanceSign * 0.0001;
-    imageStore(SolidSignedDistances, ivec3(gl_GlobalInvocationID), vec4(sqrt(distanceSq) * distanceSign));
+    float dist = sqrt(distanceSq) * distanceSign;
+    if (dist != dist)
+        dist = 0.0;
+    imageStore(SolidSignedDistances, ivec3(gl_GlobalInvocationID), vec4(dist));
 }
