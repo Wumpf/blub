@@ -22,3 +22,6 @@ screenshot*.png
 
 # no sun variant of background. easy to replicate with gimp
 background/no sun
+
+# Data that is cached on first run for faster loading.
+background/.cached_raw_data

@@ -4,7 +4,6 @@ use crate::{
     wgpu_utils::uniformbuffer::PaddedVector3,
     wgpu_utils::{binding_builder::*, binding_glsl, pipelines::*, shader::ShaderDirectory, uniformbuffer::UniformBuffer},
 };
-use image::hdr::{HdrDecoder, Rgbe8Pixel};
 use serde::Deserialize;
 use std::{fs::File, io, io::BufReader, path::Path, rc::Rc};
 
@@ -34,74 +33,151 @@ pub struct Background {
     bind_group: wgpu::BindGroup,
 }
 
-// Loads cubemap in rgbe format
-fn load_cubemap(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<wgpu::TextureView, io::Error> {
-    let filenames = ["px.hdr", "nx.hdr", "py.hdr", "ny.hdr", "pz.hdr", "nz.hdr"];
+mod cubemap_loader {
+    use image::hdr::Rgbe8Pixel;
+    use std::{
+        fs::File,
+        io::{Read, Write},
+        path::{Path, PathBuf},
+    };
 
-    let mut cubemap = None;
-    let mut resolution: u32 = 0;
+    const CUBEMAP_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+    const CUBEMAP_FORMAT_BYTES_PER_PIXEL: u32 = std::mem::size_of::<Rgbe8Pixel>() as u32;
 
-    for (i, filename) in filenames.iter().enumerate() {
-        info!("loading cubemap face {}..", i);
+    fn get_cache_filename(path: &Path) -> PathBuf {
+        path.join(format!(".cached_raw_data"))
+    }
 
-        let file_reader = BufReader::new(File::open(path.join(filename))?);
-        let decoder = HdrDecoder::new(file_reader).unwrap();
-        let metadata = decoder.metadata();
+    fn from_cache(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<wgpu::Texture, std::io::Error> {
+        let cache_filename = get_cache_filename(path);
+        info!("loading cubemap from cached raw file at {:?}", cache_filename);
 
-        if metadata.height != metadata.width {
-            panic!("cubemap face width not equal height");
-        }
+        let mut image_data = Vec::new();
+        let num_bytes_read = File::open(cache_filename)?.read_to_end(&mut image_data).unwrap();
 
-        if let &None = &cubemap {
-            resolution = metadata.width;
-            cubemap = Some(device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Cubemap"),
-                size: wgpu::Extent3d {
-                    width: resolution,
-                    height: resolution,
-                    depth: 6,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-            }));
-        }
+        let resolution = f32::sqrt((num_bytes_read / 4 / 6) as f32) as u32;
 
-        if resolution != metadata.width {
-            panic!("all cubemap faces need to have the same resolution");
-        }
-
-        let image_data = decoder.read_image_native().unwrap();
-        let image_data_raw =
-            unsafe { std::slice::from_raw_parts(image_data.as_ptr() as *const u8, image_data.len() * std::mem::size_of::<Rgbe8Pixel>()) };
+        let cubemap = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Cubemap"),
+            size: wgpu::Extent3d {
+                width: resolution,
+                height: resolution,
+                depth: 6,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: CUBEMAP_FORMAT,
+            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+        });
 
         queue.write_texture(
             wgpu::TextureCopyView {
-                texture: &cubemap.as_ref().unwrap(),
+                texture: &cubemap,
                 mip_level: 0,
-                origin: wgpu::Origin3d { x: 0, y: 0, z: i as u32 },
+                origin: wgpu::Origin3d::ZERO,
             },
-            image_data_raw,
+            &image_data,
             wgpu::TextureDataLayout {
                 offset: 0,
-                bytes_per_row: std::mem::size_of::<Rgbe8Pixel>() as u32 * resolution,
-                rows_per_image: 0,
+                bytes_per_row: CUBEMAP_FORMAT_BYTES_PER_PIXEL * resolution,
+                rows_per_image: resolution,
             },
             wgpu::Extent3d {
                 width: resolution,
                 height: resolution,
-                depth: 1,
+                depth: 6,
             },
         );
+
+        Ok(cubemap)
     }
 
-    Ok(cubemap.unwrap().create_view(&wgpu::TextureViewDescriptor {
-        label: None,
-        dimension: Some(wgpu::TextureViewDimension::Cube),
-        ..wgpu::TextureViewDescriptor::default()
-    }))
+    // Loads cubemap in rgbe format
+    fn from_hdr_faces(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<wgpu::Texture, std::io::Error> {
+        let filenames = ["px.hdr", "nx.hdr", "py.hdr", "ny.hdr", "pz.hdr", "nz.hdr"];
+
+        let mut cubemap = None;
+        let mut resolution: u32 = 0;
+
+        let mut cache_file = File::create(get_cache_filename(path)).unwrap();
+
+        for (i, filename) in filenames.iter().enumerate() {
+            info!("loading cubemap face {}..", i);
+
+            let file_reader = std::io::BufReader::new(File::open(path.join(filename))?);
+            let decoder = image::hdr::HdrDecoder::new(file_reader).unwrap();
+            let metadata = decoder.metadata();
+
+            if metadata.height != metadata.width {
+                panic!("cubemap face width not equal height");
+            }
+
+            if let &None = &cubemap {
+                resolution = metadata.width;
+                cubemap = Some(device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("Cubemap"),
+                    size: wgpu::Extent3d {
+                        width: resolution,
+                        height: resolution,
+                        depth: 6,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: CUBEMAP_FORMAT,
+                    usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+                }));
+            }
+
+            if resolution != metadata.width {
+                panic!("all cubemap faces need to have the same resolution");
+            }
+
+            let image_data = decoder.read_image_native().unwrap();
+            let image_data_raw =
+                unsafe { std::slice::from_raw_parts(image_data.as_ptr() as *const u8, image_data.len() * std::mem::size_of::<Rgbe8Pixel>()) };
+            cache_file.write_all(image_data_raw);
+
+            queue.write_texture(
+                wgpu::TextureCopyView {
+                    texture: &cubemap.as_ref().unwrap(),
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x: 0, y: 0, z: i as u32 },
+                },
+                image_data_raw,
+                wgpu::TextureDataLayout {
+                    offset: 0,
+                    bytes_per_row: CUBEMAP_FORMAT_BYTES_PER_PIXEL * resolution,
+                    rows_per_image: 0,
+                },
+                wgpu::Extent3d {
+                    width: resolution,
+                    height: resolution,
+                    depth: 1,
+                },
+            );
+        }
+
+        Ok(cubemap.unwrap())
+    }
+
+    pub fn load(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<wgpu::TextureView, std::io::Error> {
+        // Loading .hdr is somewhat slow, especially so in debug. So we cache the raw data.
+        let cubemap = match from_cache(path, device, queue) {
+            Ok(cubemap) => cubemap,
+            Err(_) => {
+                info!("no raw cubemap file, loading from .hdr faces instead");
+                from_hdr_faces(path, device, queue)?
+            }
+        };
+
+        Ok(cubemap.create_view(&wgpu::TextureViewDescriptor {
+            label: None,
+            dimension: Some(wgpu::TextureViewDimension::Cube),
+            ..wgpu::TextureViewDescriptor::default()
+        }))
+    }
 }
 
 impl Background {
@@ -136,7 +212,7 @@ impl Background {
             },
         );
 
-        let cubemap_view = load_cubemap(path, device, queue)?;
+        let cubemap_view = cubemap_loader::load(path, device, queue)?;
 
         let bind_group_layout = BindGroupLayoutBuilder::new()
             .next_binding(wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::FRAGMENT, binding_glsl::uniform())
