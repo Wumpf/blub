@@ -25,3 +25,4 @@ background/no sun
 
 # Data that is cached on first run for faster loading.
 background/.cached_raw_data
+*.static_signed_distance_field

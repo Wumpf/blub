@@ -1,4 +1,5 @@
-use std::{path::Path, rc::Rc};
+use futures::FutureExt;
+use std::{io::Read, io::Write, path::Path, rc::Rc};
 
 use crate::wgpu_utils::{
     self,
@@ -12,10 +13,14 @@ pub struct SignedDistanceField {
     grid_dimension: wgpu::Extent3d,
     bind_group_write_signed_distance_field: wgpu::BindGroup,
     pipeline_compute_distance_field: ComputePipelineHandle,
+    volume_signed_distances: wgpu::Texture,
     volume_signed_distances_view: wgpu::TextureView,
 }
 
 impl SignedDistanceField {
+    const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+    const BYTES_PER_VOXEL: u32 = 2;
+
     pub fn new(
         device: &wgpu::Device,
         grid_dimension: wgpu::Extent3d,
@@ -27,16 +32,16 @@ impl SignedDistanceField {
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R16Float, false))
             .create(device, "BindGroupLayout: Signed Distance Field Write");
 
-        let volume_solid_signed_distances = device.create_texture(&wgpu::TextureDescriptor {
+        let volume_signed_distances = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Signed Distance Field"),
             size: grid_dimension,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
-            format: wgpu::TextureFormat::R16Float,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
+            format: Self::FORMAT,
+            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::COPY_SRC | wgpu::TextureUsage::COPY_DST,
         });
-        let volume_signed_distances_view = volume_solid_signed_distances.create_view(&Default::default());
+        let volume_signed_distances_view = volume_signed_distances.create_view(&Default::default());
 
         let bind_group_write_signed_distance_field = BindGroupBuilder::new(&group_layout_write_signed_distance_field)
             .texture(&volume_signed_distances_view)
@@ -63,11 +68,46 @@ impl SignedDistanceField {
                 ),
             ),
             bind_group_write_signed_distance_field,
+            volume_signed_distances,
             volume_signed_distances_view,
         }
     }
 
-    // TODO: Smaller?
+    fn size_in_bytes(&self) -> u32 {
+        self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth * Self::BYTES_PER_VOXEL
+    }
+
+    pub fn load_signed_distance_field(&self, path: &Path, queue: &wgpu::Queue) -> Result<(), std::io::Error> {
+        let mut raw_data = Vec::new();
+        let num_bytes_read = std::fs::File::open(path)?.read_to_end(&mut raw_data).unwrap() as u32;
+        if num_bytes_read != self.size_in_bytes() {
+            error!(
+                "Failure loading distance field from file {:?}: File size is {}, expected {}",
+                path,
+                num_bytes_read,
+                self.size_in_bytes()
+            );
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "unexpected size"));
+        }
+
+        queue.write_texture(
+            wgpu::TextureCopyView {
+                texture: &self.volume_signed_distances,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            &raw_data,
+            wgpu::TextureDataLayout {
+                offset: 0,
+                bytes_per_row: Self::BYTES_PER_VOXEL * self.grid_dimension.width,
+                rows_per_image: self.grid_dimension.height,
+            },
+            self.grid_dimension,
+        );
+
+        Ok(())
+    }
+
     const COMPUTE_LOCAL_SIZE: wgpu::Extent3d = wgpu::Extent3d {
         width: 4,
         height: 4,
@@ -119,6 +159,52 @@ impl SignedDistanceField {
         }
 
         info!("Static signed distance field computation took {:?}", start_time_overall.elapsed());
+    }
+
+    // fairly brute force and blocking but we don't care here :)
+    pub fn save(&self, path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) {
+        info!("Saving signed distance field data to {:?}", path);
+
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Signed Distance Field save temp buffer"),
+            size: self.size_in_bytes() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Encoder: Save Signed Distance Field"),
+        });
+        encoder.copy_texture_to_buffer(
+            wgpu::TextureCopyView {
+                texture: &self.volume_signed_distances,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            wgpu::BufferCopyView {
+                buffer: &buffer,
+                layout: wgpu::TextureDataLayout {
+                    offset: 0,
+                    bytes_per_row: self.grid_dimension.width * Self::BYTES_PER_VOXEL,
+                    rows_per_image: self.grid_dimension.height,
+                },
+            },
+            self.grid_dimension,
+        );
+        queue.submit(Some(encoder.finish()));
+        device.poll(wgpu::Maintain::Wait);
+
+        let buffer_slice = buffer.slice(..);
+        let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
+        device.poll(wgpu::Maintain::Wait);
+        mapping
+            .now_or_never()
+            .expect("Failed to await buffer mapping with signed distance field copy (Future not ready)")
+            .expect("Failed to map buffer with signed distance field copy");
+
+        let mut file = std::fs::File::create(path).expect(&format!("Failed to create file {:?}", path));
+        file.write_all(&buffer_slice.get_mapped_range())
+            .expect("Failed to write signed distance field data");
     }
 
     pub fn texture_view(&self) -> &wgpu::TextureView {

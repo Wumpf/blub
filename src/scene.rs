@@ -5,7 +5,7 @@ use crate::{
 };
 
 use serde::Deserialize;
-use std::{error, fs::File, io::BufReader, path::Path, time::Duration};
+use std::{error, fs::File, io::BufReader, path::Path, path::PathBuf, time::Duration};
 
 #[derive(Deserialize)]
 pub struct Box {
@@ -39,18 +39,19 @@ pub struct Scene {
     config: SceneConfig,
     pub models: SceneModels,
     distance_field_dirty: bool,
+    path: PathBuf,
 }
 
 impl Scene {
     pub fn new(
-        scene_path: &Path,
+        path: &Path,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         global_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Result<Self, std::boxed::Box<dyn error::Error>> {
-        let file = File::open(scene_path)?;
+        let file = File::open(path)?;
         let reader = BufReader::new(file);
         let config: SceneConfig = serde_json::from_reader(reader)?;
 
@@ -62,6 +63,7 @@ impl Scene {
             config,
             models,
             distance_field_dirty: true,
+            path: path.to_path_buf(),
         })
     }
 
@@ -128,8 +130,14 @@ impl Scene {
         device.poll(wgpu::Maintain::Poll);
 
         if self.distance_field_dirty {
-            self.hybrid_fluid
-                .update_signed_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, &self.models.meshes);
+            self.hybrid_fluid.update_signed_distance_field_for_static(
+                device,
+                pipeline_manager,
+                queue,
+                global_bind_group,
+                &self.models.meshes,
+                &self.path,
+            );
             self.distance_field_dirty = false;
         }
 

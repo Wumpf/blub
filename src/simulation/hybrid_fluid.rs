@@ -558,9 +558,20 @@ impl HybridFluid {
         queue: &wgpu::Queue,
         global_bind_group: &wgpu::BindGroup,
         static_meshes: &Vec<crate::scene_models::MeshData>,
+        scene_path: &Path,
     ) {
-        self.signed_distance_field
-            .compute_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, static_meshes);
+        let cache_filename = scene_path.parent().unwrap().join(format!(
+            ".{}.static_signed_distance_field",
+            scene_path.file_name().unwrap().to_str().unwrap()
+        ));
+        match self.signed_distance_field.load_signed_distance_field(&cache_filename, queue) {
+            Ok(_) => {}
+            Err(_) => {
+                self.signed_distance_field
+                    .compute_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, static_meshes);
+                self.signed_distance_field.save(&cache_filename, device, queue);
+            }
+        }
     }
 
     pub fn set_gravity_grid(&mut self, gravity: cgmath::Vector3<f32>) {
