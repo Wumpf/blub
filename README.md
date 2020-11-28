@@ -20,10 +20,14 @@ Should work on Linux/Windows - I'm developing on Windows, so things might break 
 
 Doing release mode (`cargo run --release`) can be significantly faster.
 
+First time loading any scene/background is a bit slower since some of the pre-computations are cached on disk. In particular:
+* raw cubemap texture (decoding the .hdr takes surprisingly long)
+* computing signed distance field (happens brute force on gpu)
+
 ### Shaders
 
 GLSL, compiled to SPIR-V at runtime. Shaders are hot reloaded on change, have fun!  
-(on failure it will use the previously loaded shader)
+(on failure it will keep using the previously loaded shader)
 
 ### "Scenes"
 
