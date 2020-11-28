@@ -330,6 +330,7 @@ impl GUI {
             .speed(0.0001)
             .display_format(im_str!("%.3f"))
             .build(&ui, &mut scene_renderer.velocity_visualization_scale);
+        ui.checkbox(im_str!("Render meshes"), &mut scene_renderer.enable_mesh_rendering);
         ui.checkbox(im_str!("Show Fluid Domain Bounds"), &mut scene_renderer.enable_box_lines);
     }
 

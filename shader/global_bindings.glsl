@@ -30,7 +30,7 @@ struct TimerData {
 
 struct GlobalRenderingSettings {
     vec3 FluidWorldOrigin;
-    float FluidGridToWorldScale;
+    float FluidGridToWorldScale; // how big is a grid cell in world scale
     float VelocityVisualizationScale;
     float FluidParticleRadius; // particle size in world space
 };

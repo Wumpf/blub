@@ -46,6 +46,7 @@ pub struct SceneRenderer {
     pub volume_visualization: VolumeVisualizationMode,
     pub particle_radius_factor: f32,
     pub enable_box_lines: bool,
+    pub enable_mesh_rendering: bool,
     pub velocity_visualization_scale: f32,
 }
 
@@ -108,6 +109,7 @@ impl SceneRenderer {
             volume_visualization: VolumeVisualizationMode::None,
             particle_radius_factor: 0.7,
             enable_box_lines: true,
+            enable_mesh_rendering: true,
             velocity_visualization_scale: 0.008,
         }
     }
@@ -214,12 +216,14 @@ impl SceneRenderer {
                     }
                 }
 
-                self.mesh_renderer.draw(
-                    &mut rpass_backbuffer,
-                    pipeline_manager,
-                    self.background_and_lighting.bind_group(),
-                    &scene.models,
-                );
+                if self.enable_mesh_rendering {
+                    self.mesh_renderer.draw(
+                        &mut rpass_backbuffer,
+                        pipeline_manager,
+                        self.background_and_lighting.bind_group(),
+                        &scene.models,
+                    );
+                }
                 self.volume_renderer
                     .draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid(), self.volume_visualization);
 

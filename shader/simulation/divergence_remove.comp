@@ -16,6 +16,7 @@ float samplePressure(ivec3 gridCoord, float cellType) {
 }
 
 // Macro because image3D can't be passed to functions
+// TODO: Implement push boundary conditions here (todo: add some explanation why here and not elsewhere in the pressure solver)
 #define correctVelocityForDirection(velocityVolume, centerGridCoord, centerPressure, centerCellType, component)                                      \
     {                                                                                                                                                \
         ivec3 neighborGridCoord = centerGridCoord;                                                                                                   \
@@ -34,7 +35,7 @@ float samplePressure(ivec3 gridCoord, float cellType) {
             }                                                                                                                                        \
             imageStore(velocityVolume, centerGridCoord, velocity.xxxx);                                                                              \
         } else {                                                                                                                                     \
-            imageStore(velocityVolume, centerGridCoord, (0.0 / 0.0).xxxx);                                                                           \
+            imageStore(velocityVolume, centerGridCoord, (0.0).xxxx);                                                                                 \
         }                                                                                                                                            \
     }
 
