@@ -10,7 +10,7 @@ version = "0.1.0"
 bytemuck = "1.4.1"
 cgmath = {git = "https://github.com/rustgd/cgmath", rev = "50a345b", features = ["rand", "serde"]}
 enumflags2 = "0.6"
-env_logger = "0.8.1"
+env_logger = "0.8.2"
 futures = "0.3"
 image = {version = "0.23", default-features = false, features = ["png", "hdr"]}
 imgui = "0.5"
@@ -25,9 +25,9 @@ regex = "1"
 scopeguard = "1.1"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-shaderc = "0.6"
-strum = "0.19"
-strum_macros = "0.19"
+shaderc = "0.7"
+strum = "0.20"
+strum_macros = "0.20.1"
 wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "e3eadca"}#, features = ["trace"]}
 winit = "0.22"
 
