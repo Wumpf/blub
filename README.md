@@ -50,7 +50,7 @@ Noted down a few interesting implementation details here.
 
 ### Particle to Grid Transfer
 
-Transferring the particle's velocity to the grid is tricky/costly to do in parallel!
+Transferring the particle's velocity to the grid is tricky & costly to do in parallel!
 Either, velocities are scattered by doing 8 atomic adds for every particle to surrounding grid cells, or grid cells traverse all neighboring cells. (times 3 for staggered grid!)
 There's some very clever ideas on how to do efficient scattering in [Ming et al 2018, GPU Optimization of Material Point Methods](http://pages.cs.wisc.edu/~sifakis/papers/GPU_MPM.pdf) using subgroup operations (i.e. inter warp/wavefront shuffles) and atomics.
 Note though that today atomic floats addition is pretty much only available in CUDA and OpenGL (using an NV extension) and subgroup operations are not available in wgpu as of writing.
@@ -88,6 +88,17 @@ There is a fix maximum number of iterations which determines how many compute di
 Since evaluating the MSE itself is costly, this is done every couple of few iterations (configurable).
 
 The last computed MSE and iteration count is queried asynchronously, in order to display a histogram in the gui and make informed choices for selecting the target MSE, max iteration & MSE evaluation frequency parameters.
+
+#### Implicit Density Projection
+
+For improved volume conversation & iteration times Blub implements a "secondary pressure solver" that uses fluid density instead of divergence as input. A video + paper can be found [here](https://animation.rwth-aachen.de/publication/0566/). I found that it improves the quality of the simulation tremendously for large timesteps (I typically run the simulation/solver at 120hz).
+
+Compared to what is described (to my understanding) in the paper I made a few adjustments/trade-offs:
+* For computing densities, neighboring solid cells are assumed to have a fixed (interpolation kernel derived) density contribution instead of sampling it with particles
+* Velocity change from the density/pressure solver is not interpolated over the grid like in the "primary" solver. Instead, every particle looks at the pressure difference at its closest walls. We can do this here since (in accordance to the paper) we change the position of particles, not their velocity (and APIC matrix).
+  * Pro: A **lot** faster - no writing write out to a velocity volume, no velocity extrapolation, no trilinear interpolation of velocity vectors over particles
+  * Con: Multiple particles get the exact same push. I blame this as the reason for the particle distribution in Blub getting a grid like texture when left at rest for too long. Maybe there's a better tradeoff here?
+* No resampling for degenerated cases - they are rather hard to detect and handle on GPU
 
 ## Rendering
 
