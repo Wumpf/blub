@@ -34,7 +34,7 @@ void main() {
         DispatchCommandReduce1 = uvec4((numElements / REDUCE_READS_PER_THREAD + (LOCAL_SIZE_REDUCE - 1)) / LOCAL_SIZE_REDUCE, 1, 1, 0);
     }
 
-    // If this is the first step overall, just do a clear, nothing else.
+    // If this is the first step overall (not just the first of this particular physics step), just do a clear, nothing else.
     if (PushConstants.Mode == FIRST_STEP) {
         imageStore(Pressure, gridCoord, vec4(0.0));
         return;

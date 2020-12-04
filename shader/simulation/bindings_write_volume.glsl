@@ -4,8 +4,7 @@
 #include "utilities.glsl"
 
 // Perf note: Tried to encode direct positive neighbars in Marker volume (making it rgba8_snorm) in order to eliminate extra sampling in various
-// places. Immediate effect was a lot worse perf. Has texture cache optimizations for R8 to leverage the packed size? Result quite unexpected. Unclear
-// if there particular wins/losses.
+// places. Immediate effect was a lot worse perf.
 layout(set = 2, binding = 0) uniform texture3D MarkerVolume;
 
 // Staggered velocity volume with marker at the center and velocity components on the positive walls.
