@@ -1,5 +1,7 @@
 #version 450
 
+#define NO_SIMPROPS
+
 #include "fluid_render_info.glsl"
 #include "global_bindings.glsl"
 #include "simulation/hybrid_fluid.glsl"
@@ -19,6 +21,7 @@ layout(push_constant) uniform PushConstants { uint VisualizationType; };
 #define VISUALIZE_PRESSURE_VELOCITY 1
 #define VISUALIZE_PRESSURE_DENSITY 2
 #define VISUALIZE_MARKER 3
+#define VISUALIZE_DEBUG 4
 
 float computeDivergenceForDirection(ivec3 coord, texture3D velocityVolume, float oppositeWallType, const uint component) {
     ivec3 neighborCoord = coord;
@@ -75,6 +78,14 @@ void main() {
         else if (marker == CELL_FLUID)
             out_Tint = vec3(0.0, 0.0, 1.0);
         break;
+
+#ifdef DEBUG
+    case VISUALIZE_DEBUG:
+        float debugValue = texelFetch(DebugVolume, volumeCoordinate, 0).x / 16.0;
+        scale = saturate(abs(debugValue));
+        out_Tint = colormapCoolToWarm(debugValue).rgb;
+        break;
+#endif
     }
     scale = saturate(abs(scale));
 

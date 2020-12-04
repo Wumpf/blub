@@ -28,7 +28,7 @@ pub struct HybridFluid {
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
     simulation_properties: SimulationPropertiesUniformBufferContent,
 
-    bind_group_uniform: wgpu::BindGroup,
+    bind_group_general: wgpu::BindGroup,
     bind_group_transfer_velocity: [wgpu::BindGroup; 3],
     bind_group_divergence_compute: wgpu::BindGroup,
     bind_group_write_velocity: wgpu::BindGroup,
@@ -123,6 +123,11 @@ impl HybridFluid {
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker_primary = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
+        let volume_debug = if cfg!(debug_assertions) {
+            Some(device.create_texture(&create_volume_texture_desc("Debug Volume", wgpu::TextureFormat::R32Float)))
+        } else {
+            None
+        };
 
         // Resource views
         let volume_velocity_view_x = volume_velocity_x.create_view(&Default::default());
@@ -130,10 +135,20 @@ impl HybridFluid {
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
         let volume_marker_view = volume_marker_primary.create_view(&Default::default());
+        let volume_debug_view = match volume_debug {
+            Some(volume) => Some(volume.create_view(&Default::default())),
+            None => None,
+        };
 
         // Layouts
-        let group_layout_uniform = BindGroupLayoutBuilder::new()
+        let group_layout_general = if volume_debug_view.is_some() {
+            BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::uniform())
+                // Debug Volume
+                .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+        } else {
+            BindGroupLayoutBuilder::new().next_binding_compute(binding_glsl::uniform())
+        }
             .create(device, "BindGroupLayout: HybridFluid Uniform");
         let group_layout_transfer_velocity = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
@@ -208,8 +223,12 @@ impl HybridFluid {
         let signed_distance_field = SignedDistanceField::new(device, grid_dimension, shader_dir, pipeline_manager, global_bind_group_layout);
 
         // Bind groups.
-        let bind_group_uniform = BindGroupBuilder::new(&group_layout_uniform)
+        let bind_group_general = match volume_debug_view.as_ref() {
+            Some(volume_debug_view) => BindGroupBuilder::new(&group_layout_general)
             .resource(simulation_properties_uniformbuffer.binding_resource())
+                .texture(volume_debug_view),
+            None => BindGroupBuilder::new(&group_layout_general).resource(simulation_properties_uniformbuffer.binding_resource()),
+        }
             .create(device, "BindGroup: HybridFluid Uniform");
 
         let bind_group_transfer_velocity = [
@@ -286,8 +305,11 @@ impl HybridFluid {
             .texture(&volume_marker_view)
             .texture(&pressure_field_from_velocity.pressure_view())
             .texture(&pressure_field_from_density.pressure_view())
-            .texture(signed_distance_field.texture_view())
-            .create(device, "BindGroup: Fluid Renderers");
+            .texture(signed_distance_field.texture_view());
+        if let Some(volume_debug_view) = volume_debug_view.as_ref() {
+            bind_group_renderer_builder = bind_group_renderer_builder.texture(volume_debug_view);
+        }
+        let bind_group_renderer = bind_group_renderer_builder.create(device, "BindGroup: Fluid Renderers");
 
         // pipeline layouts.
         // Use same push constant range for all pipelines to improve internal Vulkan pipeline compatibility.
@@ -300,7 +322,7 @@ impl HybridFluid {
             label: Some("PipelineLayout: HybridFluid, Transfer Velocity"),
             bind_group_layouts: &[
                 global_bind_group_layout,
-                &group_layout_uniform.layout,
+                &group_layout_general.layout,
                 &group_layout_transfer_velocity.layout,
             ],
             push_constant_ranges,
@@ -314,7 +336,7 @@ impl HybridFluid {
             label: Some("PipelineLayout: HybridFluid, Write Volume"),
             bind_group_layouts: &[
                 global_bind_group_layout,
-                &group_layout_uniform.layout,
+                &group_layout_general.layout,
                 &group_layout_write_velocity_volume.layout,
             ],
             push_constant_ranges,
@@ -323,7 +345,7 @@ impl HybridFluid {
             label: Some("PipelineLayout: HybridFluid, Particles"),
             bind_group_layouts: &[
                 global_bind_group_layout,
-                &group_layout_uniform.layout,
+                &group_layout_general.layout,
                 &group_layout_advect_particles.layout,
             ],
             push_constant_ranges,
@@ -332,7 +354,7 @@ impl HybridFluid {
             label: Some("PipelineLayout: HybridFluid, Density Projection Gather"),
             bind_group_layouts: &[
                 global_bind_group_layout,
-                &group_layout_uniform.layout,
+                &group_layout_general.layout,
                 &group_layout_density_projection_gather_error.layout,
             ],
             push_constant_ranges,
@@ -341,7 +363,7 @@ impl HybridFluid {
             label: Some("PipelineLayout: HybridFluid, Density Projection Gather"),
             bind_group_layouts: &[
                 global_bind_group_layout,
-                &group_layout_uniform.layout,
+                &group_layout_general.layout,
                 &group_layout_density_projection_correct_particles.layout,
             ],
             push_constant_ranges,
@@ -366,7 +388,7 @@ impl HybridFluid {
                 gravity_grid: cgmath::vec3(0.0, -9.81, 0.0),
             },
 
-            bind_group_uniform,
+            bind_group_general,
             bind_group_transfer_velocity,
             bind_group_divergence_compute,
             bind_group_write_velocity,
@@ -585,7 +607,7 @@ impl HybridFluid {
     pub fn get_or_create_group_layout_renderer(device: &wgpu::Device) -> &BindGroupLayoutWithDesc {
         unsafe {
             GROUP_LAYOUT_RENDERER.get_or_insert_with(|| {
-                BindGroupLayoutBuilder::new()
+                let mut builder = BindGroupLayoutBuilder::new()
                     .next_binding_vertex(binding_glsl::buffer(true)) // particles, position llindex
                     .next_binding_vertex(binding_glsl::buffer(true)) // particles, velocityX
                     .next_binding_vertex(binding_glsl::buffer(true)) // particles, velocityY
@@ -596,8 +618,12 @@ impl HybridFluid {
                     .next_binding_vertex(binding_glsl::texture3D()) // marker
                     .next_binding_vertex(binding_glsl::texture3D()) // pressure
                     .next_binding_vertex(binding_glsl::texture3D()) // density
-                    .next_binding_vertex(binding_glsl::texture3D()) // distance field
-                    .create(device, "BindGroupLayout: ParticleRenderer")
+                    .next_binding_vertex(binding_glsl::texture3D()); // distance field
+                if cfg!(debug_assertions) {
+                    builder = builder.next_binding_vertex(binding_glsl::texture3D());
+                }
+
+                builder.create(device, "BindGroupLayout: ParticleRenderer")
             })
         }
     }
@@ -662,7 +688,7 @@ impl HybridFluid {
         {
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, global_bind_group, &[]);
-            cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
+            cpass.set_bind_group(1, &self.bind_group_general, &[]);
 
             wgpu_scope!(cpass, "transfer particle velocity to grid", || {
                 for i in 0..3 {
@@ -707,7 +733,7 @@ impl HybridFluid {
         {
             let mut cpass = encoder.begin_compute_pass();
             cpass.set_bind_group(0, global_bind_group, &[]);
-            cpass.set_bind_group(1, &self.bind_group_uniform, &[]);
+            cpass.set_bind_group(1, &self.bind_group_general, &[]);
 
             {
                 cpass.set_bind_group(2, &self.bind_group_write_velocity, &[]);

@@ -14,6 +14,8 @@ pub enum VolumeVisualizationMode {
     PressureFromVelocity,
     PressureFromDensity,
     Marker,
+    #[cfg(debug_assertions)]
+    Debug,
 }
 
 pub struct VolumeRenderer {
@@ -101,6 +103,8 @@ impl VolumeRenderer {
                         rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[2 as u32]))
                     }
                     VolumeVisualizationMode::Marker => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[3 as u32])),
+                    #[cfg(debug_assertions)]
+                    VolumeVisualizationMode::Debug => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[4 as u32])),
                     _ => {}
                 };
                 rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));

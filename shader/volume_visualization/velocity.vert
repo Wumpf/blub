@@ -1,5 +1,7 @@
 #version 450
 
+#define NO_SIMPROPS
+
 #include "../fluid_render_info.glsl"
 #include "../global_bindings.glsl"
 #include "../simulation/hybrid_fluid.glsl"

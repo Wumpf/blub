@@ -7,6 +7,11 @@ layout(set = 1, binding = 0) uniform SimulationProperties {
     vec3 GravityGridSpace;
     uint NumParticles;
 };
+
+#ifdef DEBUG
+layout(set = 1, binding = 1, r32f) uniform restrict image3D DebugVolume;
+#endif
+
 #endif
 
 // Boundary is zero, so texel fetch outside of the domain always gives us boundary cells.

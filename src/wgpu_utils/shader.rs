@@ -79,6 +79,12 @@ impl ShaderDirectory {
             options.add_macro_definition("VERTEX_SHADER", Some(if kind == shaderc::ShaderKind::Vertex { "1" } else { "0" }));
             options.add_macro_definition("COMPUTE_SHADER", Some(if kind == shaderc::ShaderKind::Compute { "1" } else { "0" }));
 
+            if cfg!(debug_assertions) {
+                options.add_macro_definition("DEBUG", Some("1"));
+            } else {
+                options.add_macro_definition("NDEBUG", Some("1"));
+            }
+
             options.set_include_callback(|name, include_type, source_file, _depth| {
                 let path = if include_type == shaderc::IncludeType::Relative {
                     Path::new(Path::new(source_file).parent().unwrap()).join(name)
