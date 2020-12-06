@@ -1,0 +1,45 @@
+// Computes position correction from density derived pressure
+// A bit simpler than its divergence derived counterpart, since we don't correct existing velocity, but just introduce a "correction velocity"
+
+#version 450
+
+#include "../utilities.glsl"
+#include "bindings_write_volume.glsl"
+
+COMPUTE_PASS_VOLUME
+
+float samplePressure(ivec3 gridCoord, float cellType) {
+    if (cellType == CELL_FLUID)
+        return texelFetch(PressureVolume, gridCoord, 0).x;
+    else
+        return 0.0;
+}
+
+float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCoord, float centerPressure, uint component) {
+    ivec3 neighborGridCoord = centerGridCoord;
+    neighborGridCoord[component] += 1;
+    float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;
+
+    float positionChange = samplePressure(neighborGridCoord, neighborCellType) - centerPressure;
+    if (neighborCellType == CELL_SOLID) {
+        positionChange = min(0.0, positionChange);
+    }
+    if (centerCellType == CELL_SOLID) {
+        positionChange = max(0.0, positionChange);
+    }
+    return positionChange;
+}
+
+void main() {
+    ivec3 centerGridCoord = ivec3(gl_GlobalInvocationID);
+
+    float centerCellType = texelFetch(MarkerVolume, centerGridCoord, 0).x;
+    float centerPressure = samplePressure(centerGridCoord, centerCellType);
+
+    float posChangeX = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 0).x;
+    imageStore(VelocityVolumeX, centerGridCoord, posChangeX.xxxx);
+    float posChangeY = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 1).x;
+    imageStore(VelocityVolumeY, centerGridCoord, posChangeY.xxxx);
+    float posChangeZ = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 2).x;
+    imageStore(VelocityVolumeZ, centerGridCoord, posChangeZ.xxxx);
+}

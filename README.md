@@ -99,9 +99,6 @@ For improved volume conversation & iteration times Blub implements a "secondary 
 
 Compared to what is described (to my understanding) in the paper I made a few adjustments/trade-offs:
 * For computing densities, neighboring solid cells are assumed to have a fixed (interpolation kernel derived) density contribution instead of sampling it with particles
-* Velocity change from the density/pressure solver is not interpolated over the grid like in the "primary" solver. Instead, every particle looks at the pressure difference at its closest walls. We can do this here since (in accordance to the paper) we change the position of particles, not their velocity (and APIC matrix).
-  * Pro: A **lot** faster - no writing write out to a velocity volume, no velocity extrapolation, no trilinear interpolation of velocity vectors over particles
-  * Con: Multiple particles get the exact same push. I blame this as the reason for the particle distribution in Blub getting a grid like texture when left at rest for too long. Maybe there's a better tradeoff here?
 * No resampling for degenerated cases - they are rather hard to detect and handle on GPU
 
 ## Rendering
