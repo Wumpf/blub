@@ -1,12 +1,15 @@
 use futures::FutureExt;
 use std::{io::Read, io::Write, path::Path, rc::Rc};
 
-use crate::wgpu_utils::{
-    self,
-    binding_builder::{BindGroupBuilder, BindGroupLayoutBuilder},
-    binding_glsl,
-    pipelines::*,
-    shader::ShaderDirectory,
+use crate::{
+    utils::round_to_multiple,
+    wgpu_utils::{
+        self,
+        binding_builder::{BindGroupBuilder, BindGroupLayoutBuilder},
+        binding_glsl,
+        pipelines::*,
+        shader::ShaderDirectory,
+    },
 };
 
 pub struct SignedDistanceField {
@@ -74,7 +77,7 @@ impl SignedDistanceField {
     }
 
     fn size_in_bytes(&self) -> u32 {
-        self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth * Self::BYTES_PER_VOXEL
+        self.buffer_bytes_per_padded_row() * self.grid_dimension.height * self.grid_dimension.depth
     }
 
     pub fn load_signed_distance_field(&self, path: &Path, queue: &wgpu::Queue) -> Result<(), std::io::Error> {
@@ -99,7 +102,7 @@ impl SignedDistanceField {
             &raw_data,
             wgpu::TextureDataLayout {
                 offset: 0,
-                bytes_per_row: Self::BYTES_PER_VOXEL * self.grid_dimension.width,
+                bytes_per_row: self.buffer_bytes_per_padded_row(),
                 rows_per_image: self.grid_dimension.height,
             },
             self.grid_dimension,
@@ -161,6 +164,13 @@ impl SignedDistanceField {
         info!("Static signed distance field computation took {:?}", start_time_overall.elapsed());
     }
 
+    fn buffer_bytes_per_padded_row(&self) -> u32 {
+        round_to_multiple(
+            self.grid_dimension.width as usize * Self::BYTES_PER_VOXEL as usize,
+            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize,
+        ) as u32
+    }
+
     // fairly brute force and blocking but we don't care here :)
     pub fn save(&self, path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) {
         info!("Saving signed distance field data to {:?}", path);
@@ -175,6 +185,7 @@ impl SignedDistanceField {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Save Signed Distance Field"),
         });
+
         encoder.copy_texture_to_buffer(
             wgpu::TextureCopyView {
                 texture: &self.volume_signed_distances,
@@ -185,7 +196,7 @@ impl SignedDistanceField {
                 buffer: &buffer,
                 layout: wgpu::TextureDataLayout {
                     offset: 0,
-                    bytes_per_row: self.grid_dimension.width * Self::BYTES_PER_VOXEL,
+                    bytes_per_row: self.buffer_bytes_per_padded_row(),
                     rows_per_image: self.grid_dimension.height,
                 },
             },

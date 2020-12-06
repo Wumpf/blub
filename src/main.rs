@@ -18,6 +18,7 @@ mod scene_models;
 mod simulation;
 mod simulation_controller;
 mod timer;
+mod utils;
 
 use global_bindings::*;
 use global_ubo::*;

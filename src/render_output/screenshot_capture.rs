@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
+use crate::utils::round_to_multiple;
+
 struct PendingScreenshot {
     copy_operation: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>>,
     buffer: wgpu::Buffer,
@@ -162,8 +164,4 @@ impl ScreenshotCapture {
             target_path: path.into(),
         });
     }
-}
-
-fn round_to_multiple(value: usize, multiple: usize) -> usize {
-    (value + multiple - 1) / multiple * multiple
 }
