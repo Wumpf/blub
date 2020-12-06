@@ -15,18 +15,27 @@ float samplePressure(ivec3 gridCoord, float cellType) {
         return 0.0;
 }
 
-float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCoord, float centerPressure, uint component) {
+float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCoord, float centerPressure, uint component, float centerPenetration) {
     ivec3 neighborGridCoord = centerGridCoord;
     neighborGridCoord[component] += 1;
     float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;
 
     float positionChange = samplePressure(neighborGridCoord, neighborCellType) - centerPressure;
-    if (neighborCellType == CELL_SOLID) {
-        positionChange = min(0.0, positionChange);
+
+    // todo optimize
+    float penetrationNeighbor = unpackPushDisplacement(imageLoad(SolidPenetrationDepth, neighborGridCoord).x)[component];
+
+    // If we're completely outside, use maximum penetration value from the penetration volume to push the particles back in!
+    if (centerCellType == CELL_SOLID && neighborCellType == CELL_SOLID) {
+        positionChange = abs(penetrationNeighbor) < abs(centerPenetration) ? centerPenetration : penetrationNeighbor;
+    } else {
+        if (neighborCellType == CELL_SOLID) {
+            positionChange = min(penetrationNeighbor, positionChange);
+        } else if (centerCellType == CELL_SOLID) {
+            positionChange = max(centerPenetration, positionChange);
+        }
     }
-    if (centerCellType == CELL_SOLID) {
-        positionChange = max(0.0, positionChange);
-    }
+
     return positionChange;
 }
 
@@ -36,10 +45,14 @@ void main() {
     float centerCellType = texelFetch(MarkerVolume, centerGridCoord, 0).x;
     float centerPressure = samplePressure(centerGridCoord, centerCellType);
 
-    float posChangeX = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 0).x;
+    vec3 centerPenetration = vec3(0.0);
+    if (centerCellType == CELL_SOLID)
+        centerPenetration = unpackPushDisplacement(imageLoad(SolidPenetrationDepth, centerGridCoord).x).xyz;
+
+    float posChangeX = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 0, centerPenetration.x);
     imageStore(VelocityVolumeX, centerGridCoord, posChangeX.xxxx);
-    float posChangeY = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 1).x;
+    float posChangeY = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 1, centerPenetration.y);
     imageStore(VelocityVolumeY, centerGridCoord, posChangeY.xxxx);
-    float posChangeZ = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 2).x;
+    float posChangeZ = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 2, centerPenetration.z);
     imageStore(VelocityVolumeZ, centerGridCoord, posChangeZ.xxxx);
 }

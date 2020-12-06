@@ -9,11 +9,13 @@
 COMPUTE_PASS_VOLUME
 
 void main() {
-    if (any(equal(gl_GlobalInvocationID, uvec3(0)))) {
+    // Boundary at 0 is needed so we have a velocity vector at that SOLID-FLUID boundary.
+    // Boundary at max is (even ;-)) less straight-forward: We need it to particles outside of the domain can register a displacement.
+    if (any(equal(gl_GlobalInvocationID, uvec3(0))) || any(equal(gl_GlobalInvocationID, imageSize(MarkerVolume) - ivec3(1)))) {
         imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_SOLID));
     } else {
         float distanceToNextSolid = texelFetch(SolidSignedDistances, ivec3(gl_GlobalInvocationID), 0).x;
-        if (distanceToNextSolid < 0)
+        if (distanceToNextSolid < 0.0) //= Rendering.FluidGridToWorldScale * 0.5)
             imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_SOLID));
     }
 }

@@ -14,7 +14,7 @@ layout(set = 2, binding = 0) buffer restrict readonly ParticlePositionLlBuffer {
 layout(set = 2, binding = 1) uniform utexture3D LinkedListDualGrid;
 layout(set = 2, binding = 2, r8_snorm) uniform restrict image3D MarkerVolume;
 layout(set = 2, binding = 3, r32f) uniform restrict image3D DensityVolume;
-// layout(set = 2, binding = 4) uniform utexture3D SolidPenetrationDepth;
+layout(set = 2, binding = 4) uniform utexture3D SolidPenetrationDepth;
 // layout(push_constant) uniform PushConstants { uint VelocityTransferComponent; };
 
 // Uses a shared memory so every thread loads one particle for its current cell and then accesses remaining neighbors (a 2x2x2 environment) from
@@ -134,9 +134,25 @@ void main() {
         marker_nz == CELL_AIR)
         density = max(Density0, density);
 
-    // Clamp density as suggested in paper to avoid displacement of more than half a cell at a time
     // Compared to the formula in the paper this is the error multiplied with delta t
     // (so the solver will arrive at dt²/ρ_0 p_2)
-    float densityError = clamp(1.0 - density / Density0, -0.5, 0.5);
-    imageStore(DensityVolume, gridCoord, densityError.xxxx);
+    density = 1.0 - density / Density0;
+    // Clamp density as suggested in paper to avoid displacement of more than half a cell at a time
+    density = clamp(density, -0.5, 0.5);
+
+    // Push boundaries
+    if (marker_px == CELL_SOLID)
+        density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(1, 0, 0), 0).x).x;
+    if (marker_py == CELL_SOLID)
+        density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(0, 1, 0), 0).x).y;
+    if (marker_pz == CELL_SOLID)
+        density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(0, 0, 1), 0).x).z;
+    if (marker_nx == CELL_SOLID)
+        density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(1, 0, 0), 0).x).x;
+    if (marker_ny == CELL_SOLID)
+        density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 1, 0), 0).x).y;
+    if (marker_nz == CELL_SOLID)
+        density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 0, 1), 0).x).z;
+
+    imageStore(DensityVolume, gridCoord, density.xxxx);
 }

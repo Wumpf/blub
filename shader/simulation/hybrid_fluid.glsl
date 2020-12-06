@@ -18,3 +18,16 @@ layout(set = 1, binding = 1, r32f) uniform restrict image3D DebugVolume;
 #define CELL_SOLID 0.0 // A couple of things rely on this being zero! (sampling images out of bounds returns zero)
 #define CELL_FLUID 1.0
 #define CELL_AIR -1.0
+
+vec3 unpackPushDisplacement(uint packedPushDisplacement) { return unpackSnorm4x8(packedPushDisplacement).xyz * 0.5; }
+
+// A value direct proportional to length of the displacement vector
+float displacementLengthComparisionValue(uint packedPushDisplacement) {
+    vec3 v = unpackSnorm4x8(packedPushDisplacement).xyz;
+    return dot(v, v);
+}
+
+uint packPushDisplacement(vec3 displacement) {
+    displacement = clamp(displacement, vec3(-0.5), vec3(0.5)); // More than 0.5 cells displacement is not allowed per step.
+    return packSnorm4x8(vec4(displacement * 2.0, 0.0));
+}

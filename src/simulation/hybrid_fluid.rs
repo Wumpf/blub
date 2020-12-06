@@ -125,6 +125,8 @@ impl HybridFluid {
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker_primary = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
+        // TODO: Reuse (a) pressure volume for this. (pressure is only defined at FLUID, this is only defined at SOLID)
+        let volume_penetration_depth = device.create_texture(&create_volume_texture_desc("Solid Penetration Depth", wgpu::TextureFormat::R32Uint));
         let volume_debug = if cfg!(debug_assertions) {
             Some(device.create_texture(&create_volume_texture_desc("Debug Volume", wgpu::TextureFormat::R32Float)))
         } else {
@@ -137,6 +139,7 @@ impl HybridFluid {
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
         let volume_marker_view = volume_marker_primary.create_view(&Default::default());
+        let volume_penetration_depth_view = volume_penetration_depth.create_view(&Default::default());
         let volume_debug_view = match volume_debug {
             Some(volume) => Some(volume.create_view(&Default::default())),
             None => None,
@@ -173,6 +176,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityY
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityZ
             .next_binding_compute(binding_glsl::texture3D()) // pressure
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, false)) // penetration depth / unused
             .create(device, "BindGroupLayout: Write to Velocity");
         let group_layout_advect_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture2D()) // velocityX
@@ -184,6 +188,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
+            .next_binding_compute(binding_glsl::uimage3D(wgpu::TextureFormat::R32Uint, false)) // penetration depth
             .create(device, "BindGroupLayout: Advect to Particles");
 
         let group_layout_density_projection_gather_error = BindGroupLayoutBuilder::new()
@@ -191,6 +196,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::utexture3D()) // linkedlist_volume
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, false)) // marker volume
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // density volume
+            .next_binding_compute(binding_glsl::utexture3D()) // penetration depth
             .create(device, "BindGroupLayout: Compute density error");
         let group_layout_density_projection_correct_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
@@ -274,6 +280,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(pressure_field_from_velocity.pressure_view())
+            .texture(&volume_penetration_depth_view) // TODO: Not great to have this here
             .create(device, "BindGroup: Write to Velocity Grid - divergence projection");
         let bind_group_density_projection_write_velocity = BindGroupBuilder::new(&group_layout_write_velocity_volume)
             .texture(&volume_marker_view)
@@ -281,6 +288,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
             .texture(pressure_field_from_density.pressure_view())
+            .texture(&volume_penetration_depth_view)
             .create(device, "BindGroup: Write to Velocity Grid - density projection");
         let bind_group_advect_particles = BindGroupBuilder::new(&group_layout_advect_particles)
             .texture(&volume_velocity_view_x)
@@ -292,12 +300,14 @@ impl HybridFluid {
             .resource(particles_velocity_x.as_entire_binding())
             .resource(particles_velocity_y.as_entire_binding())
             .resource(particles_velocity_z.as_entire_binding())
+            .texture(&volume_penetration_depth_view)
             .create(device, "BindGroup: Write to Particles");
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .resource(particles_position_llindex.as_entire_binding())
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_view)
             .texture(&pressure_solver.residual_view())
+            .texture(&volume_penetration_depth_view)
             .create(device, "BindGroup: Density projection gather");
         let bind_group_density_projection_correct_particles = BindGroupBuilder::new(&group_layout_density_projection_correct_particles)
             .resource(particles_position_llindex.as_entire_binding())
@@ -305,7 +315,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_x)
             .texture(&volume_velocity_view_y)
             .texture(&volume_velocity_view_z)
-            .create(device, "BindGroup: Density projection gather");
+            .create(device, "BindGroup: Density projection correct particles");
 
         let mut bind_group_renderer_builder = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
             .resource(particles_position_llindex.as_entire_binding())
@@ -519,10 +529,11 @@ impl HybridFluid {
 
     fn clamp_to_grid(&self, grid_cor: cgmath::Point3<f32>) -> cgmath::Point3<u32> {
         // Due to the design of the grid, the 0-1 range is reserved by solid cells and can't be filled.
+        // Due to the way push boundaries work, the (max-1)-max range is reserved as well!
         cgmath::Point3::new(
-            self.grid_dimension.width.min(grid_cor.x as u32).max(1),
-            self.grid_dimension.height.min(grid_cor.y as u32).max(1),
-            self.grid_dimension.depth.min(grid_cor.z as u32).max(1),
+            (self.grid_dimension.width - 1).min(grid_cor.x as u32).max(1),
+            (self.grid_dimension.height - 1).min(grid_cor.y as u32).max(1),
+            (self.grid_dimension.depth - 1).min(grid_cor.z as u32).max(1),
         )
     }
 
@@ -810,10 +821,10 @@ impl HybridFluid {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_position_change));
                     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 });
-                wgpu_scope!(cpass, "extrapolate velocity grid", || {
-                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
-                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-                });
+                // wgpu_scope!(cpass, "extrapolate velocity grid", || {
+                //     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
+                //     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                // });
             }
             wgpu_scope!(cpass, "correct particle density error", || {
                 cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);

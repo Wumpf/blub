@@ -30,9 +30,7 @@ void main() {
     vec3 positionChange = vec3(texture(sampler3D(VelocityVolumeX, SamplerTrilinearClamp), offsetPositions[0]).x,
                                texture(sampler3D(VelocityVolumeY, SamplerTrilinearClamp), offsetPositions[1]).x,
                                texture(sampler3D(VelocityVolumeZ, SamplerTrilinearClamp), offsetPositions[2]).x);
+    vec3 newPosition = originalPosition + positionChange;
 
-    // TODO: Boundary conditions...
-    vec3 newPosition = originalPosition + positionChange; // clamp(originalPosition + totalMovement, vec3(1.0001), gridSize - vec3(0.0001));
-
-    Particles[particleIndex].Position = newPosition;
+    Particles[particleIndex].Position = originalPosition + positionChange;
 }
