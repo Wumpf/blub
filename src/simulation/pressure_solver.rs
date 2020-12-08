@@ -151,7 +151,7 @@ impl PressureField {
                 readback.buffer.unmap();
                 self.unused_error_buffers.push(readback.buffer);
 
-                // We currently always deal with 'pressure * density / dt', not with pressure.
+                // We always deal with 'pressure * dt / density', not with pressure.
                 // To make display more representative for different time, we adjust our error value accordingly.
                 // See also config.target_mse
                 let delta_sq = simulation_delta.as_secs_f32() * simulation_delta.as_secs_f32();

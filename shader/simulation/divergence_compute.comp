@@ -1,7 +1,7 @@
 // Computes velocity divergence plus solid wall influence
 // So technically not just divergence, just the right hand sight of the pressure solve!
 //
-// Another "technicallity" is that the (pressure) pressure we compute is premultiplied with density/dTime
+// Another "technicallity" is that the pressure we compute is premultiplied with dTime / density
 // as this is what we need later on to remove divergence.
 
 #version 460

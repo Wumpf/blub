@@ -134,8 +134,6 @@ void main() {
         marker_nz == CELL_AIR)
         density = max(Density0, density);
 
-    // Compared to the formula in the paper this is the error multiplied with delta t
-    // (so the solver will arrive at dt²/ρ_0 p_2)
     density = 1.0 - density / Density0;
     // Clamp density as suggested in paper to avoid displacement of more than half a cell at a time
     density = clamp(density, -0.5, 0.5);
@@ -153,6 +151,10 @@ void main() {
         density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 1, 0), 0).x).y;
     if (marker_nz == CELL_SOLID)
         density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 0, 1), 0).x).z;
+
+    // We could remove the time factor on both sides of the equation (this is multiplied back during density_projection_position_change),
+    // but by keeping it the pressure solver configuration becomes more similar to the configuration for the divergence projection.
+    density /= Time.SimulationDelta;
 
     imageStore(DensityVolume, gridCoord, density.xxxx);
 }

@@ -58,14 +58,12 @@ void main() {
 
     case VISUALIZE_PRESSURE_VELOCITY:
         float pressureV = marker == CELL_FLUID ? texelFetch(PressureVolume_Velocity, volumeCoordinate, 0).x : 0.0;
-        // pressureV *= 0.1;
         scale = pressureV * Rendering.FluidGridToWorldScale;
         out_Tint = colormapCoolToWarm(pressureV).rgb;
         break;
 
     case VISUALIZE_PRESSURE_DENSITY:
         float pressureD = marker == CELL_FLUID ? texelFetch(PressureVolume_Density, volumeCoordinate, 0).x : 0.0;
-        pressureD /= Time.SimulationDelta;
         scale = pressureD * Rendering.FluidGridToWorldScale;
         out_Tint = colormapCoolToWarm(pressureD).rgb;
         break;

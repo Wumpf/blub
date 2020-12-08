@@ -20,7 +20,7 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     neighborGridCoord[component] += 1;
     float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;
 
-    float positionChange = samplePressure(neighborGridCoord, neighborCellType) - centerPressure;
+    float positionChange = (samplePressure(neighborGridCoord, neighborCellType) - centerPressure) * Time.SimulationDelta;
 
     // todo optimize
     float penetrationNeighbor = unpackPushDisplacement(imageLoad(SolidPenetrationDepth, neighborGridCoord).x)[component];

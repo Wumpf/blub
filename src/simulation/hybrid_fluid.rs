@@ -224,9 +224,9 @@ impl HybridFluid {
             grid_dimension,
             &pressure_solver,
             SolverConfig {
-                target_mse: 0.05,
+                target_mse: 0.5,
                 mse_check_frequency: 4,
-                max_num_iterations: 16,
+                max_num_iterations: 32,
             },
         );
 
