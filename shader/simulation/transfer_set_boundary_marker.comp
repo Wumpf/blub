@@ -13,7 +13,7 @@ void main() {
         imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_SOLID));
     } else {
         float distanceToNextSolid = texelFetch(SolidSignedDistances, ivec3(gl_GlobalInvocationID), 0).x;
-        if (distanceToNextSolid < Rendering.FluidGridToWorldScale * 0.5)
+        if (distanceToNextSolid < 0)
             imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_SOLID));
     }
 }

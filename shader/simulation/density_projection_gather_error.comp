@@ -1,7 +1,7 @@
-// Builds density grid from particles and llgrid
-// Uses shepard interpolation on particles.
+// Computes right hand side of pressure equation from density
 // TODO: Similar to transfer_gather_velocity.comp - can share more code?
-// Just like in divergence_compute the error value here - and the pressure value - is premultiplied with density/dTime
+//
+// Just as in compute_divergence the pressure we compute is premultiplied with dTime / density.
 
 #version 450
 
@@ -14,6 +14,7 @@ layout(set = 2, binding = 0) buffer restrict readonly ParticlePositionLlBuffer {
 layout(set = 2, binding = 1) uniform utexture3D LinkedListDualGrid;
 layout(set = 2, binding = 2, r8_snorm) uniform restrict image3D MarkerVolume;
 layout(set = 2, binding = 3, r32f) uniform restrict image3D DensityVolume;
+// layout(set = 2, binding = 4) uniform utexture3D SolidPenetrationDepth;
 // layout(push_constant) uniform PushConstants { uint VelocityTransferComponent; };
 
 // Uses a shared memory so every thread loads one particle for its current cell and then accesses remaining neighbors (a 2x2x2 environment) from
@@ -53,7 +54,7 @@ void main() {
     float density = 0.0;
 
     // A cell starts out with 8 particles, ideally that stays roughly constant.
-    for (int i = 0; i < 12; ++i) {
+    for (int i = 0; i < 20; ++i) {
         if (localParticleIndex != INVALID_LINKED_LIST_PTR) {
             // Load a particle
             vec3 particlePosition = Particles[localParticleIndex].Position;
@@ -91,6 +92,8 @@ void main() {
 
     if (!threadWritesFluid)
         return;
+
+    //    imageStore(DebugVolume, gridCoord, vec4(density > 12.0));
 
     // To simplify we set the volume of a cell and the mass of a single particle to 1.
     // Our normal density is defined by 8 evenly distributed particles in a cell. Therefore the normal density is defines as 8!
@@ -131,10 +134,27 @@ void main() {
         marker_nz == CELL_AIR)
         density = max(Density0, density);
 
-    // Clamp density as suggested in paper to avoid displacement of more than one particle at a time
-    density = clamp(density, Density0 * 0.5, Density0 * 1.5);
+    density = 1.0 - density / Density0;
+    // Clamp density as suggested in paper to avoid displacement of more than half a cell at a time
+    density = clamp(density, -0.5, 0.5);
 
-    // Compared to the formula in the paper this is the error multiplied with delta t and ρ0 (normal density)
-    float densityError = Density0 - density;
-    imageStore(DensityVolume, gridCoord, densityError.xxxx);
+    // Push boundaries
+    // if (marker_px == CELL_SOLID)
+    //    density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(1, 0, 0), 0).x).x;
+    // if (marker_py == CELL_SOLID)
+    //    density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(0, 1, 0), 0).x).y;
+    // if (marker_pz == CELL_SOLID)
+    //    density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(0, 0, 1), 0).x).z;
+    // if (marker_nx == CELL_SOLID)
+    //    density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(1, 0, 0), 0).x).x;
+    // if (marker_ny == CELL_SOLID)
+    //    density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 1, 0), 0).x).y;
+    // if (marker_nz == CELL_SOLID)
+    //    density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 0, 1), 0).x).z;
+
+    // We could remove the time factor on both sides of the equation (this is multiplied back during density_projection_position_change),
+    // but by keeping it the pressure solver configuration becomes more similar to the configuration for the divergence projection.
+    // density /= Time.SimulationDelta;
+
+    imageStore(DensityVolume, gridCoord, density.xxxx);
 }

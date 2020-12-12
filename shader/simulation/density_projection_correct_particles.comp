@@ -56,7 +56,7 @@ void main() {
         vec3(interpolateBilinear(p_100, p_110, p_101, p_111, interpolants.yz) - interpolateBilinear(p_000, p_010, p_001, p_011, interpolants.yz),
              interpolateBilinear(p_010, p_110, p_011, p_111, interpolants.xz) - interpolateBilinear(p_000, p_100, p_001, p_101, interpolants.xz),
              interpolateBilinear(p_001, p_101, p_011, p_111, interpolants.xy) - interpolateBilinear(p_000, p_100, p_010, p_110, interpolants.xy));
-    vec3 totalMovement = Time.SimulationDelta * gradient;
+    vec3 totalMovement = gradient * 0.01; // HACK: Artificial damping
 
     // Enforce boundary. TODO: Implement push boundaries as described by Implicit Density Projection paper?
     vec3 newPosition = clamp(originalPosition + totalMovement, vec3(1.0001), gridSize - vec3(0.0001));
