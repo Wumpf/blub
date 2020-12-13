@@ -23,7 +23,8 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     // HACK/BUG?: Following the theory from the paper we expect to multiply only with Time.SimulationDelta once.
     // However, I have found this to be extremly unstable. Unstability seems to be timestamp related.
     // One could argue that this damps the effect of Implicit Density projection out of existance, but this is *not* the case - after the factor the
-    // technique works as expected.
+    // technique mostly works as expected. What we can't reproduce is the volume recovery from degenerated cases
+    // (completly degenerated is expected to fail since we don't resample particles)
     float positionChange = (samplePressure(neighborGridCoord, neighborCellType) - centerPressure) * Time.SimulationDelta * Time.SimulationDelta;
 
     // todo optimize
