@@ -20,7 +20,11 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     neighborGridCoord[component] += 1;
     float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;
 
-    float positionChange = (samplePressure(neighborGridCoord, neighborCellType) - centerPressure) * Time.SimulationDelta;
+    // HACK/BUG?: Following the theory from the paper we expect to multiply only with Time.SimulationDelta once.
+    // However, I have found this to be extremly unstable. Unstability seems to be timestamp related.
+    // One could argue that this damps the effect of Implicit Density projection out of existance, but this is *not* the case - after the factor the
+    // technique works as expected.
+    float positionChange = (samplePressure(neighborGridCoord, neighborCellType) - centerPressure) * Time.SimulationDelta * Time.SimulationDelta;
 
     // todo optimize
     float penetrationNeighbor = unpackPushDisplacement(imageLoad(SolidPenetrationDepth, neighborGridCoord).x)[component];
@@ -48,6 +52,8 @@ void main() {
     vec3 centerPenetration = vec3(0.0);
     if (centerCellType == CELL_SOLID)
         centerPenetration = unpackPushDisplacement(imageLoad(SolidPenetrationDepth, centerGridCoord).x).xyz;
+
+    imageStore(DebugVolume, centerGridCoord, centerPressure.xxxx);
 
     float posChangeX = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 0, centerPenetration.x);
     imageStore(VelocityVolumeX, centerGridCoord, posChangeX.xxxx);
