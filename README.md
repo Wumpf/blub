@@ -93,13 +93,25 @@ Since evaluating the MSE itself is costly, this is done every couple of few iter
 
 The last computed MSE and iteration count is queried asynchronously, in order to display a histogram in the gui and make informed choices for selecting the target MSE, max iteration & MSE evaluation frequency parameters.
 
-#### Implicit Density Projection
+## Implicit Density Projection
 
 For improved volume conversation & iteration times Blub implements a "secondary pressure solver" that uses fluid density instead of divergence as input. A video + paper can be found [here](https://animation.rwth-aachen.de/publication/0566/). I found that it improves the quality of the simulation tremendously for large timesteps (I typically run the simulation/solver at 120hz).
 
 Compared to what is described (to my understanding) in the paper I made a few adjustments/trade-offs:
 * For computing densities, neighboring solid cells are assumed to have a fixed (interpolation kernel derived) density contribution instead of sampling it with particles
-* No resampling for degenerated cases - they are rather hard to detect and handle on GPU
+* No resampling for degenerated cases
+
+**My implementation most likely has some bug as I need an extra damping factor (multiply by time stamp) on all position corrections to keep the simulation stable.
+I asked the authors for an implementation in order to be able to compare but have not received any reply.**
+
+### Push Boundaries
+
+Push boundaries as described in the paper are a bit challenging for a GPU implementation as they require to store the maximum penetration into a solid cell, thus requiring in theory another vec3 volume with data that needs to be written atomically.
+This displacement is clamped to the length of the cell (as in the paper) allowing us to accurately enough encode this value in a 32 bit value.
+As particles only rarely exit the volume (this happens only due to inaccuracies in the first place), I employ a atomic compare exchange loop for writing the max displacement of a cell.
+
+An interesting implementation detail of push boundaries is that we need to reserve a few more boundary cells than without: In the MAC grid one can usually keep outer border cells on the positive axis marked as free,
+but with push boundaries we need to have a place to solid cell penetration for all borders.
 
 ## Rendering
 
