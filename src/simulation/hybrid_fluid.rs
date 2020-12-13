@@ -179,9 +179,9 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, false)) // penetration depth / unused
             .create(device, "BindGroupLayout: Write to Velocity");
         let group_layout_advect_particles = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::texture2D()) // velocityX
-            .next_binding_compute(binding_glsl::texture2D()) // velocityY
-            .next_binding_compute(binding_glsl::texture2D()) // velocityZ
+            .next_binding_compute(binding_glsl::texture3D()) // velocityX
+            .next_binding_compute(binding_glsl::texture3D()) // velocityY
+            .next_binding_compute(binding_glsl::texture3D()) // velocityZ
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, false)) // marker volume
             .next_binding_compute(binding_glsl::uimage3D(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
@@ -189,6 +189,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
             .next_binding_compute(binding_glsl::uimage3D(wgpu::TextureFormat::R32Uint, false)) // penetration depth
+            .next_binding_compute(binding_glsl::texture3D()) // Distance field
             .create(device, "BindGroupLayout: Advect to Particles");
 
         let group_layout_density_projection_gather_error = BindGroupLayoutBuilder::new()
@@ -301,6 +302,7 @@ impl HybridFluid {
             .resource(particles_velocity_y.as_entire_binding())
             .resource(particles_velocity_z.as_entire_binding())
             .texture(&volume_penetration_depth_view)
+            .texture(signed_distance_field.texture_view())
             .create(device, "BindGroup: Write to Particles");
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .resource(particles_position_llindex.as_entire_binding())
@@ -821,10 +823,14 @@ impl HybridFluid {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_position_change));
                     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 });
-                // wgpu_scope!(cpass, "extrapolate velocity grid", || {
-                //     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
-                //     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-                // });
+
+                // TODO:
+                // We don't do velocity extrapolation here.
+                // Yes this means that we loos a bit of
+                //wgpu_scope!(cpass, "extrapolate velocity grid", || {
+                //    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
+                //    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                //});
             }
             wgpu_scope!(cpass, "correct particle density error", || {
                 cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);

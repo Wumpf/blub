@@ -25,11 +25,12 @@ pub enum FluidRenderingMode {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GlobalRenderSettingsUniformBufferContent {
-    fluid_origin: cgmath::Point3<f32>,
+    fluid_min: cgmath::Point3<f32>,
     fluid_grid_to_world_scale: f32,
+    fluid_max: cgmath::Point3<f32>,
     velocity_visualization_scale: f32,
+    padding: cgmath::Point3<f32>,
     fluid_particle_radius: f32,
-    padding: cgmath::Point2<f32>,
 }
 
 // What renders the scene (so everything except ui!)
@@ -157,15 +158,17 @@ impl SceneRenderer {
     }
 
     pub fn fill_global_uniform_buffer(&self, scene: &Scene) -> GlobalRenderSettingsUniformBufferContent {
+        let fluid_config = &scene.config().fluid;
         let fluid_particle_radius =
-            scene.config().fluid.grid_to_world_scale / (HybridFluid::PARTICLES_PER_GRID_CELL as f32).powf(1.0 / 3.0) * self.particle_radius_factor;
+            fluid_config.grid_to_world_scale / (HybridFluid::PARTICLES_PER_GRID_CELL as f32).powf(1.0 / 3.0) * self.particle_radius_factor;
 
         GlobalRenderSettingsUniformBufferContent {
-            fluid_origin: scene.config().fluid.world_position,
-            fluid_grid_to_world_scale: scene.config().fluid.grid_to_world_scale,
+            fluid_min: fluid_config.world_position,
+            fluid_max: fluid_config.world_position + fluid_config.grid_dimension.cast::<f32>().unwrap().to_vec() * fluid_config.grid_to_world_scale,
+            fluid_grid_to_world_scale: fluid_config.grid_to_world_scale,
             velocity_visualization_scale: self.velocity_visualization_scale,
             fluid_particle_radius,
-            padding: cgmath::point2(0.0, 0.0),
+            padding: cgmath::point3(0.0, 0.0, 0.0),
         }
     }
 

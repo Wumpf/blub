@@ -43,7 +43,7 @@ float triangleDistanceSquared(in vec3 v1, in vec3 v2, in vec3 v3, in vec3 p, out
 
 void main() {
     // grid cell world position
-    vec3 cellCenter = (gl_GlobalInvocationID + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
+    vec3 cellCenter = (gl_GlobalInvocationID + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldMin;
 
     // clear on first run, otherwise improve on existing results.
     float distanceSq = 1.0 / 0.0;
@@ -81,5 +81,6 @@ void main() {
     float dist = sqrt(distanceSq) * distanceSign;
     if (dist != dist)
         dist = 0.0;
+
     imageStore(SolidSignedDistances, ivec3(gl_GlobalInvocationID), vec4(dist));
 }

@@ -31,7 +31,7 @@ void main() {
 
     float marker = texelFetch(MarkerVolume, volumeCoordinate, 0).x;
 
-    vec3 cellCenter = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
+    vec3 cellCenter = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldMin;
     vec3 linePosition = cellCenter;
     addToChannel(linePosition, 0.5 * Rendering.FluidGridToWorldScale, channel);
 

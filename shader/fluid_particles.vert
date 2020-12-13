@@ -17,7 +17,7 @@ void main() {
     vec3 velocity =
         vec3(ParticleBufferVelocityX[gl_InstanceIndex].w, ParticleBufferVelocityY[gl_InstanceIndex].w, ParticleBufferVelocityZ[gl_InstanceIndex].w);
     out_Tint = colormapHeat(length(velocity) * Rendering.VelocityVisualizationScale);
-    out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
+    out_ParticleWorldPosition = Particles[gl_InstanceIndex].Position * Rendering.FluidGridToWorldScale + Rendering.FluidWorldMin;
     out_WorldPosition = spanParticle(out_ParticleWorldPosition, out_Radius);
     gl_Position = Camera.ViewProjection * vec4(out_WorldPosition, 1.0);
 }

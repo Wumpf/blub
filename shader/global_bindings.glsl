@@ -29,9 +29,11 @@ struct TimerData {
 };
 
 struct GlobalRenderingSettings {
-    vec3 FluidWorldOrigin;
+    vec3 FluidWorldMin;          // Origin of the fluid domain in world space
     float FluidGridToWorldScale; // how big is a grid cell in world scale
+    vec3 FluidWorldMax;
     float VelocityVisualizationScale;
+    vec3 _Padding;
     float FluidParticleRadius; // particle size in world space
 };
 

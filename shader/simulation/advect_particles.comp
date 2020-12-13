@@ -15,6 +15,7 @@ layout(set = 2, binding = 6) buffer restrict ParticleBufferVx { vec4 ParticleBuf
 layout(set = 2, binding = 7) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
 layout(set = 2, binding = 8) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
 layout(set = 2, binding = 9, r32ui) uniform restrict coherent uimage3D SolidPenetrationDepth;
+layout(set = 2, binding = 10) uniform texture3D SignedDistanceField;
 
 COMPUTE_PASS_PARTICLES
 
@@ -117,13 +118,26 @@ void main() {
         ivec3 nearestDualGridCell = ivec3(newPosition - vec3(0.5));
         Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
     }
+
     // If we penetrated a solid, write max penetration into the penetration depth volume.
     // Note that penetration is clamped out  from -1 to 1 for distance to the cell
-    // TODO: Use exclusively the signed distance field for this.
+    //
+    // Domain bounds are treated separately - it would mess our distance field computation up quite a bit since it would mean that there's a "special"
+    // interior with positive sign. (can be done but I figured it's too messy)
     {
         vec3 penetration = max(vec3(0.0), vec3(1.001) - newPosition) - max(vec3(0.0), newPosition - vec3(gridSize - 1.001));
+        vec3 texcoord = newPosition * gridTexelSizeNormalized; // / (gridSize - vec3(1));
+        float solidDistance = texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord).x;
+        if (solidDistance < 0.0) {
+            vec3 solidDistanceGradient = normalize(vec3(
+                texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord + vec3(gridTexelSizeNormalized.x, 0, 0)).x - solidDistance,
+                texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord + vec3(0, gridTexelSizeNormalized.y, 0)).x - solidDistance,
+                texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord + vec3(0, 0, gridTexelSizeNormalized.z)).x - solidDistance));
+            penetration = -solidDistance * solidDistanceGradient;
+        }
+
         if (penetration.x != 0.0 || penetration.y != 0.0 || penetration.z != 0.0) {
-            uint packedPenetrationVector = packPushDisplacement(penetration);
+            uint packedPenetrationVector = packPushDisplacement(penetration); // This is where clamp -1 to 1 happens
             float penetrationLengthCompVal = displacementLengthComparisionValue(packedPenetrationVector);
             uint previousPackedPenetrationVector = imageLoad(SolidPenetrationDepth, newGridCoord).x;
             while (displacementLengthComparisionValue(previousPackedPenetrationVector) < penetrationLengthCompVal) {

@@ -53,8 +53,6 @@ void main() {
     if (centerCellType == CELL_SOLID)
         centerPenetration = unpackPushDisplacement(imageLoad(SolidPenetrationDepth, centerGridCoord).x).xyz;
 
-    imageStore(DebugVolume, centerGridCoord, centerPressure.xxxx);
-
     float posChangeX = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 0, centerPenetration.x);
     imageStore(VelocityVolumeX, centerGridCoord, posChangeX.xxxx);
     float posChangeY = computePositionChangeForDirection(centerCellType, centerGridCoord, centerPressure, 1, centerPenetration.y);

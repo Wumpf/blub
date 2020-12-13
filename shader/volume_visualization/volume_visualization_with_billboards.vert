@@ -87,7 +87,7 @@ void main() {
     }
     scale = saturate(abs(scale));
 
-    out_ParticleWorldPosition = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldOrigin;
+    out_ParticleWorldPosition = (volumeCoordinate + vec3(0.5)) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldMin;
     out_Radius = scale * 0.5 * Rendering.FluidGridToWorldScale;
     out_WorldPosition = spanParticle(out_ParticleWorldPosition, out_Radius);
     gl_Position = Camera.ViewProjection * vec4(out_WorldPosition, 1.0);

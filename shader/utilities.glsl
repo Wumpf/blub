@@ -51,6 +51,15 @@ bool sphereIntersect(vec3 spherePosition, float radius, vec3 rayOrigin, vec3 ray
 }
 
 float dot2(in vec3 v) { return dot(v, v); }
+float max3(vec3 v) { return max(max(v.x, v.y), v.z); }
+float min3(vec3 v) { return min(min(v.x, v.y), v.z); }
+
+// https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
+// box is centered at 0 and has extents of b.
+// float sdBox(vec3 p, vec3 b) {
+//     vec3 q = abs(p) - b;
+//     return length(max(q, 0.0)) + min(max3(q), 0.0);
+// }
 
 // also known as 1/(2pi)
 #define INV_TAU 0.15915494309
