@@ -50,9 +50,7 @@ float MultiplyWithCoefficientMatrix(ivec3 gridCoord, texture3D texture, float va
     numNonSolidNeighbors += abs(markerZ1); // float(markerZ1 != CELL_SOLID);
 
     // apply diagonal of A
-    if (numNonSolidNeighbors > 0.0) {
-        result += numNonSolidNeighbors * valueAtGridCoord;
-    }
+    result += numNonSolidNeighbors * valueAtGridCoord;
 
     // apply other coefficients of A
     if (markerX0 == CELL_FLUID) {
