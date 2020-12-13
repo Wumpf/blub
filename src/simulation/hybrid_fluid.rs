@@ -823,14 +823,10 @@ impl HybridFluid {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_position_change));
                     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 });
-
-                // TODO:
-                // We don't do velocity extrapolation here.
-                // Yes this means that we loos a bit of
-                //wgpu_scope!(cpass, "extrapolate velocity grid", || {
-                //    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
-                //    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
-                //});
+                wgpu_scope!(cpass, "extrapolate velocity grid", || {
+                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
+                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                });
             }
             wgpu_scope!(cpass, "correct particle density error", || {
                 cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);
