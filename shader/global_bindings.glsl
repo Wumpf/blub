@@ -69,8 +69,14 @@ struct MeshData {
 
     uvec2 VertexBufferRange;
     uvec2 IndexBufferRange;
+
+    int TextureIndex;
+    vec3 _Padding;
 };
 layout(set = 0, binding = 3) restrict readonly buffer Meshes_ { MeshData Meshes[]; };
+// Not going with dynamic size (UNSIZED_BINDING_ARRAY extension) for convenience in layout setup (which doesn't change per scene).
+// (also this is more widely supported)
+layout(set = 0, binding = 4) uniform texture2D MeshTextures[1];
 
 // Can't do packed layouts in glsl/spirv?
 struct Vertex {
@@ -79,8 +85,8 @@ struct Vertex {
     vec2 NormalYZ;
     vec2 Texcoord;
 };
-layout(set = 0, binding = 4) restrict readonly buffer MeshIndices_ { uint MeshIndices[]; };
-layout(set = 0, binding = 5) restrict readonly buffer MeshVertices_ { Vertex MeshVertices[]; };
+layout(set = 0, binding = 5) restrict readonly buffer MeshIndices_ { uint MeshIndices[]; };
+layout(set = 0, binding = 6) restrict readonly buffer MeshVertices_ { Vertex MeshVertices[]; };
 
 // ----------------------------------------
 // Other

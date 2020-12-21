@@ -56,7 +56,7 @@ impl Scene {
         let config: SceneConfig = serde_json::from_reader(reader)?;
 
         let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, global_bind_group_layout);
-        let models = SceneModels::from_config(&device, &config.static_objects)?;
+        let models = SceneModels::from_config(&device, queue, &config.static_objects)?;
 
         Ok(Scene {
             hybrid_fluid,

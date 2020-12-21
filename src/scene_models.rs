@@ -17,9 +17,9 @@ pub struct MeshData {
     pub vertex_buffer_range: core::ops::Range<u32>, // range in number of vertices (not bytes!)
     pub index_buffer_range: core::ops::Range<u32>,  // range in number of indices (not bytes!)
 
-                                                    // Material data. If we expected many materials would share a transform this would be a bad idea to put it together.
-                                                    // But per loaded mesh we typically only have one.
-                                                    // todo: add things like
+    // Material data. If we expected many materials would share a transform this would be a bad idea to put it together.
+    // But per loaded mesh we typically only have one.
+    pub texture_index: i32,
 }
 
 #[repr(C)]
@@ -35,6 +35,9 @@ struct MeshDataGpu {
 
     vertex_buffer_range: cgmath::Vector2<u32>,
     index_buffer_range: cgmath::Vector2<u32>,
+
+    texture_index: i32,
+    padding: cgmath::Vector3<f32>,
 }
 unsafe impl bytemuck::Pod for MeshDataGpu {}
 unsafe impl bytemuck::Zeroable for MeshDataGpu {}
@@ -65,18 +68,64 @@ pub struct SceneModels {
     pub vertex_buffer: wgpu::Buffer,
     pub mesh_desc_buffer: wgpu::Buffer,
 
+    pub texture_views: Vec<wgpu::TextureView>,
+
     pub meshes: Vec<MeshData>,
 }
 
+fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &Path) -> wgpu::Texture {
+    info!("Loading 2d texture {:?}", path);
+    // TODO: Mipmaps
+
+    let image = image::io::Reader::open(path).unwrap().decode().unwrap().to_rgba();
+    let image_data = image.as_raw();
+
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: path.file_name().unwrap().to_str(),
+        size: wgpu::Extent3d {
+            width: image.width(),
+            height: image.height(),
+            depth: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+    });
+
+    queue.write_texture(
+        wgpu::TextureCopyView {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+        },
+        &image_data,
+        wgpu::TextureDataLayout {
+            offset: 0,
+            bytes_per_row: 4 * image.width(),
+            rows_per_image: image.height(),
+        },
+        wgpu::Extent3d {
+            width: image.width(),
+            height: image.height(),
+            depth: 1,
+        },
+    );
+
+    texture
+}
+
 impl SceneModels {
-    pub fn from_config(device: &wgpu::Device, configs: &Vec<StaticObjectConfig>) -> Result<Self, Box<dyn Error>> {
+    pub fn from_config(device: &wgpu::Device, queue: &wgpu::Queue, configs: &Vec<StaticObjectConfig>) -> Result<Self, Box<dyn Error>> {
         let mut vertices = Vec::new();
         let mut indices = Vec::<u32>::new();
         let mut meshes = Vec::new();
+        let mut texture_paths = Vec::new();
 
         for static_object_config in configs {
             let file_name = Path::new("models").join(&static_object_config.model);
-            let (mut loaded_models, _loaded_materials) = tobj::load_obj(&file_name, true)?;
+            let (mut loaded_models, loaded_materials) = tobj::load_obj(&file_name, true)?;
 
             loaded_models.sort_by_key(|m| m.mesh.material_id);
             let mut prev_material_id = std::usize::MAX;
@@ -94,6 +143,21 @@ impl SceneModels {
                     m.mesh.material_id.unwrap()
                 };
                 if prev_material_id != material_id {
+                    let texture_index: i32 = if let Some(matid) = m.mesh.material_id {
+                        let texture_path = file_name.parent().unwrap().join(&loaded_materials[matid].diffuse_texture);
+
+                        let known_texture_index = texture_paths.iter().position(|p| *p == texture_path);
+                        match known_texture_index {
+                            Some(index) => index as i32,
+                            None => {
+                                texture_paths.push(texture_path);
+                                texture_paths.len() as i32 - 1
+                            }
+                        }
+                    } else {
+                        -1
+                    };
+
                     meshes.push(MeshData {
                         transform: cgmath::Matrix4::from_translation(static_object_config.world_position.to_vec())
                             * cgmath::Matrix4::from_scale(static_object_config.scale)
@@ -102,6 +166,7 @@ impl SceneModels {
                             * cgmath::Matrix4::from_angle_z(static_object_config.rotation_angles.z),
                         vertex_buffer_range: (vertices.len() as u32)..(vertices.len() as u32),
                         index_buffer_range: (indices.len() as u32)..(indices.len() as u32),
+                        texture_index,
                     });
                 }
                 prev_material_id = material_id;
@@ -126,7 +191,7 @@ impl SceneModels {
                 }
                 for (vertex, uv) in vertices.iter_mut().skip(prev_vertex_count).zip(m.mesh.texcoords.chunks(2)) {
                     vertex.uv.x = uv[0];
-                    vertex.uv.y = uv[1];
+                    vertex.uv.y = 1.0 - uv[1];
                 }
             }
         }
@@ -147,9 +212,35 @@ impl SceneModels {
                     inverse_transform_r2: inverse_transform.z,
                     vertex_buffer_range: cgmath::vec2(mesh.vertex_buffer_range.start, mesh.vertex_buffer_range.end),
                     index_buffer_range: cgmath::vec2(mesh.index_buffer_range.start, mesh.index_buffer_range.end),
+                    texture_index: mesh.texture_index,
+                    padding: cgmath::vec3(0.0, 0.0, 0.0),
                 }
             })
             .collect();
+
+        // TODO HACK: Right now texturew_views MUST have one element
+        let texture_views = if texture_paths.len() == 0 {
+            vec![device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some("Dummy Texture"),
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    usage: wgpu::TextureUsage::SAMPLED,
+                })
+                .create_view(&Default::default())]
+        } else {
+            texture_paths
+                .iter()
+                .map(|path| load_texture2d_from_path(device, queue, path).create_view(&Default::default()))
+                .collect()
+        };
 
         Ok(SceneModels {
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -168,6 +259,7 @@ impl SceneModels {
                 usage: wgpu::BufferUsage::STORAGE,
             }),
             meshes,
+            texture_views,
         })
     }
 }

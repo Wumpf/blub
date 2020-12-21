@@ -7,6 +7,8 @@ pub struct GlobalBindings {
 }
 
 impl GlobalBindings {
+    pub const NUM_MESH_TEXTURES: u32 = 1;
+
     pub fn new(device: &wgpu::Device) -> Self {
         let bind_group_layout = BindGroupLayoutBuilder::new()
             // Constants
@@ -19,6 +21,12 @@ impl GlobalBindings {
                 wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT | wgpu::ShaderStage::COMPUTE,
                 binding_glsl::buffer(true),
             )
+            .binding(wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: binding_glsl::texture2D(),
+                count: std::num::NonZeroU32::new(Self::NUM_MESH_TEXTURES),
+            })
             .next_binding(wgpu::ShaderStage::COMPUTE, binding_glsl::buffer(true)) // Index buffer used for compute shader consuming the mesh
             .next_binding(wgpu::ShaderStage::COMPUTE, binding_glsl::buffer(true)) // Vertex buffer used for compute shader consuming the mesh
             .create(device, "BindGroupLayout: GlobalBindings");
@@ -51,6 +59,13 @@ impl GlobalBindings {
             ..Default::default()
         });
 
+        // let texture_views: Vec<wgpu::TextureView> = meshes
+        //     .texture_views
+        //     .iter()
+        //     .chain(std::iter::repeat(&dummy_texture_view).take(Self::NUM_MESH_TEXTURES as usize - meshes.texture_views.len()))
+        //     .collect();
+        let texture_views = &meshes.texture_views;
+
         self.bind_group = Some(
             BindGroupBuilder::new(&self.bind_group_layout)
                 // Constants
@@ -60,6 +75,7 @@ impl GlobalBindings {
                 .sampler(&point_sampler)
                 // Meshdata
                 .resource(meshes.mesh_desc_buffer.as_entire_binding())
+                .resource(wgpu::BindingResource::TextureViewArray(texture_views))
                 .resource(meshes.index_buffer.as_entire_binding())
                 .resource(meshes.vertex_buffer.as_entire_binding())
                 .create(device, "BindGroup: GlobalBindings"),

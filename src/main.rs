@@ -90,7 +90,10 @@ impl Application {
         let (device, mut command_queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::PUSH_CONSTANTS,
+                    features: wgpu::Features::PUSH_CONSTANTS
+                        | wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY
+                        | wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING
+                        | wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING,
                     limits: wgpu::Limits {
                         max_push_constant_size: 8,
                         ..Default::default()
