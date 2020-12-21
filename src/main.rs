@@ -90,6 +90,7 @@ impl Application {
         let (device, mut command_queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
+                    label: Some("main device"),
                     features: wgpu::Features::PUSH_CONSTANTS
                         | wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY
                         | wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING
@@ -98,7 +99,6 @@ impl Application {
                         max_push_constant_size: 8,
                         ..Default::default()
                     },
-                    shader_validation: true,
                 },
                 None, //Some(Path::new("C:/dev/blub/trace")),
             )

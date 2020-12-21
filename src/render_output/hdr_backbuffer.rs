@@ -33,7 +33,7 @@ impl HdrBackbuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::COPY_SRC,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::COPY_SRC,
         });
         let hdr_backbuffer_view = hdr_backbuffer.create_view(&Default::default());
 
@@ -68,7 +68,7 @@ impl HdrBackbuffer {
             color_states: &[color_state::write_all(Screen::FORMAT_BACKBUFFER)],
             depth_stencil_state: None,
             vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint16,
+                index_format: None,
                 vertex_buffers: &[],
             },
             sample_count: 1,
@@ -104,6 +104,7 @@ impl HdrBackbuffer {
         // TODO: All this tonemapping does is go from half (linear) to srgb. Do some nice tonemapping here!
         // Note that we can't use a compute shader here since that would require STORAGE usage flag on the final output which we can't do since it's srgb!
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("tonemap"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &target,
                 resolve_target: None,

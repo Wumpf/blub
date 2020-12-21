@@ -45,7 +45,7 @@ impl Screen {
         let swap_chain = device.create_swap_chain(
             window_surface,
             &wgpu::SwapChainDescriptor {
-                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
                 format: Screen::FORMAT_SWAPCHAIN,
                 width: resolution.width,
                 height: resolution.height,
@@ -66,7 +66,7 @@ impl Screen {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::FORMAT_BACKBUFFER,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_SRC,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_SRC,
         });
         let backbuffer_view = backbuffer.create_view(&Default::default());
 
@@ -77,7 +77,7 @@ impl Screen {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::FORMAT_DEPTH,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
         });
 
         let bind_group_layout = BindGroupLayoutBuilder::new()
@@ -112,7 +112,7 @@ impl Screen {
             color_states: &[color_state::write_all(Self::FORMAT_SWAPCHAIN)],
             depth_stencil_state: None,
             vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint16,
+                index_format: None,
                 vertex_buffers: &[],
             },
             sample_count: 1,
@@ -172,7 +172,7 @@ impl Screen {
                 self.swap_chain = device.create_swap_chain(
                     window_surface,
                     &wgpu::SwapChainDescriptor {
-                        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+                        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
                         format: Screen::FORMAT_SWAPCHAIN,
                         width: self.resolution.width,
                         height: self.resolution.height,
@@ -195,6 +195,7 @@ impl Screen {
         // However, this would require that backbuffer() gives out a different texture depending on whether this is a frame with or without screenshot.
         // Right now this is not possible since they have different formats. Could fix that, but all it safes us is this copy here (can't remove the buffer either)
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("copy to swapchain"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &output.view,
                 resolve_target: None,

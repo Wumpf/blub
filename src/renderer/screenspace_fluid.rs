@@ -114,7 +114,7 @@ impl ScreenSpaceFluid {
                     stencil: Default::default(),
                 }),
                 vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: wgpu::IndexFormat::Uint16,
+                    index_format: None,
                     vertex_buffers: &[],
                 },
                 sample_count: 1,
@@ -234,7 +234,7 @@ impl ScreenSpaceFluid {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: Self::FORMAT_FLUID_DEPTH,
-                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
             }),
             device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Texture: Fluid Depth 2 (blur target)"),
@@ -243,7 +243,7 @@ impl ScreenSpaceFluid {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: Self::FORMAT_FLUID_DEPTH,
-                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
             }),
         ];
         let backbuffer_copy = device.create_texture(&wgpu::TextureDescriptor {
@@ -273,7 +273,7 @@ impl ScreenSpaceFluid {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: Self::FORMAT_FLUID_THICKNESS,
-                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
             }),
             device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Texture: Fluid Thickness 2 (blur target)"),
@@ -282,7 +282,7 @@ impl ScreenSpaceFluid {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: Self::FORMAT_FLUID_THICKNESS,
-                usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::SAMPLED,
             }),
         ];
         let texture_view_fluid_thickness = [
@@ -372,6 +372,7 @@ impl ScreenSpaceFluid {
 
         wgpu_scope!(encoder, "particles", || {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("particles"),
                 color_attachments: &[
                     wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: &self.screen_dependent.texture_view_fluid_view[0],
@@ -409,6 +410,7 @@ impl ScreenSpaceFluid {
             {
                 encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("clear secondary water depth texture"),
                         color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                             attachment: &self.screen_dependent.texture_view_fluid_view[1],
                             resolve_target: None,
@@ -424,6 +426,7 @@ impl ScreenSpaceFluid {
             {
                 encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("clear secondary water thickness texture"),
                         color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                             attachment: &self.screen_dependent.texture_view_fluid_thickness[1],
                             resolve_target: None,
@@ -439,7 +442,9 @@ impl ScreenSpaceFluid {
         });
 
         wgpu_scope!(encoder, "fluid filters & render", || {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("fluid filters & render"),
+            });
             cpass.set_bind_group(0, &global_bind_group, &[]);
             cpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
 

@@ -52,7 +52,7 @@ impl StaticLineRenderer {
         );
         render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
         render_pipeline_desc.vertex_state = wgpu::VertexStateDescriptor {
-            index_format: wgpu::IndexFormat::Uint16,
+            index_format: None,
             vertex_buffers: &[wgpu::VertexBufferDescriptor {
                 stride: LINE_VERTEX_SIZE as wgpu::BufferAddress,
                 step_mode: wgpu::InputStepMode::Vertex,

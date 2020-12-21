@@ -190,6 +190,7 @@ impl SceneRenderer {
             // Opaque
             wgpu_scope!(encoder, "opaque", || {
                 let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("opaque"),
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: backbuffer.texture_view(),
                         resolve_target: None,

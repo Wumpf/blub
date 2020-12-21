@@ -105,7 +105,7 @@ impl RenderPipelineCreationDesc {
                 None => None,
             },
             vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint16,
+                index_format: None,
                 vertex_buffers: &[],
             },
             sample_count: 1,

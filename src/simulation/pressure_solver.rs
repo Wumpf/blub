@@ -560,7 +560,9 @@ impl PressureSolver {
     ) {
         wgpu_scope!(encoder, "PressureSolver.solve");
 
-        let mut cpass = encoder.begin_compute_pass();
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("pressure solve"),
+        });
 
         const PRECONDITIONER_PASS0: u32 = 0;
         const PRECONDITIONER_PASS1: u32 = 1;

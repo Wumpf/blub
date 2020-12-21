@@ -722,7 +722,9 @@ impl HybridFluid {
         let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, Self::COMPUTE_LOCAL_SIZE_PARTICLES);
 
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("transfer & divergence compute"),
+            });
             cpass.set_bind_group(0, global_bind_group, &[]);
             cpass.set_bind_group(1, &self.bind_group_general, &[]);
 
@@ -767,7 +769,9 @@ impl HybridFluid {
             .solve(simulation_delta, &mut self.pressure_field_from_velocity, &mut encoder, pipeline_manager);
 
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("correct for divergence / advect, compute density"),
+            });
             cpass.set_bind_group(0, global_bind_group, &[]);
             cpass.set_bind_group(1, &self.bind_group_general, &[]);
 
@@ -813,7 +817,9 @@ impl HybridFluid {
             .solve(simulation_delta, &mut self.pressure_field_from_density, &mut encoder, pipeline_manager);
 
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("correct for density error"),
+            });
             cpass.set_bind_group(1, &self.bind_group_general, &[]);
             cpass.set_bind_group(0, global_bind_group, &[]);
             {

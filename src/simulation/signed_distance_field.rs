@@ -145,7 +145,9 @@ impl SignedDistanceField {
                 });
 
                 {
-                    let mut compute_pass = encoder.begin_compute_pass();
+                    let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("compute distance field"),
+                    });
                     compute_pass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_compute_distance_field));
                     compute_pass.set_bind_group(0, global_bind_group, &[]);
                     compute_pass.set_bind_group(1, &self.bind_group_write_signed_distance_field, &[]);

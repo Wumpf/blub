@@ -14,8 +14,8 @@ impl GlobalBindings {
             // Constants
             .next_binding_all(binding_glsl::uniform())
             // Sampler
-            .next_binding_all(binding_glsl::sampler())
-            .next_binding_all(binding_glsl::sampler())
+            .next_binding_all(binding_glsl::sampler(true))
+            .next_binding_all(binding_glsl::sampler(false))
             // Meshdata
             .next_binding(
                 wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT | wgpu::ShaderStage::COMPUTE,
@@ -59,12 +59,27 @@ impl GlobalBindings {
             ..Default::default()
         });
 
-        // let texture_views: Vec<wgpu::TextureView> = meshes
-        //     .texture_views
-        //     .iter()
-        //     .chain(std::iter::repeat(&dummy_texture_view).take(Self::NUM_MESH_TEXTURES as usize - meshes.texture_views.len()))
-        //     .collect();
-        let texture_views = &meshes.texture_views;
+        let dummy_texture_view = device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("Dummy Texture"),
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsage::SAMPLED,
+            })
+            .create_view(&Default::default());
+
+        let texture_views: Vec<&wgpu::TextureView> = meshes
+            .texture_views
+            .iter()
+            .chain(std::iter::repeat(&dummy_texture_view).take(Self::NUM_MESH_TEXTURES as usize - meshes.texture_views.len()))
+            .collect();
 
         self.bind_group = Some(
             BindGroupBuilder::new(&self.bind_group_layout)
@@ -75,7 +90,7 @@ impl GlobalBindings {
                 .sampler(&point_sampler)
                 // Meshdata
                 .resource(meshes.mesh_desc_buffer.as_entire_binding())
-                .resource(wgpu::BindingResource::TextureViewArray(texture_views))
+                .resource(wgpu::BindingResource::TextureViewArray(&texture_views))
                 .resource(meshes.index_buffer.as_entire_binding())
                 .resource(meshes.vertex_buffer.as_entire_binding())
                 .create(device, "BindGroup: GlobalBindings"),

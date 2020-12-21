@@ -40,7 +40,7 @@ impl MeshRenderer {
                 color_states: vec![color_state::write_all(HdrBackbuffer::FORMAT)],
                 depth_stencil_state: Some(depth_state::default_read_write(Screen::FORMAT_DEPTH)),
                 vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: wgpu::IndexFormat::Uint32,
+                    index_format: Some(wgpu::IndexFormat::Uint32),
                     vertex_buffers: &[wgpu::VertexBufferDescriptor {
                         stride: VERTEX_SIZE,
                         step_mode: wgpu::InputStepMode::Vertex,
@@ -84,7 +84,7 @@ impl MeshRenderer {
         rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
         rpass.set_bind_group(1, background_and_lighting_bind_group, &[]);
 
-        rpass.set_index_buffer(scene_models.index_buffer.slice(..));
+        rpass.set_index_buffer(scene_models.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         rpass.set_vertex_buffer(0, scene_models.vertex_buffer.slice(..));
 
         for (i, mesh) in scene_models.meshes.iter().enumerate() {

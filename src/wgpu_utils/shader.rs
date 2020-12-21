@@ -116,6 +116,10 @@ impl ShaderDirectory {
             }
         };
 
-        Ok(device.create_shader_module(wgpu::ShaderModuleSource::SpirV(Borrowed(&compilation_artifact.as_binary()))))
+        Ok(device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some(path.file_name().unwrap().to_str().unwrap()),
+            source: wgpu::ShaderSource::SpirV(Borrowed(&compilation_artifact.as_binary())),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        }))
     }
 }

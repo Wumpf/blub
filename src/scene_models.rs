@@ -218,29 +218,10 @@ impl SceneModels {
             })
             .collect();
 
-        // TODO HACK: Right now texturew_views MUST have one element
-        let texture_views = if texture_paths.len() == 0 {
-            vec![device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some("Dummy Texture"),
-                    size: wgpu::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsage::SAMPLED,
-                })
-                .create_view(&Default::default())]
-        } else {
-            texture_paths
-                .iter()
-                .map(|path| load_texture2d_from_path(device, queue, path).create_view(&Default::default()))
-                .collect()
-        };
+        let texture_views = texture_paths
+            .iter()
+            .map(|path| load_texture2d_from_path(device, queue, path).create_view(&Default::default()))
+            .collect();
 
         Ok(SceneModels {
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
