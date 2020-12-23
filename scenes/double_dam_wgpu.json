@@ -10,7 +10,7 @@
             "y": 0.0,
             "z": 0.0
         },
-        "max_num_particles": 1238328,
+        "max_num_particles": 2000000,
         "grid_to_world_scale": 0.01,
         "grid_dimension": {
             "x": 128,
@@ -25,7 +25,19 @@
                     "z": 0.0
                 },
                 "max": {
-                    "x": 0.64,
+                    "x": 0.32,
+                    "y": 0.4,
+                    "z": 0.64
+                }
+            },
+            {
+                "min": {
+                    "x": 0.96,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "max": {
+                    "x": 1.28,
                     "y": 0.4,
                     "z": 0.64
                 }
@@ -36,14 +48,14 @@
         {
             "model": "wgpu-logo/wgpu.obj",
             "world_position": {
-                "x": 0.9,
+                "x": 0.64,
                 "y": 0.0,
                 "z": 0.32
             },
-            "scale": 0.15,
+            "scale": 0.12,
             "rotation_angles": {
                 "x": 0.0,
-                "y": -180.0,
+                "y": 30.0,
                 "z": 0.0
             }
         }
