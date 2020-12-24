@@ -123,10 +123,17 @@ impl GUI {
             "num simulation steps current frame: {}",
             simulation_controller.timer().num_simulation_steps_performed_for_current_frame()
         ));
-        ui.text(im_str!(
-            "rendered time:  {:.2}",
-            simulation_controller.timer().total_render_time().as_secs_f64()
-        ));
+        if let SimulationControllerStatus::RecordingWithFixedFrameLength { .. } = simulation_controller.status() {
+            ui.text(im_str!(
+                "OFFLINE RECORDING - rendered time forced to {:.2}fps",
+                1.0 / simulation_controller.timer().frame_delta().as_secs_f64()
+            ));
+        } else {
+            ui.text(im_str!(
+                "rendered time:  {:.2}",
+                simulation_controller.timer().total_render_time().as_secs_f64()
+            ));
+        }
         ui.text(im_str!(
             "simulated time: {:.2}",
             simulation_controller.timer().total_simulated_time().as_secs_f64()

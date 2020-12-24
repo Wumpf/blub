@@ -77,7 +77,7 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
     info!("Loading 2d texture {:?}", path);
     // TODO: Mipmaps
 
-    let image = image::io::Reader::open(path).unwrap().decode().unwrap().to_rgba();
+    let image = image::io::Reader::open(path).unwrap().decode().unwrap().to_rgba8();
     let image_data = image.as_raw();
 
     let texture = device.create_texture(&wgpu::TextureDescriptor {

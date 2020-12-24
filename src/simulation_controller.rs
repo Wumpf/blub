@@ -24,7 +24,10 @@ pub struct SimulationController {
     pub time_scale: f32,
 }
 
-const MIN_REALTIME_FPS: f64 = 20.0;
+// The maximum length of a single step we're willing to do in a single frame.
+// If we need to compute more steps than this in a single frame, we give up and slow down the sim.
+// -> this is correlated but not equal to the minimum target framerate.
+const MAX_STEP_COMPUTATION_PER_FRAME: f64 = 1.0 / 50.0; // i.e. give up on keeping realtime if simulation alone would lead to 30fps
 
 fn delta_from_steps_per_second(steps_per_second: u64) -> Duration {
     Duration::from_nanos(1000 * 1000 * 1000 / steps_per_second)
@@ -194,7 +197,7 @@ impl SimulationController {
     ) -> bool {
         // frame drops are only relevant in realtime mode.
         let max_total_step_per_frame = if self.status == SimulationControllerStatus::Realtime {
-            Duration::from_secs_f64(1.0 / MIN_REALTIME_FPS)
+            Duration::from_secs_f64(MAX_STEP_COMPUTATION_PER_FRAME)
         } else {
             Duration::from_secs(u64::MAX)
         };
