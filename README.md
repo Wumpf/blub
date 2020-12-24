@@ -5,7 +5,7 @@ Focusing primarily on hybrid approaches lagrangian/eularian approaches here (PIC
 
 For SPH (pure lagrangian) fluid simulation, check out my simple 2D DFSPH fluid simulator, [YASPH2D](https://github.com/Wumpf/yasph2d).
 
-[![](https://img.youtube.com/vi/b8_HMJhM7Ws/hqdefault.jpg)](https://www.youtube.com/watch?v=b8_HMJhM7Ws "Blub fluid simulation video")
+[![](https://img.youtube.com/vi/Y646KLHyIms/hqdefault.jpg)](https://www.youtube.com/watch?v=Y646KLHyIms "Blub fluid simulation video")
 
 ## Application / Framework
 
