@@ -23,13 +23,9 @@ float samplePressure(ivec3 gridCoord, float cellType) {
                                                                                                                                                      \
         float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;                                                                   \
         if (centerCellType == CELL_FLUID || neighborCellType == CELL_FLUID) {                                                                        \
-            float velocity = imageLoad(velocityVolume, centerGridCoord).x;                                                                           \
-                                                                                                                                                     \
-            if (neighborCellType == CELL_SOLID) {                                                                                                    \
-                velocity = min(0.0, velocity);                                                                                                       \
-            } else if (centerCellType == CELL_SOLID) {                                                                                               \
-                velocity = max(0.0, velocity);                                                                                                       \
-            } else {                                                                                                                                 \
+            float velocity = 0.0;                                                                                                                    \
+            if (neighborCellType != CELL_SOLID && centerCellType != CELL_SOLID) {                                                                    \
+                velocity = imageLoad(velocityVolume, centerGridCoord).x;                                                                             \
                 velocity -= centerPressure - samplePressure(neighborGridCoord, neighborCellType);                                                    \
             }                                                                                                                                        \
             imageStore(velocityVolume, centerGridCoord, velocity.xxxx);                                                                              \

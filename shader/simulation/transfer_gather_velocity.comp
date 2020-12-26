@@ -48,6 +48,7 @@ void main() {
     float markerA = imageLoad(MarkerVolume, gridCoord).r;
     float markerB = imageLoad(MarkerVolume, neighborGridCoord).r;
     bool threadWritesFluid = !isBorderThread && (markerA == CELL_FLUID || markerB == CELL_FLUID);
+    bool threadComputesVelocity = !isBorderThread && (markerA != CELL_SOLID && markerB != CELL_SOLID);
 
     vec3 staggeredVelocitySamplePosition = vec3(gridCoord) + vec3(0.5);
     staggeredVelocitySamplePosition[VelocityTransferComponent] += 0.5;
@@ -65,7 +66,7 @@ void main() {
             localParticleIndex = Particles[localParticleIndex].LinkedListNext;
 
             // Apply it
-            if (threadWritesFluid) {
+            if (threadComputesVelocity) {
                 addParticleContribution(velocityComponent, velocityWeight, particlePosition, ParticleBufferVelocityMatrixRow,
                                         staggeredVelocitySamplePosition);
             }
@@ -82,7 +83,7 @@ void main() {
         barrier();
 
         // Load & apply remaining seven neighbor particles.
-        if (threadWritesFluid) {
+        if (threadComputesVelocity) {
             addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 0, 0), staggeredVelocitySamplePosition);
             addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(0, 1, 0), staggeredVelocitySamplePosition);
             addParticleContributionFromSharedMemory(velocityComponent, velocityWeight, uvec3(1, 1, 0), staggeredVelocitySamplePosition);
@@ -113,15 +114,14 @@ void main() {
     // }
 
     if (threadWritesFluid) {
-        if (velocityWeight > 0.0)
-            velocityComponent /= velocityWeight;
-        velocityComponent += GravityGridSpace[VelocityTransferComponent] * Time.SimulationDelta;
-
-        // Don't flow into solid
-        if (markerA == CELL_SOLID)
-            velocityComponent = max(velocityComponent, 0.0);
-        else if (markerB == CELL_SOLID)
-            velocityComponent = min(velocityComponent, 0.0);
+        if (threadComputesVelocity) {
+            if (velocityWeight > 0.0)
+                velocityComponent /= velocityWeight;
+            velocityComponent += GravityGridSpace[VelocityTransferComponent] * Time.SimulationDelta;
+        } else {
+            // Don't flow into solid
+            velocityComponent = 0.0;
+        }
 
         imageStore(VelocityComponentVolume, gridCoord, velocityComponent.xxxx);
     }
