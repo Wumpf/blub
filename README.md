@@ -101,8 +101,10 @@ Compared to what is described (to my understanding) in the paper I made a few ad
 * For computing densities, neighboring solid cells are assumed to have a fixed (interpolation kernel derived) density contribution instead of sampling it with particles
 * No resampling for degenerated cases
 
-**My implementation most likely has some bug as I need an extra damping factor (multiply by time stamp) on all position corrections to keep the simulation stable.
-I asked the authors for an implementation in order to be able to compare but have not received any reply.**
+TODO: Note a few more details.
+TODO: Recently fixed some major bugs, some things are a bit incomplete right now - WIP
+
+To my knowledge this is the only publicly available implementation as of writing (I asked the authors for a look at their reference implementation but didn't get a reply.)
 
 ### Push Boundaries
 

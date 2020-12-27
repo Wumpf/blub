@@ -113,7 +113,7 @@ void main() {
 
     // Write new LinkedList & marker grid for density projection step.
     {
-        // TODO: Consider not changing density_projection_gather_error step can do this easily by checking the linkedlist volume
+        // TODO: Consider not changing, density_projection_gather_error step can do this easily by checking the linkedlist volume
         imageStore(MarkerVolume, newGridCoord, vec4(CELL_FLUID, 0, 0, 0));
         ivec3 nearestDualGridCell = ivec3(newPosition - vec3(0.5));
         Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;

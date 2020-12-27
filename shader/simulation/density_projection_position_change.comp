@@ -20,12 +20,8 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     neighborGridCoord[component] += 1;
     float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;
 
-    // HACK/BUG?: Following the theory from the paper we expect to multiply only with Time.SimulationDelta once.
-    // However, I have found this to be extremly unstable. Unstability seems to be timestamp related.
-    // One could argue that this damps the effect of Implicit Density projection out of existance, but this is *not* the case - after the factor the
-    // technique mostly works as expected. What we can't reproduce is the volume recovery from degenerated cases
-    // (completly degenerated is expected to fail since we don't resample particles)
-    float positionChange = (samplePressure(neighborGridCoord, neighborCellType) - centerPressure) * Time.SimulationDelta * Time.SimulationDelta;
+    // We want to deal with position changes, from here on as the penetration value is a position change as well.
+    float positionChange = (samplePressure(neighborGridCoord, neighborCellType) - centerPressure) * Time.SimulationDelta;
 
     // todo optimize
     float penetrationNeighbor = unpackPushDisplacement(imageLoad(SolidPenetrationDepth, neighborGridCoord).x)[component];
@@ -34,10 +30,11 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     if (centerCellType == CELL_SOLID && neighborCellType == CELL_SOLID) {
         positionChange = abs(penetrationNeighbor) < abs(centerPenetration) ? centerPenetration : penetrationNeighbor;
     } else {
+        // TODO: Using the positoin change as intended leads to small explosions right now.
         if (neighborCellType == CELL_SOLID) {
-            positionChange = min(penetrationNeighbor, positionChange);
+            positionChange = 0.0; // min(penetrationNeighbor, positionChange);
         } else if (centerCellType == CELL_SOLID) {
-            positionChange = max(centerPenetration, positionChange);
+            positionChange = 0.0; // max(centerPenetration, positionChange);
         }
     }
 
