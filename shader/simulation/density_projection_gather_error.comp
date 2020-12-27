@@ -53,8 +53,19 @@ void main() {
 
     float density = 0.0;
 
+    // Debug: Count number of particles in cell.
+    // if (!isBorderThread) {
+    //     uint numParticles = 0;
+    //     while (localParticleIndex != INVALID_LINKED_LIST_PTR) {
+    //         ++numParticles;
+    //         localParticleIndex = Particles[localParticleIndex].LinkedListNext;
+    //     }
+    //     localParticleIndex = texelFetch(LinkedListDualGrid, gridCoord, 0).r - 1;
+    //     imageStore(DebugVolume, gridCoord, vec4(numParticles / 8.0));
+    // }
+
     // A cell starts out with 8 particles, ideally that stays roughly constant.
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 64; ++i) {
         if (localParticleIndex != INVALID_LINKED_LIST_PTR) {
             // Load a particle
             vec3 particlePosition = Particles[localParticleIndex].Position;
@@ -93,8 +104,6 @@ void main() {
     if (!threadWritesFluid)
         return;
 
-    //    imageStore(DebugVolume, gridCoord, vec4(density > 12.0));
-
     // To simplify we set the volume of a cell and the mass of a single particle to 1.
     // Our normal density is defined by 8 evenly distributed particles in a cell. Therefore the normal density is defines as 8!
     const float Density0 = 8.0;
@@ -110,12 +119,51 @@ void main() {
     float marker_ny = imageLoad(MarkerVolume, gridCoord - ivec3(0, 1, 0)).r;
     float marker_nz = imageLoad(MarkerVolume, gridCoord - ivec3(0, 0, 1)).r;
 
+    // Three kinds of (solid) neighbors, if they were filled with particles they would contribute:
+    // * (6) share a surface        0.25 * 0.75 * 0.75 * 4 = 0.5625
+    // * (12) share only an edge    0.25 * 0.25 * 0.75 * 2 = 0.09375
+    // * (8) share only a corner    0.25 * 0.25 * 0.25 = 0.015625
+    // (adds up to 4.625, middle cell (if filled) itself is weighted with 0.75 * 0.75 * 0.75 * 8 = 3.375 -> 3.375 + 4.625 = 8)
+
+    // More precise version.
+#if 0
+    float markers[3][3][3];
+    bool anyAir = false;
+    [[unroll]] for (int x = -1; x <= 1; ++x) {
+        [[unroll]] for (int y = -1; y <= 1; ++y) {
+            [[unroll]] for (int z = -1; z <= 1; ++z) {
+                if (x == 0 && y == 0 && z == 0)
+                    continue;
+                float marker = imageLoad(MarkerVolume, gridCoord + ivec3(x, y, z)).r;
+                markers[x][y][z] = marker;
+
+                anyAir = anyAir || marker == CELL_AIR;
+
+                if (marker == CELL_SOLID) {
+                    int numNonZeroOffset = abs(x) + abs(y) + abs(z);
+                    if (numNonZeroOffset == 0)
+                        density += 0.5625;
+                    else if (numNonZeroOffset == 1)
+                        density += 0.09375;
+                    else // if (numNonZeroOffset == 2)
+                        density += 0.015625;
+                }
+            }
+        }
+    }
+
+    if (anyAir)
+        density = max(Density0, density);
+
+        // Approximiation
+#else
+
     // Handle solid cells: Look at all the neighbors and for every SOLID cell compute how much particles in there would add mass to this sample.
     // If there were particles in those solid cells (error) then the density gets too high, but that's a good thing since the gradient should work in
     // our favor then!
     // For equally filled out space with 8 particles per cell, the direct neighbors account for a weight of 3.375 (0.5625 for every cell)
     // Middle cell makes 3.375 of the total weight, distributing the rest to 6 neighbors gives 0.77
-    const float solidNeighborContribution = 0.77; // 0.5625;
+    const float solidNeighborContribution = 0.5625; // 0.77
     if (marker_px == CELL_SOLID)
         density += solidNeighborContribution;
     if (marker_py == CELL_SOLID)
@@ -134,7 +182,11 @@ void main() {
         marker_nz == CELL_AIR)
         density = max(Density0, density);
 
+#endif
+
     density = 1.0 - density / Density0;
+    // imageStore(DebugVolume, gridCoord, vec4(density));
+
     // Clamp density as suggested in paper to avoid displacement of more than half a cell at a time
     density = clamp(density, -0.5, 0.5);
 
