@@ -108,8 +108,15 @@ impl Application {
         let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
         let mut pipeline_manager = pipelines::PipelineManager::new();
 
-        let screen = Screen::new(&device, &window_surface, Screen::DEFAULT_PRESENT_MODE, window.inner_size(), &shader_dir);
-        let hdr_backbuffer = HdrBackbuffer::new(&device, screen.resolution(), &shader_dir);
+        let screen = Screen::new(
+            &device,
+            &window_surface,
+            Screen::DEFAULT_PRESENT_MODE,
+            window.inner_size(),
+            &shader_dir,
+            &mut pipeline_manager,
+        );
+        let hdr_backbuffer = HdrBackbuffer::new(&device, screen.resolution(), &shader_dir, &mut pipeline_manager);
         let global_ubo = GlobalUBO::new(&device);
         let mut global_bindings = GlobalBindings::new(&device);
         let simulation_controller = simulation_controller::SimulationController::new();
@@ -234,6 +241,7 @@ impl Application {
                             *present_mode,
                             self.screen.resolution(),
                             &self.shader_dir,
+                            &mut self.pipeline_manager,
                         );
                     }
                 },
@@ -288,8 +296,15 @@ impl Application {
     }
 
     fn window_resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        self.screen = Screen::new(&self.device, &self.window_surface, self.screen.present_mode(), size, &self.shader_dir);
-        self.hdr_backbuffer = HdrBackbuffer::new(&self.device, self.screen.resolution(), &self.shader_dir);
+        self.screen = Screen::new(
+            &self.device,
+            &self.window_surface,
+            self.screen.present_mode(),
+            size,
+            &self.shader_dir,
+            &mut self.pipeline_manager,
+        );
+        self.hdr_backbuffer = HdrBackbuffer::new(&self.device, self.screen.resolution(), &self.shader_dir, &mut self.pipeline_manager);
         self.scene_renderer.on_window_resize(&self.device, &self.hdr_backbuffer);
     }
 
@@ -352,7 +367,8 @@ impl Application {
             self.global_bindings.bind_group(),
         );
 
-        self.hdr_backbuffer.tonemap(&self.screen.backbuffer(), &mut encoder);
+        self.hdr_backbuffer
+            .tonemap(&self.screen.backbuffer(), &mut encoder, &self.pipeline_manager);
 
         self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
 
@@ -368,7 +384,7 @@ impl Application {
             event_loop_proxy,
         );
 
-        self.screen.copy_to_swapchain(&frame, &mut encoder);
+        self.screen.copy_to_swapchain(&frame, &mut encoder, &self.pipeline_manager);
         self.command_queue.submit(Some(encoder.finish()));
         self.screen.end_frame(frame);
         self.simulation_controller.on_frame_submitted();

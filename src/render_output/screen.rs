@@ -3,7 +3,10 @@ use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
 use pipelines::*;
-use std::path::Path;
+use std::{
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 pub struct Screen {
     resolution: winit::dpi::PhysicalSize<u32>,
@@ -15,7 +18,7 @@ pub struct Screen {
     depth_view: wgpu::TextureView,
 
     read_backbuffer_bind_group: wgpu::BindGroup,
-    copy_to_swapchain_pipeline: wgpu::RenderPipeline,
+    copy_to_swapchain_pipeline: RenderPipelineHandle,
 
     screenshot_capture: ScreenshotCapture,
 }
@@ -39,6 +42,7 @@ impl Screen {
         present_mode: wgpu::PresentMode,
         resolution: winit::dpi::PhysicalSize<u32>,
         shader_dir: &ShaderDirectory,
+        pipeline_manager: &mut PipelineManager,
     ) -> Self {
         info!("creating screen with {:?}", resolution);
 
@@ -93,32 +97,27 @@ impl Screen {
             .texture(&backbuffer_view)
             .create(device, "BindGroup: Read Backbuffer");
 
-        let vs_module = shader_dir.load_shader_module(device, Path::new("screentri.vert")).unwrap();
-        let fs_module = shader_dir.load_shader_module(device, Path::new("copy_texture.frag")).unwrap();
-        // TODO: Use pipelinemanager
-        let copy_to_swapchain_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Screen: Copy texture"),
-            layout: Some(&pipeline_layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &vs_module,
-                entry_point: SHADER_ENTRY_POINT_NAME,
+        let copy_to_swapchain_pipeline = pipeline_manager.create_render_pipeline(
+            device,
+            shader_dir,
+            RenderPipelineCreationDesc {
+                label: "Screen: Copy texture",
+                layout: Rc::new(pipeline_layout),
+                vertex_shader_relative_path: PathBuf::from("screentri.vert"),
+                fragment_shader_relative_path: Some(PathBuf::from("copy_texture.frag")),
+                rasterization_state: Some(rasterization_state::culling_none()),
+                primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+                color_states: vec![color_state::write_all(Self::FORMAT_SWAPCHAIN)],
+                depth_stencil_state: None,
+                vertex_state: wgpu::VertexStateDescriptor {
+                    index_format: None,
+                    vertex_buffers: &[],
+                },
+                sample_count: 1,
+                sample_mask: !0,
+                alpha_to_coverage_enabled: false,
             },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &fs_module,
-                entry_point: SHADER_ENTRY_POINT_NAME,
-            }),
-            rasterization_state: Some(rasterization_state::culling_none()),
-            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &[color_state::write_all(Self::FORMAT_SWAPCHAIN)],
-            depth_stencil_state: None,
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: None,
-                vertex_buffers: &[],
-            },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
-        });
+        );
 
         Screen {
             resolution,
@@ -184,7 +183,7 @@ impl Screen {
         }
     }
 
-    pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder) {
+    pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder, pipeline_manager: &PipelineManager) {
         wgpu_scope!(encoder, "Screen.copy_to_swapchain");
 
         // why this extra copy?
@@ -206,7 +205,7 @@ impl Screen {
             }],
             depth_stencil_attachment: None,
         });
-        render_pass.set_pipeline(&self.copy_to_swapchain_pipeline);
+        render_pass.set_pipeline(pipeline_manager.get_render(&self.copy_to_swapchain_pipeline));
         render_pass.set_bind_group(0, &self.read_backbuffer_bind_group, &[]);
         render_pass.draw(0..3, 0..1);
     }
