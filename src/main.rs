@@ -309,10 +309,17 @@ impl Application {
     }
 
     fn update(&mut self) {
-        if self.shader_dir.detected_change() {
-            info!("reloading shaders...");
-            self.pipeline_manager.reload_all(&self.device, &self.shader_dir);
+        // Shader/pipeline reload
+        {
+            let changed_files = self.shader_dir.drain_changed_files();
+            if !changed_files.is_empty() {
+                info!("detected shader changes. Reloading...");
+                let timer = std::time::Instant::now();
+                self.pipeline_manager.reload_changed(&self.device, &self.shader_dir, &changed_files);
+                info!("shader reload took {:?}", std::time::Instant::now() - timer);
+            }
         }
+
         self.camera.update(self.simulation_controller.timer());
 
         update_global_ubo(

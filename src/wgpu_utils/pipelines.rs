@@ -23,16 +23,19 @@ impl ComputePipelineCreationDesc {
         }
     }
 
-    fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<wgpu::ComputePipeline, ()> {
-        let module = shader_dir.load_shader_module(device, &self.compute_shader_relative_path)?;
-        Ok(device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some(self.label),
-            layout: Some(&self.layout),
-            compute_stage: wgpu::ProgrammableStageDescriptor {
-                module: &module,
-                entry_point: super::shader::SHADER_ENTRY_POINT_NAME,
-            },
-        }))
+    fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<PipelineAndSourceFiles<wgpu::ComputePipeline>, ()> {
+        let shader = shader_dir.load_shader_module(device, &self.compute_shader_relative_path)?;
+        Ok(PipelineAndSourceFiles {
+            pipeline: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(self.label),
+                layout: Some(&self.layout),
+                compute_stage: wgpu::ProgrammableStageDescriptor {
+                    module: &shader.module,
+                    entry_point: super::shader::SHADER_ENTRY_POINT_NAME,
+                },
+            }),
+            shader_sources: shader.source_files,
+        })
     }
 }
 
@@ -114,26 +117,31 @@ impl RenderPipelineCreationDesc {
         }
     }
 
-    fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<wgpu::RenderPipeline, ()> {
-        let vs_module = shader_dir.load_shader_module(device, &self.vertex_shader_relative_path)?;
-        let fs_module = match &self.fragment_shader_relative_path {
+    fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<PipelineAndSourceFiles<wgpu::RenderPipeline>, ()> {
+        let shader_vs = shader_dir.load_shader_module(device, &self.vertex_shader_relative_path)?;
+        let mut shader_fs = match &self.fragment_shader_relative_path {
             None => None,
             Some(relative_path) => Some(shader_dir.load_shader_module(device, relative_path)?),
         };
+
+        let mut shader_sources = shader_vs.source_files;
 
         let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
             label: Some(self.label),
             layout: Some(&self.layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &vs_module,
+                module: &shader_vs.module,
                 entry_point: SHADER_ENTRY_POINT_NAME,
             },
-            fragment_stage: match &fs_module {
+            fragment_stage: match shader_fs.as_mut() {
                 None => None,
-                Some(module) => Some(wgpu::ProgrammableStageDescriptor {
-                    module,
-                    entry_point: SHADER_ENTRY_POINT_NAME,
-                }),
+                Some(shader_fs) => {
+                    shader_sources.append(&mut shader_fs.source_files);
+                    Some(wgpu::ProgrammableStageDescriptor {
+                        module: &shader_fs.module,
+                        entry_point: SHADER_ENTRY_POINT_NAME,
+                    })
+                }
             },
             rasterization_state: self.rasterization_state.clone(),
             primitive_topology: self.primitive_topology,
@@ -145,20 +153,28 @@ impl RenderPipelineCreationDesc {
             alpha_to_coverage_enabled: self.alpha_to_coverage_enabled,
         };
 
-        Ok(device.create_render_pipeline(&render_pipeline_descriptor))
+        Ok(PipelineAndSourceFiles {
+            pipeline: device.create_render_pipeline(&render_pipeline_descriptor),
+            shader_sources,
+        })
     }
+}
+
+struct PipelineAndSourceFiles<T> {
+    pipeline: T,
+    shader_sources: Vec<PathBuf>,
 }
 
 struct ReloadableComputePipeline {
     desc: ComputePipelineCreationDesc,
-    pipeline: wgpu::ComputePipeline,
     handle: Weak<usize>,
+    pipeline_and_sources: PipelineAndSourceFiles<wgpu::ComputePipeline>,
 }
 
 struct ReloadableRenderPipeline {
     desc: RenderPipelineCreationDesc,
-    pipeline: wgpu::RenderPipeline,
     handle: Weak<usize>,
+    pipeline_and_sources: PipelineAndSourceFiles<wgpu::RenderPipeline>,
 }
 
 pub struct PipelineManager {
@@ -180,7 +196,7 @@ impl PipelineManager {
         shader_dir: &ShaderDirectory,
         desc: ComputePipelineCreationDesc,
     ) -> ComputePipelineHandle {
-        let pipeline = desc.try_create_pipeline(device, shader_dir).unwrap();
+        let pipeline_and_sources = desc.try_create_pipeline(device, shader_dir).unwrap();
 
         let mut first_free_slot = 0;
         while first_free_slot < self.compute_pipelines.len() && self.compute_pipelines[first_free_slot].handle.strong_count() > 0 {
@@ -190,7 +206,7 @@ impl PipelineManager {
         let handle = Rc::new(first_free_slot);
         let new_reloadable_pipeline = ReloadableComputePipeline {
             desc,
-            pipeline,
+            pipeline_and_sources,
             handle: Rc::downgrade(&handle),
         };
         if first_free_slot == self.compute_pipelines.len() {
@@ -208,7 +224,7 @@ impl PipelineManager {
         desc: RenderPipelineCreationDesc,
     ) -> RenderPipelineHandle {
         // duplicated code from create_compute_pipeline, but well within Rule of Three ;-)
-        let pipeline = desc.try_create_pipeline(device, shader_dir).unwrap();
+        let pipeline_and_sources = desc.try_create_pipeline(device, shader_dir).unwrap();
 
         let mut first_free_slot = 0;
         while first_free_slot < self.render_pipelines.len() && self.render_pipelines[first_free_slot].handle.strong_count() > 0 {
@@ -218,7 +234,7 @@ impl PipelineManager {
         let handle = Rc::new(first_free_slot);
         let new_reloadable_pipeline = ReloadableRenderPipeline {
             desc,
-            pipeline,
+            pipeline_and_sources,
             handle: Rc::downgrade(&handle),
         };
         if first_free_slot == self.render_pipelines.len() {
@@ -229,16 +245,36 @@ impl PipelineManager {
         handle
     }
 
-    // todo: reload only what's necessary
-    pub fn reload_all(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory) {
+    pub fn reload_changed(&mut self, device: &wgpu::Device, shader_dir: &ShaderDirectory, changed_shader_sources: &[PathBuf]) {
         for reloadable_pipeline in self.compute_pipelines.iter_mut() {
-            if let Ok(new_wgpu_pipeline) = reloadable_pipeline.desc.try_create_pipeline(device, shader_dir) {
-                reloadable_pipeline.pipeline = new_wgpu_pipeline;
+            if changed_shader_sources.iter().any(|p| {
+                if reloadable_pipeline.pipeline_and_sources.shader_sources.contains(p) {
+                    info!(
+                        "Reloading compute pipeline \"{}\" because {:?} changed",
+                        reloadable_pipeline.desc.label, p
+                    );
+                    true
+                } else {
+                    false
+                }
+            }) {
+                if let Ok(pipeline_and_sources) = reloadable_pipeline.desc.try_create_pipeline(device, shader_dir) {
+                    reloadable_pipeline.pipeline_and_sources = pipeline_and_sources;
+                }
             }
         }
         for reloadable_pipeline in self.render_pipelines.iter_mut() {
-            if let Ok(new_wgpu_pipeline) = reloadable_pipeline.desc.try_create_pipeline(device, shader_dir) {
-                reloadable_pipeline.pipeline = new_wgpu_pipeline;
+            if changed_shader_sources.iter().any(|p| {
+                if reloadable_pipeline.pipeline_and_sources.shader_sources.contains(p) {
+                    info!("Reloading render pipeline \"{}\" because {:?} changed", reloadable_pipeline.desc.label, p);
+                    true
+                } else {
+                    false
+                }
+            }) {
+                if let Ok(pipeline_and_sources) = reloadable_pipeline.desc.try_create_pipeline(device, shader_dir) {
+                    reloadable_pipeline.pipeline_and_sources = pipeline_and_sources;
+                }
             }
         }
     }
@@ -246,13 +282,13 @@ impl PipelineManager {
     pub fn get_compute(&self, handle: &ComputePipelineHandle) -> &wgpu::ComputePipeline {
         let i: usize = **handle;
         assert!(self.compute_pipelines[i].handle.ptr_eq(&Rc::downgrade(handle)));
-        &self.compute_pipelines[i].pipeline
+        &self.compute_pipelines[i].pipeline_and_sources.pipeline
     }
 
     pub fn get_render(&self, handle: &RenderPipelineHandle) -> &wgpu::RenderPipeline {
         let i: usize = **handle;
         assert!(self.render_pipelines[i].handle.ptr_eq(&Rc::downgrade(handle)));
-        &self.render_pipelines[i].pipeline
+        &self.render_pipelines[i].pipeline_and_sources.pipeline
     }
 }
 

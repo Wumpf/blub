@@ -1,9 +1,11 @@
 use notify::Watcher;
-use std::borrow::Cow::Borrowed;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::{borrow::Cow::Borrowed, cell::RefCell};
+use std::{
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 // All entry points need to have this name.
 // (could make customizable, but forcing this has perks as well)
@@ -12,16 +14,36 @@ pub const SHADER_ENTRY_POINT_NAME: &str = "main";
 pub struct ShaderDirectory {
     #[allow(dead_code)]
     watcher: notify::RecommendedWatcher,
-    detected_change: Arc<AtomicBool>,
+    changed_files: Arc<Mutex<Vec<PathBuf>>>,
     directory: PathBuf,
+}
+
+pub struct ShaderModuleWithSourceFiles {
+    pub module: wgpu::ShaderModule,
+    pub source_files: Vec<PathBuf>, // main source file and all includes
 }
 
 impl ShaderDirectory {
     pub fn new(path: &Path) -> ShaderDirectory {
-        let detected_change = Arc::new(AtomicBool::new(false));
-        let detected_change_evt_ref = detected_change.clone();
-        let mut watcher: notify::RecommendedWatcher = notify::Watcher::new_immediate(move |res| match res {
-            Ok(_) => detected_change_evt_ref.store(true, Ordering::Relaxed),
+        let changed_files = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+        let changed_files_evt_ref = changed_files.clone();
+        let mut watcher: notify::RecommendedWatcher = notify::Watcher::new_immediate(move |res: Result<notify::Event, notify::Error>| match res {
+            Ok(evt) => match evt.kind {
+                notify::EventKind::Any => {}
+                notify::EventKind::Access(_) => {}
+                notify::EventKind::Create(_) => {}
+                notify::EventKind::Modify(_) => {
+                    let mut changes = changed_files_evt_ref.lock().unwrap();
+                    for path in evt.paths.iter() {
+                        if !path.is_file() || changes.contains(path) {
+                            continue;
+                        }
+                        changes.push(path.canonicalize().unwrap());
+                    }
+                }
+                notify::EventKind::Remove(_) => {}
+                notify::EventKind::Other => {}
+            },
             Err(e) => error!("Failed to create filewatcher: {:?}", e),
         })
         .unwrap();
@@ -29,19 +51,20 @@ impl ShaderDirectory {
 
         ShaderDirectory {
             watcher,
-            detected_change,
+            changed_files,
             directory: PathBuf::from(path),
         }
     }
 
     // Checks if any change was detected in the shader directory.
     // Right now notifies any changes in the directory, if too slow consider filtering & distinguishing shaders.
-    pub fn detected_change(&self) -> bool {
-        self.detected_change.swap(false, Ordering::Relaxed)
+    pub fn drain_changed_files(&self) -> Vec<PathBuf> {
+        self.changed_files.lock().unwrap().drain(..).collect()
     }
 
-    pub fn load_shader_module(&self, device: &wgpu::Device, relative_path: &Path) -> Result<wgpu::ShaderModule, ()> {
+    pub fn load_shader_module(&self, device: &wgpu::Device, relative_path: &Path) -> Result<ShaderModuleWithSourceFiles, ()> {
         let path = self.directory.join(relative_path);
+        let source_files = RefCell::new(vec![path.canonicalize().unwrap()]);
 
         let kind = match path.extension().and_then(OsStr::to_str) {
             Some("frag") => shaderc::ShaderKind::Fragment,
@@ -92,10 +115,13 @@ impl ShaderDirectory {
                     self.directory.join(name)
                 };
                 match std::fs::read_to_string(&path) {
-                    Ok(glsl_code) => Ok(shaderc::ResolvedInclude {
-                        resolved_name: String::from(name),
-                        content: glsl_code,
-                    }),
+                    Ok(glsl_code) => {
+                        source_files.borrow_mut().push(path.canonicalize().unwrap());
+                        Ok(shaderc::ResolvedInclude {
+                            resolved_name: String::from(name),
+                            content: glsl_code,
+                        })
+                    }
                     Err(err) => Err(format!(
                         "Failed to resolve include to {} in {} (was looking for {:?}): {}",
                         name, source_file, path, err
@@ -116,10 +142,13 @@ impl ShaderDirectory {
             }
         };
 
-        Ok(device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some(path.file_name().unwrap().to_str().unwrap()),
-            source: wgpu::ShaderSource::SpirV(Borrowed(&compilation_artifact.as_binary())),
-            flags: wgpu::ShaderFlags::VALIDATION,
-        }))
+        Ok(ShaderModuleWithSourceFiles {
+            module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some(path.file_name().unwrap().to_str().unwrap()),
+                source: wgpu::ShaderSource::SpirV(Borrowed(&compilation_artifact.as_binary())),
+                flags: wgpu::ShaderFlags::VALIDATION,
+            }),
+            source_files: source_files.into_inner(),
+        })
     }
 }
