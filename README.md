@@ -57,7 +57,7 @@ Noted down a few interesting implementation details here.
 Transferring the particle's velocity to the grid is tricky & costly to do in parallel!
 Either, velocities are scattered by doing 8 atomic adds for every particle to surrounding grid cells, or grid cells traverse all neighboring cells. (times 3 for staggered grid!)
 There's some very clever ideas on how to do efficient scattering in [Ming et al 2018, GPU Optimization of Material Point Methods](http://pages.cs.wisc.edu/~sifakis/papers/GPU_MPM.pdf) using subgroup operations (i.e. inter warp/wavefront shuffles) and atomics.
-Note though that today atomic floats addition is pretty much only available in CUDA and OpenGL (using an NV extension) and subgroup operations are not available in wgpu as of writing.
+Note though that today atomic floats addition is pretty much only available in CUDA and OpenGL/[Vulkan](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#VK_EXT_shader_atomic_float) (using extensions which are only supported on Nvidia) and subgroup operations are not available in wgpu as of writing.
 
 In Blub I tried a (to my knowledge) new variant of the gather approach:
 Particles form a linked list by putting their index with a atomic exchange operation in a "linked list head pointer grid" which is a grid dual to the main velocity volume.
@@ -86,12 +86,14 @@ for a while but shied away from implementing such a complex solver at the moment
 
 #### Iteration Control
 
-Typically solvers are run until a certain error threshold is reached. This is notoriously tricky on GPU, since this means that we need to have the mean squared error (MSE) feed back to determine how many more dispatch calls for solver iterations should be issued. We can't wait for the result as this would introduce a GPU-CPU stall. Experimenting with using MSE from several iterations ago (i.e. asynchronously querying the MSE) didn't yield promising results due to strong fluctuations and varying delay. Blub follows a different strategy instead:
+Typically solvers are run until a certain error threshold is reached.
+Error in blub is expressed with an infinity norm (i.e. the max absolute residual; I used mean squared error previously, but max-error is more stable).
+This is notoriously tricky on GPU, since this means that we need to feed back the error measure to determine how many more dispatch calls for solver iterations should be issued. We can't wait for the result as this would introduce a GPU-CPU stall. Experimenting with using error values from a couple of iterations ago (i.e. asynchronously querying the error) didn't yield promising results due to strong fluctuations and varying delay. Blub follows a different strategy instead:
 
-There is a fix maximum number of iterations which determines how many compute dispatches are issued (note that there are several per iteration!), however most of these dispatches are indirect, so when evaluating the MSE, we may null out the indirect dispatch struct, making the remaining dispatches rather cheap (still not free though!).
-Since evaluating the MSE itself is costly, this is done every couple of few iterations (configurable).
+There is a fix maximum number of iterations which determines how many compute dispatches are issued (note that there are several per iteration!), however most of these dispatches are indirect, so when evaluating the error, we may null out the indirect dispatch struct, making the remaining dispatches rather cheap (still not free though!).
+Since evaluating the error itself is costly, this is done every couple of few iterations (configurable).
 
-The last computed MSE and iteration count is queried asynchronously, in order to display a histogram in the gui and make informed choices for selecting the target MSE, max iteration & MSE evaluation frequency parameters.
+The last computed error and iteration count is queried asynchronously, in order to display a histogram in the gui and make informed choices for selecting the error tolerance, max iteration & error evaluation frequency parameters.
 
 ## Implicit Density Projection
 

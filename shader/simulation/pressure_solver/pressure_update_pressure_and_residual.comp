@@ -9,7 +9,7 @@ layout(set = 2, binding = 1, r32f) uniform restrict image3D Residual;
 layout(set = 2, binding = 2) uniform texture3D Search;
 layout(set = 2, binding = 3) uniform PcgScalars_ { PcgScalars Scalars; };
 
-#define PRUPDATE_COMPUTE_MSE 1
+#define PRUPDATE_COMPUTE_MAX_ERROR 1
 
 COMPUTE_PASS_PRESSURE
 
@@ -24,7 +24,7 @@ void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x; // Empirically this test + skip is a speedup!
     if (marker != CELL_FLUID) {
-        if (PushConstants.Mode == PRUPDATE_COMPUTE_MSE) {
+        if (PushConstants.Mode == PRUPDATE_COMPUTE_MAX_ERROR) {
             ReduceBuffer[GetReduceBufferAddress()] = 0.0;
         }
         return;
@@ -51,8 +51,8 @@ void main() {
         float searchTimesA = MultiplyWithCoefficientMatrix(gridCoord, Search, search); // The auxillary z!
         residual -= alpha * searchTimesA;
 
-        if (PushConstants.Mode == PRUPDATE_COMPUTE_MSE) {
-            ReduceBuffer[GetReduceBufferAddress()] = residual * residual;
+        if (PushConstants.Mode == PRUPDATE_COMPUTE_MAX_ERROR) {
+            ReduceBuffer[GetReduceBufferAddress()] = abs(residual);
         }
         imageStore(Residual, gridCoord, residual.xxxx);
     }

@@ -207,29 +207,14 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
             .create(device, "BindGroupLayout: Correct density error");
 
+        let solver_config = SolverConfig {
+            error_tolerance: 0.1,
+            error_check_frequency: 4,
+            max_num_iterations: 32,
+        };
         let pressure_solver = PressureSolver::new(device, grid_dimension, shader_dir, pipeline_manager, &volume_marker_view);
-        let pressure_field_from_velocity = PressureField::new(
-            "from velocity",
-            device,
-            grid_dimension,
-            &pressure_solver,
-            SolverConfig {
-                target_mse: 0.5,
-                mse_check_frequency: 4,
-                max_num_iterations: 32,
-            },
-        );
-        let pressure_field_from_density = PressureField::new(
-            "from density",
-            device,
-            grid_dimension,
-            &pressure_solver,
-            SolverConfig {
-                target_mse: 0.5,
-                mse_check_frequency: 4,
-                max_num_iterations: 32,
-            },
-        );
+        let pressure_field_from_velocity = PressureField::new("from velocity", device, grid_dimension, &pressure_solver, solver_config);
+        let pressure_field_from_density = PressureField::new("from density", device, grid_dimension, &pressure_solver, solver_config);
 
         let signed_distance_field = SignedDistanceField::new(device, grid_dimension, shader_dir, pipeline_manager, global_bind_group_layout);
 
@@ -764,7 +749,6 @@ impl HybridFluid {
             });
         }
 
-        // Solve for pressure
         self.pressure_solver
             .solve(simulation_delta, &mut self.pressure_field_from_velocity, &mut encoder, pipeline_manager);
 

@@ -32,7 +32,8 @@ pub struct PressureSolver {
 
     pipeline_init: ComputePipelineHandle,
     pipeline_apply_preconditioner: ComputePipelineHandle,
-    pipeline_reduce: ComputePipelineHandle,
+    pipeline_reduce_sum: ComputePipelineHandle,
+    pipeline_reduce_max: ComputePipelineHandle,
     pipeline_apply_coeff: ComputePipelineHandle,
     pipeline_update_pressure_and_residual: ComputePipelineHandle,
     pipeline_update_search: ComputePipelineHandle,
@@ -52,14 +53,15 @@ struct PendingErrorBuffer {
     resulting_sample: SolverStatisticSample,
 }
 
+#[derive(Copy, Clone)]
 pub struct SolverConfig {
-    pub target_mse: f32,
+    pub error_tolerance: f32,
     pub max_num_iterations: i32,
-    pub mse_check_frequency: i32,
+    pub error_check_frequency: i32,
 }
 #[derive(Default, Copy, Clone)]
 pub struct SolverStatisticSample {
-    pub mse: f32,
+    pub error: f32,
     pub iteration_count: i32,
     //timestamp: Duration,
 }
@@ -67,9 +69,9 @@ pub struct SolverStatisticSample {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct SolverConfigUniformBufferContent {
-    // We compute internally the mse for a pseudo pressure value defined as 'pressure * density / dt', not with pressure.
+    // We compute internally the max error for a pseudo pressure value defined as 'pressure * density / dt', not with pressure.
     // For easier handling with different timesteps the user facing parameter is about 'pressure * density'.
-    target_mse_per_second: f32,
+    error_tolerance: f32,
     max_num_iterations: u32,
 }
 unsafe impl bytemuck::Pod for SolverConfigUniformBufferContent {}
@@ -146,16 +148,15 @@ impl PressureField {
             if (&mut readback.copy_operation.as_mut().unwrap()).now_or_never().is_some() {
                 let mapped = readback.buffer.slice(0..8);
                 let buffer_data = mapped.get_mapped_range().to_vec();
-                let squared_error = *bytemuck::from_bytes::<f32>(&buffer_data[0..4]);
+                let max_error = *bytemuck::from_bytes::<f32>(&buffer_data[0..4]);
                 let iteration_count = *bytemuck::from_bytes::<f32>(&buffer_data[4..8]);
                 readback.buffer.unmap();
                 self.unused_error_buffers.push(readback.buffer);
 
-                // We always deal with 'pressure * dt / density', not with pressure.
+                // We always deal with 'pressure * dt / density' in the solver, not with pressure.
                 // To make display more representative for different time, we adjust our error value accordingly.
-                // See also config.target_mse
-                let delta_sq = simulation_delta.as_secs_f32() * simulation_delta.as_secs_f32();
-                readback.resulting_sample.mse = squared_error * delta_sq;
+                // See also config.error_tolerance
+                readback.resulting_sample.error = max_error * simulation_delta.as_secs_f32();
                 readback.resulting_sample.iteration_count = iteration_count as i32;
 
                 self.stats.push_back(readback.resulting_sample);
@@ -176,7 +177,7 @@ impl PressureField {
                 copy_operation: None, // Filled out in start_error_buffer_readbacks
                 buffer: target_buffer,
                 resulting_sample: SolverStatisticSample {
-                    mse: 0.0,
+                    error: 0.0,
                     iteration_count: 0,
                     //timestamp: self.timestamp_last_iteration,
                 },
@@ -187,11 +188,10 @@ impl PressureField {
     }
 
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue, simulation_delta: Duration) {
-        let delta_sq = simulation_delta.as_secs_f32() * simulation_delta.as_secs_f32();
         self.config_ubo.update_content(
             queue,
             SolverConfigUniformBufferContent {
-                target_mse_per_second: self.config.target_mse / delta_sq,
+                error_tolerance: self.config.error_tolerance / simulation_delta.as_secs_f32(),
                 max_num_iterations: self.config.max_num_iterations as u32,
             },
         );
@@ -211,7 +211,7 @@ impl PressureSolver {
     const REDUCE_RESULTMODE_INIT: u32 = 1;
     const REDUCE_RESULTMODE_ALPHA: u32 = 2;
     const REDUCE_RESULTMODE_BETA: u32 = 3;
-    const REDUCE_RESULTMODE_MSE: u32 = 4;
+    const REDUCE_RESULTMODE_MAX_ERROR: u32 = 4;
 
     const COMPUTE_LOCAL_SIZE_VOLUME: wgpu::Extent3d = wgpu::Extent3d {
         width: 8,
@@ -459,13 +459,22 @@ impl PressureSolver {
                     &shader_path.join(&Path::new("pressure_apply_preconditioner.comp")),
                 ),
             ),
-            pipeline_reduce: pipeline_manager.create_compute_pipeline(
+            pipeline_reduce_sum: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "PressureSolve: DotProduct Reduce",
                     layout_reduce.clone(),
-                    &shader_path.join(&Path::new("pressure_reduce.comp")),
+                    &shader_path.join(&Path::new("pressure_reduce_sum.comp")),
+                ),
+            ),
+            pipeline_reduce_max: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(
+                    "PressureSolve: DotProduct Reduce",
+                    layout_reduce.clone(),
+                    &shader_path.join(&Path::new("pressure_reduce_max.comp")),
                 ),
             ),
             pipeline_apply_coeff: pipeline_manager.create_compute_pipeline(
@@ -509,7 +518,21 @@ impl PressureSolver {
     }
 
     fn reduce_add<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, result_mode: u32) {
-        wgpu_scope!(cpass, &format!("PressureSolver.reduce_add - mode {}", result_mode));
+        self.reduce(cpass, pipeline_manager, result_mode, &self.pipeline_reduce_sum);
+    }
+
+    fn reduce_max<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager, result_mode: u32) {
+        self.reduce(cpass, pipeline_manager, result_mode, &self.pipeline_reduce_max);
+    }
+
+    fn reduce<'a, 'b: 'a>(
+        &'b self,
+        cpass: &mut wgpu::ComputePass<'a>,
+        pipeline_manager: &'a PipelineManager,
+        result_mode: u32,
+        pipeline: &ComputePipelineHandle,
+    ) {
+        wgpu_scope!(cpass, &format!("PressureSolver.reduce - mode {}", result_mode));
 
         let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
         assert!(num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP);
@@ -519,7 +542,7 @@ impl PressureSolver {
         const DISPATCH_BUFFER_OFFSETS: [u64; 2] = [(4 * 4) * 2, (4 * 4) * 2];
 
         // Reduce
-        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_reduce));
+        cpass.set_pipeline(pipeline_manager.get_compute(pipeline));
         let mut reduce_step_idx = 0;
         while num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP {
             cpass.set_bind_group(2, &self.bind_group_dotproduct_reduce[source_buffer_index], &[]);
@@ -631,14 +654,14 @@ impl PressureSolver {
                 // finish dotproduct of auxiliary field (z) and search field (s)
                 self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_ALPHA);
 
-                let iteration_with_mse_computation =
-                    pressure_field.config.max_num_iterations == i || (i > 0 && i % pressure_field.config.mse_check_frequency == 0);
+                let iteration_with_error_computation =
+                    pressure_field.config.max_num_iterations == i || (i > 0 && i % pressure_field.config.error_check_frequency == 0);
 
                 wgpu_scope!(cpass, "update pressure field (p) and residual field (r)", || {
-                    const PRUPDATE_COMPUTE_MSE: u32 = 1;
+                    const PRUPDATE_COMPUTE_MAX_ERROR: u32 = 1;
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
-                    if iteration_with_mse_computation {
-                        cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRUPDATE_COMPUTE_MSE, reduce_pass_initial_group_size]));
+                    if iteration_with_error_computation {
+                        cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRUPDATE_COMPUTE_MAX_ERROR, reduce_pass_initial_group_size]));
                     } else {
                         cpass.set_push_constants(0, &bytemuck::bytes_of(&[0]));
                     }
@@ -646,11 +669,11 @@ impl PressureSolver {
                     cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                 });
 
-                // Time to check on mse?
-                if iteration_with_mse_computation {
+                // Time to check on error?
+                if iteration_with_error_computation {
                     // Compute remaining error.
                     // Used for statistics. If below target, makes all upcoming dispatch_indirect no-ops.
-                    self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_MSE + i as u32);
+                    self.reduce_max(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_MAX_ERROR + i as u32);
 
                     if pressure_field.config.max_num_iterations == i {
                         return false;

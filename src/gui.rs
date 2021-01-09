@@ -140,17 +140,17 @@ impl GUI {
         ));
     }
 
-    fn setup_ui_solver_stats(ui: &imgui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: i32, target_mse: f32) {
+    fn setup_ui_solver_stats(ui: &imgui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: i32, error_tolerance: f32) {
         let newest_sample = match stats.back() {
             Some(&sample) => sample,
             None => Default::default(),
         };
         ui.plot_histogram(
-            &im_str!("mse - {}", newest_sample.mse),
-            &stats.iter().map(|sample| sample.mse).collect::<Vec<f32>>(),
+            &im_str!("max residual error - {}", newest_sample.error),
+            &stats.iter().map(|sample| sample.error).collect::<Vec<f32>>(),
         )
         .scale_min(0.0)
-        .scale_max(target_mse * 3.0)
+        .scale_max(error_tolerance * 3.0)
         .graph_size([300.0, 40.0])
         .build();
 
@@ -165,11 +165,11 @@ impl GUI {
     }
 
     fn setup_ui_solver_config(ui: &imgui::Ui, config: &mut SolverConfig) {
-        imgui::Drag::new(im_str!("target mse"))
+        imgui::Drag::new(im_str!("error tolerance"))
             .range(0.0001..=1.0)
             .speed(0.0001)
             .display_format(im_str!("%.4f"))
-            .build(&ui, &mut config.target_mse);
+            .build(&ui, &mut config.error_tolerance);
 
         let mut max_iteration_count = config.max_num_iterations as i32;
         if imgui::Drag::new(im_str!("max iteration count"))
@@ -178,12 +178,12 @@ impl GUI {
         {
             config.max_num_iterations = max_iteration_count as i32;
         }
-        let mut mse_check_frequency = config.mse_check_frequency as i32;
-        if imgui::Drag::new(im_str!("mse check frequency count"))
+        let mut error_check_frequency = config.error_check_frequency as i32;
+        if imgui::Drag::new(im_str!("error check frequency count"))
             .range(1..=max_iteration_count)
-            .build(&ui, &mut mse_check_frequency)
+            .build(&ui, &mut error_check_frequency)
         {
-            config.mse_check_frequency = mse_check_frequency as i32;
+            config.error_check_frequency = error_check_frequency as i32;
         }
     }
 
@@ -192,18 +192,24 @@ impl GUI {
         {
             ui.text(im_str!("pressure solver, primary (from velocity)"));
             let max_num_iterations = fluid.pressure_solver_config_velocity().max_num_iterations;
-            let target_mse = fluid.pressure_solver_config_velocity().target_mse;
-            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_velocity(), max_num_iterations, target_mse);
-            Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_velocity());
+            let error_tolerance = fluid.pressure_solver_config_velocity().error_tolerance;
+            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_velocity(), max_num_iterations, error_tolerance);
+            //Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_velocity());
         }
         stack_token.pop(ui);
         ui.separator();
         {
             ui.text(im_str!("pressure solver, secondary (from density)"));
             let max_num_iterations = fluid.pressure_solver_config_density().max_num_iterations;
-            let target_mse = fluid.pressure_solver_config_density().target_mse;
-            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_density(), max_num_iterations, target_mse);
+            let error_tolerance = fluid.pressure_solver_config_density().error_tolerance;
+            Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_density(), max_num_iterations, error_tolerance);
+            //Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_density());
+        }
+        // One config for both
+        ui.separator();
+        {
             Self::setup_ui_solver_config(ui, fluid.pressure_solver_config_density());
+            *fluid.pressure_solver_config_velocity() = *fluid.pressure_solver_config_density()
         }
     }
 

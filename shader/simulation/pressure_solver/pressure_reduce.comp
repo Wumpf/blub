@@ -3,9 +3,9 @@
 // This is a parallel reduce step similar (but more portable) to the one detailed here
 // https://on-demand.gputechconf.com/gtc/2010/presentations/S12312-DirectCompute-Pre-Conference-Tutorial.pdf
 
-#version 460
+#include "simulation/pressure_solver/pressure.glsl"
 
-#include "pressure.glsl"
+//#define REDUCE_MAX
 
 layout(set = 2, binding = 0) buffer readonly restrict DotProductSource_ { float DotProductSource[]; };
 // In the final step this is ReduceResultAndMainDispatchBuffer
@@ -16,13 +16,21 @@ const uint RESULTMODE_REDUCE = 0;
 const uint RESULTMODE_INIT = 1;
 const uint RESULTMODE_ALPHA = 2;
 const uint RESULTMODE_BETA = 3;
-const uint RESULTMODE_MSE = 4;
+const uint RESULTMODE_MAX_ERROR = 4;
 
 layout(local_size_x = LOCAL_SIZE_REDUCE, local_size_y = 1, local_size_z = 1) in;
 
 shared float sharedBuffer[LOCAL_SIZE_REDUCE];
 
 #define EPSILON 1e-10
+
+float reduce_op(float a, float b) {
+#ifdef REDUCE_MAX
+    return max(a, b);
+#else
+    return a + b;
+#endif
+}
 
 void main() {
     // Fetch REDUCE_READS_PER_THREAD values from global memory and store to shared memory.
@@ -31,7 +39,7 @@ void main() {
     float fetchedValue = 0.0;
     [[unroll]] for (int i = 0; i < REDUCE_READS_PER_THREAD; ++i) {
         if (fetchAddress < PushConstants.SourceBufferSize)
-            fetchedValue += DotProductSource[fetchAddress];
+            fetchedValue = reduce_op(fetchedValue, DotProductSource[fetchAddress]);
         fetchAddress += dispatchSize;
     }
     sharedBuffer[gl_LocalInvocationID.x] = fetchedValue;
@@ -40,43 +48,43 @@ void main() {
     // Reduce shared memory to a single value.
     // Unlike the Nvidia slides we can't just unroll the last 32 additions and leave out that barriers since some gpus have quite small
     // subgroups (Intel can have 8). But we could just assume a minimal subgroup size and unroll that bit...
-    // Empirically it doesn't make all that much difference here.
+    // Empirically, it doesn't make all that much difference here.
     [[unroll]] for (uint i = LOCAL_SIZE_REDUCE / 2; i > 1; i /= 2) {
         if (gl_LocalInvocationID.x >= i) {
             return;
         }
-        sharedBuffer[gl_LocalInvocationID.x] += sharedBuffer[gl_LocalInvocationID.x + i];
+        sharedBuffer[gl_LocalInvocationID.x] = reduce_op(sharedBuffer[gl_LocalInvocationID.x], sharedBuffer[gl_LocalInvocationID.x + i]);
         barrier();
     }
 
     if (gl_LocalInvocationID.x == 0) {
-        float dotProductResult = sharedBuffer[0] + sharedBuffer[1];
+        float reduceResult = reduce_op(sharedBuffer[0], sharedBuffer[1]);
 
         switch (PushConstants.Mode) {
         case RESULTMODE_REDUCE:
-            DotProductDest[gl_WorkGroupID.x] = dotProductResult;
+            DotProductDest[gl_WorkGroupID.x] = reduceResult;
             break;
 
         case RESULTMODE_INIT:
             DotProductDest[0] = 0.0;
-            DotProductDest[1] = dotProductResult;
+            DotProductDest[1] = reduceResult;
             break;
 
         case RESULTMODE_ALPHA:
-            DotProductDest[0] = DotProductDest[1] / (dotProductResult + (dotProductResult < 0.0 ? -EPSILON : EPSILON));
+            DotProductDest[0] = DotProductDest[1] / (reduceResult + (reduceResult < 0.0 ? -EPSILON : EPSILON));
             break;
 
         case RESULTMODE_BETA:
-            DotProductDest[0] = dotProductResult / (DotProductDest[1] + (DotProductDest[1] < 0.0 ? -EPSILON : EPSILON));
-            DotProductDest[1] = dotProductResult;
+            DotProductDest[0] = reduceResult / (DotProductDest[1] + (DotProductDest[1] < 0.0 ? -EPSILON : EPSILON));
+            DotProductDest[1] = reduceResult;
             break;
 
         default:
-            uint iterationIdx = PushConstants.Mode - RESULTMODE_MSE;
+            uint iterationIdx = PushConstants.Mode - RESULTMODE_MAX_ERROR;
             bool noStatsWrittenSoFar = DotProductDest[3] == 0;
-            if (noStatsWrittenSoFar && (MaxNumSolverIterations == iterationIdx || dotProductResult < TargetMSE)) {
+            if (noStatsWrittenSoFar && (MaxNumSolverIterations == iterationIdx || reduceResult < ErrorTolerance)) {
                 // Statistics
-                DotProductDest[2] = dotProductResult;
+                DotProductDest[2] = reduceResult;
                 DotProductDest[3] = float(iterationIdx);
                 // Disable all further dispatches.
                 DotProductDest[4] = 0;
