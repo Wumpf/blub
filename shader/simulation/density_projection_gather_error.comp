@@ -65,7 +65,8 @@ void main() {
     // }
 
     // A cell starts out with 8 particles, ideally that stays roughly constant.
-    for (int i = 0; i < 64; ++i) {
+    // At 16 we observe significant underestimiation
+    for (int i = 0; i < 32; ++i) {
         if (localParticleIndex != INVALID_LINKED_LIST_PTR) {
             // Load a particle
             vec3 particlePosition = Particles[localParticleIndex].Position;

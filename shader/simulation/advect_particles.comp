@@ -83,9 +83,6 @@ void main() {
     vec3 v_xy0 = mix(v_x00, v_x10, interpolantsY);
     vec3 v_xy1 = mix(v_x01, v_x11, interpolantsY);
     vec3 newVelocity = mix(v_xy0, v_xy1, interpolantsZ);
-    // For debugging: This needs to be equal (within small floating point errors) to our interpolation! (on all axis)
-    // (if we don't do on-the-fly extrapolation)
-    // newVelocity.y = texture(sampler3D(VelocityVolumeY, SamplerTrilinearClamp), offsetPositions[1] / (gridSize - vec3(1))).x;
 
     // The Apic Matrix is the jacobi matrix of the velocity for fluids.
     vec3 cx = mix(mix(v_100, v_110, interpolantsY), mix(v_101, v_111, interpolantsY), interpolantsZ) -
@@ -125,7 +122,7 @@ void main() {
     // Domain bounds are treated separately - it would mess our distance field computation up quite a bit since it would mean that there's a "special"
     // interior with positive sign. (can be done but I figured it's too messy)
     {
-        vec3 penetration = max(vec3(0.0), vec3(1.001) - newPosition) - max(vec3(0.0), newPosition - vec3(gridSize - 1.001));
+        vec3 penetration = max(vec3(0.0), vec3(1.0) - newPosition) - max(vec3(0.0), newPosition - vec3(gridSize - 1.0));
         vec3 texcoord = newPosition * gridTexelSizeNormalized; // / (gridSize - vec3(1));
         float solidDistance = texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord).x;
         if (solidDistance < 0.0) {
@@ -136,7 +133,8 @@ void main() {
             penetration = -solidDistance * solidDistanceGradient;
         }
 
-        if (penetration.x != 0.0 || penetration.y != 0.0 || penetration.z != 0.0) {
+        // Write out max penetration.
+        if (any(notEqual(penetration, vec3(0.0)))) {
             uint packedPenetrationVector = packPushDisplacement(penetration); // This is where clamp -1 to 1 happens
             float penetrationLengthCompVal = displacementLengthComparisionValue(packedPenetrationVector);
             uint previousPackedPenetrationVector = imageLoad(SolidPenetrationDepth, newGridCoord).x;
