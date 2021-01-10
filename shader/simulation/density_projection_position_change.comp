@@ -29,12 +29,12 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     // If we're completely outside, use maximum penetration value from the penetration volume to push the particles back in!
     if (centerCellType == CELL_SOLID && neighborCellType == CELL_SOLID) {
         positionChange = abs(penetrationNeighbor) < abs(centerPenetration) ? centerPenetration : penetrationNeighbor;
+    } else if (centerCellType != CELL_SOLID && neighborCellType == CELL_SOLID) {
+        positionChange = penetrationNeighbor;
+    } else if (centerCellType == CELL_SOLID && neighborCellType != CELL_SOLID) {
+        positionChange = centerPenetration;
     } else {
-        if (neighborCellType == CELL_SOLID) {
-            positionChange = min(penetrationNeighbor, positionChange);
-        } else if (centerCellType == CELL_SOLID) {
-            positionChange = max(centerPenetration, positionChange);
-        }
+        // nop, already did that. todo restructure me
     }
 
     return positionChange;
