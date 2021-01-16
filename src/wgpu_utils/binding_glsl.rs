@@ -87,85 +87,57 @@ pub fn textureCube() -> wgpu::BindingType {
     }
 }
 
-pub fn image2D(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
+pub fn image2D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
-        access: if readonly {
-            wgpu::StorageTextureAccess::ReadOnly
-        } else {
-            wgpu::StorageTextureAccess::WriteOnly
-        },
+        access,
         view_dimension: wgpu::TextureViewDimension::D2,
         format: format,
     }
 }
 
-pub fn image2DArray(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
+pub fn image2DArray(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
-        access: if readonly {
-            wgpu::StorageTextureAccess::ReadOnly
-        } else {
-            wgpu::StorageTextureAccess::WriteOnly
-        },
+        access,
         view_dimension: wgpu::TextureViewDimension::D2Array,
         format: format,
     }
 }
 
-pub fn iimage2D(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
+pub fn iimage2D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
-        access: if readonly {
-            wgpu::StorageTextureAccess::ReadOnly
-        } else {
-            wgpu::StorageTextureAccess::WriteOnly
-        },
+        access,
         view_dimension: wgpu::TextureViewDimension::D2,
         format: format,
     }
 }
 
-pub fn uimage2D(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
+pub fn uimage2D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
-        access: if readonly {
-            wgpu::StorageTextureAccess::ReadOnly
-        } else {
-            wgpu::StorageTextureAccess::WriteOnly
-        },
+        access,
         view_dimension: wgpu::TextureViewDimension::D2,
         format: format,
     }
 }
 
-pub fn image3D(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
+pub fn image3D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
-        access: if readonly {
-            wgpu::StorageTextureAccess::ReadOnly
-        } else {
-            wgpu::StorageTextureAccess::WriteOnly
-        },
+        access,
         view_dimension: wgpu::TextureViewDimension::D3,
         format: format,
     }
 }
 
-pub fn iimage3D(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
+pub fn iimage3D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
-        access: if readonly {
-            wgpu::StorageTextureAccess::ReadOnly
-        } else {
-            wgpu::StorageTextureAccess::WriteOnly
-        },
+        access,
         view_dimension: wgpu::TextureViewDimension::D3,
         format: format,
     }
 }
 
-pub fn uimage3D(format: wgpu::TextureFormat, readonly: bool) -> wgpu::BindingType {
+pub fn uimage3D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
-        access: if readonly {
-            wgpu::StorageTextureAccess::ReadOnly
-        } else {
-            wgpu::StorageTextureAccess::WriteOnly
-        },
+        access,
         format: format,
         view_dimension: wgpu::TextureViewDimension::D3,
     }

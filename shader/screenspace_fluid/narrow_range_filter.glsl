@@ -38,7 +38,7 @@ shared float sharedBuffer[LOCAL_SIZE * 2];
 #include "global_bindings.glsl"
 #include "utilities.glsl"
 
-layout(set = 2, binding = 0, r32f) uniform restrict image2D DepthDest;
+layout(set = 2, binding = 0, r32f) uniform restrict writeonly image2D DepthDest;
 layout(set = 2, binding = 1) uniform texture2D DepthSource;
 
 // Relationship between the standard deviation sigma (for gaussian kernel) and the filter size.

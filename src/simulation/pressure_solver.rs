@@ -233,11 +233,17 @@ impl PressureSolver {
             .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: Pressure solver general");
         let group_layout_pressure_field = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            ))
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Pressure solver Pressure");
         let group_layout_init = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            ))
             .next_binding_compute(binding_glsl::buffer(false))
             .create(device, "BindGroupLayout: Pressure solver init");
         let group_layout_apply_coeff = BindGroupLayoutBuilder::new()
@@ -251,12 +257,18 @@ impl PressureSolver {
         let group_layout_preconditioner = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
             .next_binding_compute(binding_glsl::texture3D())
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            ))
             .next_binding_compute(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: Pressure solver preconditioner");
         let group_layout_update_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false))
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            ))
             .next_binding_compute(binding_glsl::texture3D())
             .next_binding_compute(binding_glsl::uniform())
             .create(device, "BindGroupLayout: Pressure solver generic volume update");

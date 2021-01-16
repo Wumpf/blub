@@ -9,7 +9,7 @@ layout(local_size_x = LOCAL_SIZE, local_size_y = 1, local_size_z = 1) in;
 #include "../utilities.glsl"
 #include "filter.glsl"
 
-layout(set = 2, binding = 0, r16f) uniform restrict image2D Dest;
+layout(set = 2, binding = 0, r16f) uniform restrict writeonly image2D Dest;
 layout(set = 2, binding = 1) uniform texture2D Source;
 
 // Relationship between the standard deviation sigma (for gaussian kernel) and the filter size.

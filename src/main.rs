@@ -94,7 +94,8 @@ impl Application {
                     features: wgpu::Features::PUSH_CONSTANTS
                         | wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY
                         | wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING
-                        | wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING,
+                        | wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING
+                        | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
                     limits: wgpu::Limits {
                         max_push_constant_size: 8,
                         ..Default::default()

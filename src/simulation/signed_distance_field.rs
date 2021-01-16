@@ -32,7 +32,10 @@ impl SignedDistanceField {
         global_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let group_layout_write_signed_distance_field = BindGroupLayoutBuilder::new()
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R16Float, false))
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R16Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            ))
             .create(device, "BindGroupLayout: Signed Distance Field Write");
 
         let volume_signed_distances = device.create_texture(&wgpu::TextureDescriptor {

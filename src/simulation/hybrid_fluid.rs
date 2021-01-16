@@ -150,7 +150,10 @@ impl HybridFluid {
             BindGroupLayoutBuilder::new()
                 .next_binding_compute(binding_glsl::uniform())
                 // Debug Volume
-                .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false))
+                .next_binding_compute(binding_glsl::image3D(
+                    wgpu::TextureFormat::R32Float,
+                    wgpu::StorageTextureAccess::ReadWrite,
+                ))
         } else {
             BindGroupLayoutBuilder::new().next_binding_compute(binding_glsl::uniform())
         }
@@ -158,9 +161,15 @@ impl HybridFluid {
         let group_layout_transfer_velocity = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(true)) // particles, velocity component
-            .next_binding_compute(binding_glsl::uimage3D(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, false)) // marker volume
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocity component
+            .next_binding_compute(binding_glsl::uimage3D(
+                wgpu::TextureFormat::R32Uint,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // linkedlist_volume
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, wgpu::StorageTextureAccess::ReadWrite)) // marker volume
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // velocity component
             .next_binding_compute(binding_glsl::texture3D()) // marker for static objects
             .create(device, "BindGroupLayout: Transfer velocity from Particles to Volume(s)");
         let group_layout_divergence_compute = BindGroupLayoutBuilder::new()
@@ -168,35 +177,56 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // velocityX
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // divergence / initial residual
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // divergence / initial residual
             .create(device, "BindGroupLayout: Compute Divergence");
         let group_layout_write_velocity_volume = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture3D()) // marker volume
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityX
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityY
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // velocityZ
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // velocityX
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // velocityY
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // velocityZ
             .next_binding_compute(binding_glsl::texture3D()) // pressure
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, false)) // penetration depth / unused
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // penetration depth / unused
             .create(device, "BindGroupLayout: Write to Velocity");
         let group_layout_advect_particles = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::texture3D()) // velocityX
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, false)) // marker volume
-            .next_binding_compute(binding_glsl::uimage3D(wgpu::TextureFormat::R32Uint, false)) // linkedlist_volume
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, wgpu::StorageTextureAccess::ReadWrite)) // marker volume
+            .next_binding_compute(binding_glsl::uimage3D(
+                wgpu::TextureFormat::R32Uint,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // linkedlist_volume
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
-            .next_binding_compute(binding_glsl::uimage3D(wgpu::TextureFormat::R32Uint, false)) // penetration depth
+            .next_binding_compute(binding_glsl::uimage3D(
+                wgpu::TextureFormat::R32Uint,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // penetration depth
             .next_binding_compute(binding_glsl::texture3D()) // Distance field
             .create(device, "BindGroupLayout: Advect to Particles");
 
         let group_layout_density_projection_gather_error = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::utexture3D()) // linkedlist_volume
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, false)) // marker volume
-            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Float, false)) // density volume
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, wgpu::StorageTextureAccess::ReadWrite)) // marker volume
+            .next_binding_compute(binding_glsl::image3D(
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadWrite,
+            )) // density volume
             .next_binding_compute(binding_glsl::utexture3D()) // penetration depth
             .create(device, "BindGroupLayout: Compute density error");
         let group_layout_density_projection_correct_particles = BindGroupLayoutBuilder::new()
