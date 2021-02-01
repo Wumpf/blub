@@ -46,30 +46,28 @@ impl StaticLineRenderer {
                 push_constant_ranges: &[],
             })),
             Path::new("lines.vert"),
-            Some(Path::new("vertex_color.frag")),
+            Path::new("vertex_color.frag"),
             HdrBackbuffer::FORMAT,
             Some(Screen::FORMAT_DEPTH),
         );
-        render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
-        render_pipeline_desc.vertex_state = wgpu::VertexStateDescriptor {
-            index_format: None,
-            vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                stride: LINE_VERTEX_SIZE as wgpu::BufferAddress,
-                step_mode: wgpu::InputStepMode::Vertex,
-                attributes: &[
-                    wgpu::VertexAttributeDescriptor {
-                        format: wgpu::VertexFormat::Float3,
-                        offset: 0,
-                        shader_location: 0,
-                    },
-                    wgpu::VertexAttributeDescriptor {
-                        format: wgpu::VertexFormat::Float3,
-                        offset: 4 * 3,
-                        shader_location: 1,
-                    },
-                ],
-            }],
-        };
+        render_pipeline_desc.primitive.topology = wgpu::PrimitiveTopology::LineList;
+        render_pipeline_desc.vertex.buffers = &[wgpu::VertexBufferLayout {
+            array_stride: LINE_VERTEX_SIZE as wgpu::BufferAddress,
+            step_mode: wgpu::InputStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float3,
+                    offset: 4 * 3,
+                    shader_location: 1,
+                },
+            ],
+        }];
+
         let render_pipeline = pipeline_manager.create_render_pipeline(device, shader_dir, render_pipeline_desc);
 
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {

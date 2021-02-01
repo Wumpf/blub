@@ -18,22 +18,20 @@ impl ParticleRenderer {
         global_bind_group_layout: &wgpu::BindGroupLayout,
         fluid_renderer_group_layout: &wgpu::BindGroupLayout,
     ) -> ParticleRenderer {
-        let render_pipeline = pipeline_manager.create_render_pipeline(
-            device,
-            shader_dir,
-            RenderPipelineCreationDesc::new(
-                "ParticleRenderer: Render particles",
-                Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("ParticleRenderer Pipeline Layout"),
-                    bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
-                    push_constant_ranges: &[],
-                })),
-                Path::new("fluid_particles.vert"),
-                Some(Path::new("sphere_particles.frag")),
-                HdrBackbuffer::FORMAT,
-                Some(Screen::FORMAT_DEPTH),
-            ),
+        let mut desc = RenderPipelineCreationDesc::new(
+            "ParticleRenderer: Render particles",
+            Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("ParticleRenderer Pipeline Layout"),
+                bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
+                push_constant_ranges: &[],
+            })),
+            Path::new("fluid_particles.vert"),
+            Path::new("sphere_particles.frag"),
+            HdrBackbuffer::FORMAT,
+            Some(Screen::FORMAT_DEPTH),
         );
+        desc.primitive.topology = wgpu::PrimitiveTopology::TriangleStrip;
+        let render_pipeline = pipeline_manager.create_render_pipeline(device, shader_dir, desc);
         ParticleRenderer { render_pipeline }
     }
 

@@ -14,7 +14,7 @@ env_logger = "0.8.2"
 futures = "0.3"
 image = {version = "0.23", default-features = false, features = ["png", "hdr"]}
 imgui = "0.6.1"
-imgui-wgpu = {git = "https://github.com/Wumpf/imgui-wgpu-rs", rev = "55f7393d55f2b6266073ebbe047966353b6104fb"}
+imgui-wgpu = {git = "https://github.com/Wumpf/imgui-wgpu-rs", rev = "f1bc67936b2c49c19f60328d5aa13ebdb17691b8"}
 imgui-winit-support = {version = "0.6.1", default-features = false, features = ["winit-23"]}
 lazy_static = "1.4"
 log = "0.4"
@@ -29,8 +29,12 @@ shaderc = "0.7"
 strum = "0.20"
 strum_macros = "0.20.1"
 tobj = "2.0.3"
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "639257e9e5c41c51724801ea589d2bf771f658de"}#, features = ["trace"]}
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "f882abcf4b3d1e9bfbfc95b61874344661956479"}#, features = ["trace"]}
 winit = "0.24"
 
 [profile.dev.package."*"]
 opt-level = 3
+
+[patch."https://github.com/gfx-rs/wgpu"]
+# wgpu-core = {version = "0.7", path = "../wgpu/wgpu-core"}
+# wgpu-types = {version = "0.7", path = "../wgpu/wgpu-types"}

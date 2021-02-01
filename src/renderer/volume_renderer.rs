@@ -44,20 +44,21 @@ impl VolumeRenderer {
             "VolumeRender: Velocity",
             layout.clone(),
             Path::new("volume_visualization/velocity.vert"),
-            Some(Path::new("vertex_color.frag")),
+            Path::new("vertex_color.frag"),
             HdrBackbuffer::FORMAT,
             Some(Screen::FORMAT_DEPTH),
         );
-        velocity_render_pipeline_desc.primitive_topology = wgpu::PrimitiveTopology::LineList;
+        velocity_render_pipeline_desc.primitive.topology = wgpu::PrimitiveTopology::LineList;
 
-        let volume_visualization_with_billboards_pipeline_desc = RenderPipelineCreationDesc::new(
+        let mut volume_visualization_with_billboards_pipeline_desc = RenderPipelineCreationDesc::new(
             "VolumeRender: Generic billboard based",
             layout.clone(),
             Path::new("volume_visualization/volume_visualization_with_billboards.vert"),
-            Some(Path::new("sphere_particles.frag")),
+            Path::new("sphere_particles.frag"),
             HdrBackbuffer::FORMAT,
             Some(Screen::FORMAT_DEPTH),
         );
+        volume_visualization_with_billboards_pipeline_desc.primitive.topology = wgpu::PrimitiveTopology::TriangleStrip;
 
         VolumeRenderer {
             velocity_render_pipeline: pipeline_manager.create_render_pipeline(device, shader_dir, velocity_render_pipeline_desc),

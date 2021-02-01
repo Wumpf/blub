@@ -3,10 +3,7 @@ use crate::wgpu_utils::binding_builder::*;
 use crate::wgpu_utils::shader::*;
 use crate::wgpu_utils::*;
 use pipelines::*;
-use std::{
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use std::{path::Path, rc::Rc};
 
 pub struct Screen {
     resolution: winit::dpi::PhysicalSize<u32>,
@@ -100,23 +97,14 @@ impl Screen {
         let copy_to_swapchain_pipeline = pipeline_manager.create_render_pipeline(
             device,
             shader_dir,
-            RenderPipelineCreationDesc {
-                label: "Screen: Copy texture",
-                layout: Rc::new(pipeline_layout),
-                vertex_shader_relative_path: PathBuf::from("screentri.vert"),
-                fragment_shader_relative_path: Some(PathBuf::from("copy_texture.frag")),
-                rasterization_state: Some(rasterization_state::culling_none()),
-                primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-                color_states: vec![color_state::write_all(Self::FORMAT_SWAPCHAIN)],
-                depth_stencil_state: None,
-                vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: None,
-                    vertex_buffers: &[],
-                },
-                sample_count: 1,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
+            RenderPipelineCreationDesc::new(
+                "Screen: Copy texture",
+                Rc::new(pipeline_layout),
+                Path::new("screentri.vert"),
+                Path::new("copy_texture.frag"),
+                Self::FORMAT_SWAPCHAIN,
+                None,
+            ),
         );
 
         Screen {

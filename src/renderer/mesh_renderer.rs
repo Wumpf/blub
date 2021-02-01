@@ -33,29 +33,23 @@ impl MeshRenderer {
                         range: 0..4,
                     }],
                 })),
-                vertex_shader_relative_path: PathBuf::from("mesh.vert"),
-                fragment_shader_relative_path: Some(PathBuf::from("mesh.frag")),
-                rasterization_state: Some(rasterization_state::culling_back()),
-                primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-                color_states: vec![color_state::write_all(HdrBackbuffer::FORMAT)],
-                depth_stencil_state: Some(depth_state::default_read_write(Screen::FORMAT_DEPTH)),
-                vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: Some(wgpu::IndexFormat::Uint32),
-                    vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                        stride: VERTEX_SIZE,
+                vertex: VertexStateCreationDesc {
+                    shader_relative_path: PathBuf::from("mesh.vert"),
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: VERTEX_SIZE,
                         step_mode: wgpu::InputStepMode::Vertex,
                         attributes: &[
-                            wgpu::VertexAttributeDescriptor {
+                            wgpu::VertexAttribute {
                                 format: wgpu::VertexFormat::Float3,
                                 offset: 0,
                                 shader_location: 0,
                             },
-                            wgpu::VertexAttributeDescriptor {
+                            wgpu::VertexAttribute {
                                 format: wgpu::VertexFormat::Float3,
                                 offset: 4 * 3,
                                 shader_location: 1,
                             },
-                            wgpu::VertexAttributeDescriptor {
+                            wgpu::VertexAttribute {
                                 format: wgpu::VertexFormat::Float2,
                                 offset: 4 * 6,
                                 shader_location: 2,
@@ -63,9 +57,16 @@ impl MeshRenderer {
                         ],
                     }],
                 },
-                sample_count: 1,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: wgpu::CullMode::Back,
+                    ..Default::default()
+                },
+                depth_stencil: Some(depth_state::default_read_write(Screen::FORMAT_DEPTH)),
+                multisample: Default::default(),
+                fragment: FragmentStateCreationDesc {
+                    shader_relative_path: PathBuf::from("mesh.frag"),
+                    targets: vec![HdrBackbuffer::FORMAT.into()],
+                },
             },
         );
         MeshRenderer { render_pipeline }

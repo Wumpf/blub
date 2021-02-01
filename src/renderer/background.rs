@@ -232,15 +232,17 @@ impl Background {
                 push_constant_ranges: &[],
             })),
             Path::new("screentri.vert"),
-            Some(Path::new("background_render.frag")),
+            Path::new("background_render.frag"),
             HdrBackbuffer::FORMAT,
             None,
         );
-        render_pipeline_desc.depth_stencil_state = Some(wgpu::DepthStencilStateDescriptor {
+        render_pipeline_desc.depth_stencil = Some(wgpu::DepthStencilState {
             format: Screen::FORMAT_DEPTH,
             depth_write_enabled: false,
             depth_compare: wgpu::CompareFunction::LessEqual,
             stencil: Default::default(),
+            bias: Default::default(),
+            clamp_depth: Default::default(),
         });
 
         Ok(Background {

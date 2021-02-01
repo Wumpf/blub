@@ -81,45 +81,45 @@ impl ScreenSpaceFluid {
                     bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
                     push_constant_ranges: &[],
                 })),
-                vertex_shader_relative_path: PathBuf::from("screenspace_fluid/particles.vert"),
-                fragment_shader_relative_path: Some(PathBuf::from("screenspace_fluid/particles.frag")),
-                rasterization_state: Some(rasterization_state::culling_none()),
-                primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-                color_states: vec![
-                    wgpu::ColorStateDescriptor {
-                        format: Self::FORMAT_FLUID_DEPTH,
-                        color_blend: wgpu::BlendDescriptor {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Min,
-                        },
-                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                        write_mask: wgpu::ColorWrite::ALL,
-                    },
-                    wgpu::ColorStateDescriptor {
-                        format: Self::FORMAT_FLUID_THICKNESS,
-                        color_blend: wgpu::BlendDescriptor {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                        write_mask: wgpu::ColorWrite::ALL,
-                    },
-                ],
-                depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+
+                vertex: VertexStateCreationDesc {
+                    shader_relative_path: PathBuf::from("screenspace_fluid/particles.vert"),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
                     format: Screen::FORMAT_DEPTH,
                     depth_write_enabled: false,
                     depth_compare: wgpu::CompareFunction::LessEqual,
                     stencil: Default::default(),
+                    bias: Default::default(),
+                    clamp_depth: Default::default(),
                 }),
-                vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: None,
-                    vertex_buffers: &[],
+                multisample: Default::default(),
+                fragment: FragmentStateCreationDesc {
+                    shader_relative_path: PathBuf::from("screenspace_fluid/particles.frag"),
+                    targets: vec![
+                        wgpu::ColorTargetState {
+                            color_blend: wgpu::BlendState {
+                                src_factor: wgpu::BlendFactor::One,
+                                dst_factor: wgpu::BlendFactor::One,
+                                operation: wgpu::BlendOperation::Min,
+                            },
+                            ..Self::FORMAT_FLUID_DEPTH.into()
+                        },
+                        wgpu::ColorTargetState {
+                            color_blend: wgpu::BlendState {
+                                src_factor: wgpu::BlendFactor::One,
+                                dst_factor: wgpu::BlendFactor::One,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            ..Self::FORMAT_FLUID_THICKNESS.into()
+                        },
+                    ],
                 },
-                sample_count: 1,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
             },
         );
 

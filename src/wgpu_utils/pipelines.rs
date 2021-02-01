@@ -10,6 +10,7 @@ pub type RenderPipelineHandle = Rc<usize>;
 pub struct ComputePipelineCreationDesc {
     /// Debug label of the pipeline. This will show up in graphics debuggers for easy identification.
     pub label: &'static str,
+    /// The layout of bind groups for this pipeline.
     pub layout: Rc<wgpu::PipelineLayout>,
     pub compute_shader_relative_path: PathBuf,
 }
@@ -29,14 +30,28 @@ impl ComputePipelineCreationDesc {
             pipeline: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some(self.label),
                 layout: Some(&self.layout),
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &shader.module,
-                    entry_point: super::shader::SHADER_ENTRY_POINT_NAME,
-                },
+                module: &shader.module,
+                entry_point: SHADER_ENTRY_POINT_NAME,
             }),
             shader_sources: shader.source_files,
         })
     }
+}
+
+pub struct VertexStateCreationDesc {
+    /// Path to shader source file.
+    pub shader_relative_path: PathBuf,
+    /// The format of any vertex buffers used with this pipeline.
+    pub buffers: &'static [wgpu::VertexBufferLayout<'static>],
+}
+
+/// Describes the fragment process in a render pipeline.
+#[derive(Clone, Debug)]
+pub struct FragmentStateCreationDesc {
+    /// Path to shader source file.
+    pub shader_relative_path: PathBuf,
+    /// The format of any vertex buffers used with this pipeline.
+    pub targets: Vec<wgpu::ColorTargetState>,
 }
 
 // This is essentially a copy of wgpu::RenderPipelineDescriptor that we can store.
@@ -44,43 +59,18 @@ impl ComputePipelineCreationDesc {
 pub struct RenderPipelineCreationDesc {
     /// Debug label of the pipeline. This will show up in graphics debuggers for easy identification.
     pub label: &'static str,
-
     /// The layout of bind groups for this pipeline.
     pub layout: Rc<wgpu::PipelineLayout>,
-
-    /// The compiled vertex stage and its entry point.
-    pub vertex_shader_relative_path: PathBuf,
-
-    /// The compiled fragment stage and its entry point, if any.
-    pub fragment_shader_relative_path: Option<PathBuf>,
-
-    /// The rasterization process for this pipeline.
-    pub rasterization_state: Option<wgpu::RasterizationStateDescriptor>,
-
-    /// The primitive topology used to interpret vertices.
-    pub primitive_topology: wgpu::PrimitiveTopology,
-
-    /// The effect of draw calls on the color aspect of the output target.
-    pub color_states: Vec<wgpu::ColorStateDescriptor>,
-
+    /// The vertex stage, its entry point, and the input buffers layout.
+    pub vertex: VertexStateCreationDesc,
+    /// The properties of the pipeline at the primitive assembly and rasterization level.
+    pub primitive: wgpu::PrimitiveState,
     /// The effect of draw calls on the depth and stencil aspects of the output target, if any.
-    pub depth_stencil_state: Option<wgpu::DepthStencilStateDescriptor>,
-
-    /// The vertex input state for this pipeline.
-    pub vertex_state: wgpu::VertexStateDescriptor<'static>,
-
-    /// The number of samples calculated per pixel (for MSAA).
-    pub sample_count: u32,
-
-    /// Bitmask that restricts the samples of a pixel modified by this pipeline.
-    pub sample_mask: u32,
-
-    /// When enabled, produces another sample mask per pixel based on the alpha output value, that
-    /// is ANDed with the sample_mask and the primitive coverage to restrict the set of samples
-    /// affected by a primitive.
-    /// The implicit mask produced for alpha of zero is guaranteed to be zero, and for alpha of one
-    /// is guaranteed to be all 1-s.
-    pub alpha_to_coverage_enabled: bool,
+    pub depth_stencil: Option<wgpu::DepthStencilState>,
+    /// The multi-sampling properties of the pipeline.
+    pub multisample: wgpu::MultisampleState,
+    /// The fragment stage, its entry point, and the color targets.
+    pub fragment: FragmentStateCreationDesc,
 }
 
 impl RenderPipelineCreationDesc {
@@ -88,74 +78,55 @@ impl RenderPipelineCreationDesc {
         label: &'static str,
         layout: Rc<wgpu::PipelineLayout>,
         vertex_shader_relative_path: &Path,
-        fragment_shader_relative_path: Option<&Path>,
+        fragment_shader_relative_path: &Path,
         output_format: wgpu::TextureFormat,
         depth_format: Option<wgpu::TextureFormat>,
     ) -> Self {
         RenderPipelineCreationDesc {
             label,
-            layout: layout,
-            vertex_shader_relative_path: PathBuf::from(vertex_shader_relative_path),
-            fragment_shader_relative_path: match fragment_shader_relative_path {
-                None => None,
-                Some(path) => Some(PathBuf::from(path)),
+            layout,
+            vertex: VertexStateCreationDesc {
+                shader_relative_path: PathBuf::from(vertex_shader_relative_path),
+                buffers: &[],
             },
-            rasterization_state: Some(rasterization_state::culling_none()), // culling none is a curious default...
-            primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-            color_states: vec![color_state::write_all(output_format)],
-            depth_stencil_state: match depth_format {
+            primitive: Default::default(),
+            depth_stencil: match depth_format {
                 Some(depth_format) => Some(depth_state::default_read_write(depth_format)),
                 None => None,
             },
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: None,
-                vertex_buffers: &[],
+            multisample: Default::default(),
+            fragment: FragmentStateCreationDesc {
+                shader_relative_path: PathBuf::from(fragment_shader_relative_path),
+                targets: vec![output_format.into()],
             },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
         }
     }
 
     fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<PipelineAndSourceFiles<wgpu::RenderPipeline>, ()> {
-        let shader_vs = shader_dir.load_shader_module(device, &self.vertex_shader_relative_path)?;
-        let mut shader_fs = match &self.fragment_shader_relative_path {
-            None => None,
-            Some(relative_path) => Some(shader_dir.load_shader_module(device, relative_path)?),
-        };
-
-        let mut shader_sources = shader_vs.source_files;
+        let shader_vs = shader_dir.load_shader_module(device, &self.vertex.shader_relative_path)?;
+        let shader_fs = shader_dir.load_shader_module(device, &self.fragment.shader_relative_path)?;
 
         let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
             label: Some(self.label),
             layout: Some(&self.layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
+            vertex: wgpu::VertexState {
                 module: &shader_vs.module,
                 entry_point: SHADER_ENTRY_POINT_NAME,
+                buffers: self.vertex.buffers,
             },
-            fragment_stage: match shader_fs.as_mut() {
-                None => None,
-                Some(shader_fs) => {
-                    shader_sources.append(&mut shader_fs.source_files);
-                    Some(wgpu::ProgrammableStageDescriptor {
-                        module: &shader_fs.module,
-                        entry_point: SHADER_ENTRY_POINT_NAME,
-                    })
-                }
-            },
-            rasterization_state: self.rasterization_state.clone(),
-            primitive_topology: self.primitive_topology,
-            color_states: &self.color_states,
-            depth_stencil_state: self.depth_stencil_state.clone(),
-            vertex_state: self.vertex_state.clone(),
-            sample_count: self.sample_count,
-            sample_mask: self.sample_mask,
-            alpha_to_coverage_enabled: self.alpha_to_coverage_enabled,
+            primitive: self.primitive.clone(),
+            depth_stencil: self.depth_stencil.clone(),
+            multisample: self.multisample.clone(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_fs.module,
+                entry_point: SHADER_ENTRY_POINT_NAME,
+                targets: &self.fragment.targets,
+            }),
         };
 
         Ok(PipelineAndSourceFiles {
             pipeline: device.create_render_pipeline(&render_pipeline_descriptor),
-            shader_sources,
+            shader_sources: shader_vs.source_files,
         })
     }
 }
@@ -223,7 +194,6 @@ impl PipelineManager {
         shader_dir: &ShaderDirectory,
         desc: RenderPipelineCreationDesc,
     ) -> RenderPipelineHandle {
-        // duplicated code from create_compute_pipeline, but well within Rule of Three ;-)
         let pipeline_and_sources = desc.try_create_pipeline(device, shader_dir).unwrap();
 
         let mut first_free_slot = 0;
@@ -292,40 +262,15 @@ impl PipelineManager {
     }
 }
 
-pub mod rasterization_state {
-    pub fn culling_none() -> wgpu::RasterizationStateDescriptor {
-        wgpu::RasterizationStateDescriptor {
-            cull_mode: wgpu::CullMode::None,
-            ..Default::default()
-        }
-    }
-
-    pub fn culling_back() -> wgpu::RasterizationStateDescriptor {
-        wgpu::RasterizationStateDescriptor {
-            cull_mode: wgpu::CullMode::Back,
-            ..Default::default()
-        }
-    }
-}
-
-pub mod color_state {
-    pub fn write_all(format: wgpu::TextureFormat) -> wgpu::ColorStateDescriptor {
-        wgpu::ColorStateDescriptor {
-            format: format,
-            color_blend: wgpu::BlendDescriptor::REPLACE,
-            alpha_blend: wgpu::BlendDescriptor::REPLACE,
-            write_mask: wgpu::ColorWrite::ALL,
-        }
-    }
-}
-
 pub mod depth_state {
-    pub fn default_read_write(format: wgpu::TextureFormat) -> wgpu::DepthStencilStateDescriptor {
-        wgpu::DepthStencilStateDescriptor {
+    pub fn default_read_write(format: wgpu::TextureFormat) -> wgpu::DepthStencilState {
+        wgpu::DepthStencilState {
             format,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::LessEqual,
             stencil: Default::default(),
+            bias: Default::default(),
+            clamp_depth: false,
         }
     }
 }
