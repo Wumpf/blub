@@ -22,9 +22,6 @@ pub struct HybridFluid {
     signed_distance_field: SignedDistanceField,
 
     particles_position_llindex: wgpu::Buffer,
-    particles_velocity_x: wgpu::Buffer,
-    particles_velocity_y: wgpu::Buffer,
-    particles_velocity_z: wgpu::Buffer,
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
     simulation_properties: SimulationPropertiesUniformBufferContent,
 
@@ -419,9 +416,6 @@ impl HybridFluid {
             signed_distance_field,
 
             particles_position_llindex,
-            particles_velocity_x,
-            particles_velocity_y,
-            particles_velocity_z,
             simulation_properties_uniformbuffer,
             simulation_properties: SimulationPropertiesUniformBufferContent {
                 num_particles: 0,
@@ -611,15 +605,6 @@ impl HybridFluid {
             self.simulation_properties.num_particles as u64 * particle_size,
             bytemuck::cast_slice(&new_particles),
         );
-
-        // Clear velocities:
-        // wgpu-rs doesn't zero initialize yet (bug/missing feature impl)
-        // https://github.com/gfx-rs/wgpu/issues/563
-        let offset_velocity_buffer = self.simulation_properties.num_particles as u64 * std::mem::size_of::<cgmath::Vector4<f32>>() as u64;
-        let zero_velocity = vec![0 as u8; num_new_particles as usize * std::mem::size_of::<cgmath::Vector4<f32>>()];
-        queue.write_buffer(&self.particles_velocity_x, offset_velocity_buffer, &zero_velocity);
-        queue.write_buffer(&self.particles_velocity_y, offset_velocity_buffer, &zero_velocity);
-        queue.write_buffer(&self.particles_velocity_z, offset_velocity_buffer, &zero_velocity);
 
         self.simulation_properties.num_particles += num_new_particles;
     }

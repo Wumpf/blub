@@ -624,7 +624,7 @@ impl PressureSolver {
             const NOT_FIRST_STEP: u32 = 1;
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_init));
             // Clear pressures on first step.
-            // wgpu-rs doesn't zero initialize yet (bug/missing feature impl)
+            // wgpu-rs doesn't zero initialize textures yet (bug/missing feature impl)
             // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
             // https://github.com/gfx-rs/wgpu/issues/563
             if pressure_field.timestamp_last_iteration == Duration::new(0, 0) {
