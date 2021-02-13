@@ -13,9 +13,9 @@ enumflags2 = "0.6"
 env_logger = "0.8.2"
 futures = "0.3"
 image = {version = "0.23", default-features = false, features = ["png", "hdr"]}
-imgui = "0.6.1"
-imgui-wgpu = {git = "https://github.com/Wumpf/imgui-wgpu-rs", rev = "f1bc67936b2c49c19f60328d5aa13ebdb17691b8"}
-imgui-winit-support = {version = "0.6.1", default-features = false, features = ["winit-23"]}
+imgui = "0.7.0"
+imgui-wgpu = {git = "https://github.com/Wumpf/imgui-wgpu-rs", rev = "469845b1f731e692e46028bc0beb761f98499e94"}
+imgui-winit-support = {version = "0.7.0", default-features = false, features = ["winit-24"]}
 lazy_static = "1.4"
 log = "0.4"
 more-asserts = "0.2"
