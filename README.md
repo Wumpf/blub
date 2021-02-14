@@ -39,9 +39,8 @@ Can be reloaded at runtime and will pick up any change
 * [WebGPU-rs](https://github.com/gfx-rs/wgpu)
   * [webgpu](https://gpuweb.github.io/gpuweb/) but in Rust!
   * as of writing all this is still in heavy development, so I'm using some master version, updated in irregular intervals
-* [DearImGUI](https://github.com/ocornut/imgui)
-  * or rather, its [Rust binding](https://github.com/Gekkio/imgui-rs)
-  * I'm maintaining a fork of the webgpu-rs binding layer [here](https://github.com/Wumpf/imgui-wgpu-rs/tree/use-wgpu-master) to be able to use newest version
+* [egui](https://github.com/emilk/egui)
+* [winit](https://github.com/rust-windowing/winit)
 * various other amazing crates, check [cargo.toml](https://github.com/Wumpf/blub/blob/master/Cargo.toml) file
 
 ## Simulation

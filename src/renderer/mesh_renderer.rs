@@ -58,7 +58,7 @@ impl MeshRenderer {
                     }],
                 },
                 primitive: wgpu::PrimitiveState {
-                    cull_mode: wgpu::CullMode::Back,
+                    cull_mode: Some(wgpu::Face::Back),
                     ..Default::default()
                 },
                 depth_stencil: Some(depth_state::default_read_write(Screen::FORMAT_DEPTH)),

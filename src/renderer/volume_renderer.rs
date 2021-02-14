@@ -6,7 +6,7 @@ use crate::{
 };
 use std::{path::Path, rc::Rc};
 
-#[derive(Clone, Copy, Debug, EnumIter)]
+#[derive(Clone, Copy, Debug, EnumIter, PartialEq)]
 pub enum VolumeVisualizationMode {
     None,
     Velocity,

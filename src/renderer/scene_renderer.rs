@@ -15,7 +15,7 @@ use crate::{
 
 use cgmath::EuclideanSpace;
 use std::path::Path;
-#[derive(Clone, Copy, Debug, EnumIter)]
+#[derive(Clone, Copy, Debug, EnumIter, PartialEq)]
 pub enum FluidRenderingMode {
     None,
     ScreenSpaceFluid,

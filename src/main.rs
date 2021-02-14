@@ -129,7 +129,7 @@ impl Application {
             global_bindings.bind_group_layout(),
             &hdr_backbuffer,
         );
-        let gui = gui::GUI::new(&device, &window, &mut command_queue);
+        let gui = gui::GUI::new(&device, &window);
 
         // Load initial scene. Gui already needs to list all scenes, so we go there to grab the default selected.
         let scene = scene::Scene::new(
@@ -292,7 +292,7 @@ impl Application {
                 _ => (),
             }
 
-            self.gui.handle_event(&self.window, &event);
+            self.gui.handle_event(&event);
         });
     }
 
@@ -381,10 +381,10 @@ impl Application {
         self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
 
         self.gui.draw(
-            &self.device,
+            &mut self.device,
             &self.window,
             &mut encoder,
-            &self.command_queue,
+            &mut self.command_queue,
             &self.screen.backbuffer(),
             &mut self.simulation_controller,
             &mut self.scene_renderer,
@@ -400,7 +400,6 @@ impl Application {
 }
 
 fn main() {
-    // Silence warnings from `naga::front::spirv` for now since as of writing it doesn't know enough spirv yet.
     env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn,blub=info"));
     let event_loop = EventLoop::<ApplicationEvent>::with_user_event();
     let application = futures::executor::block_on(Application::new(&event_loop));
