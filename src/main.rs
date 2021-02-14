@@ -106,7 +106,7 @@ impl Application {
             .await
             .unwrap();
 
-        let shader_dir = shader::ShaderDirectory::new(Path::new("shader"));
+        let shader_dir = shader::ShaderDirectory::new(Path::new("shader"), Path::new(".shadercache"));
         let mut pipeline_manager = pipelines::PipelineManager::new();
 
         let screen = Screen::new(

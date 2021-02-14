@@ -1,7 +1,7 @@
 use notify::Watcher;
-use std::ffi::OsStr;
-use std::sync::Arc;
 use std::{borrow::Cow::Borrowed, cell::RefCell};
+use std::{ffi::OsStr, hash::Hash};
+use std::{hash::Hasher, sync::Arc};
 use std::{
     path::{Path, PathBuf},
     sync::Mutex,
@@ -16,6 +16,7 @@ pub struct ShaderDirectory {
     watcher: notify::RecommendedWatcher,
     changed_files: Arc<Mutex<Vec<PathBuf>>>,
     directory: PathBuf,
+    cache_dir: PathBuf,
 }
 
 pub struct ShaderModuleWithSourceFiles {
@@ -24,7 +25,7 @@ pub struct ShaderModuleWithSourceFiles {
 }
 
 impl ShaderDirectory {
-    pub fn new(path: &Path) -> ShaderDirectory {
+    pub fn new(path: &Path, cache_dir: &Path) -> ShaderDirectory {
         let changed_files = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
         let changed_files_evt_ref = changed_files.clone();
         let mut watcher: notify::RecommendedWatcher = notify::Watcher::new_immediate(move |res: Result<notify::Event, notify::Error>| match res {
@@ -49,10 +50,13 @@ impl ShaderDirectory {
         .unwrap();
         watcher.watch(path, notify::RecursiveMode::Recursive).unwrap();
 
+        let _ = std::fs::create_dir_all(cache_dir);
+
         ShaderDirectory {
             watcher,
             changed_files,
             directory: PathBuf::from(path),
+            cache_dir: PathBuf::from(cache_dir),
         }
     }
 
@@ -66,6 +70,14 @@ impl ShaderDirectory {
         let path = self.directory.join(relative_path);
         let source_files = RefCell::new(vec![path.canonicalize().unwrap()]);
 
+        let glsl_code = match std::fs::read_to_string(&path) {
+            Ok(glsl_code) => glsl_code,
+            Err(err) => {
+                error!("Failed to read shader file \"{:?}\": {}", path, err);
+                return Err(());
+            }
+        };
+
         let kind = match path.extension().and_then(OsStr::to_str) {
             Some("frag") => shaderc::ShaderKind::Fragment,
             Some("vert") => shaderc::ShaderKind::Vertex,
@@ -76,13 +88,24 @@ impl ShaderDirectory {
             }
         };
 
-        let glsl_code = match std::fs::read_to_string(&path) {
-            Ok(glsl_code) => glsl_code,
-            Err(err) => {
-                error!("Failed to read shader file \"{:?}\": {}", path, err);
-                return Err(());
-            }
-        };
+        // Check for cache hit.
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        glsl_code.hash(&mut hasher);
+        let cache_path = self.cache_dir.join(format!(
+            "{:X}.{}.cache",
+            hasher.finish(),
+            path.extension().and_then(OsStr::to_str).unwrap()
+        ));
+        if let Ok(cached_shader) = std::fs::read(&cache_path) {
+            return Ok(ShaderModuleWithSourceFiles {
+                module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                    label: Some(path.file_name().unwrap().to_str().unwrap()),
+                    source: wgpu::ShaderSource::SpirV(Borrowed(bytemuck::cast_slice(&cached_shader))),
+                    flags: wgpu::ShaderFlags::VALIDATION,
+                }),
+                source_files: source_files.into_inner(),
+            });
+        }
 
         let compilation_artifact = {
             let mut compiler = shaderc::Compiler::new().unwrap();
@@ -136,11 +159,16 @@ impl ShaderDirectory {
                     compile_result
                 }
                 Err(compile_error) => {
-                    error!("{}", compile_error);
+                    error!("failed to compile shader {:?}: {}", path, compile_error);
                     return Err(());
                 }
             }
         };
+
+        std::fs::write(&cache_path, compilation_artifact.as_binary_u8()).or_else(|e| {
+            error!("failed to shader cache file {:?}: {}", cache_path, e);
+            Err(())
+        })?;
 
         Ok(ShaderModuleWithSourceFiles {
             module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
