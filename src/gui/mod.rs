@@ -114,28 +114,36 @@ impl GUI {
             event_loop_proxy.send_event(ApplicationEvent::ChangePresentMode(present_mode)).unwrap();
         }
         ui.separator();
-        ui.label(format!(
-            "num simulation steps current frame: {}",
-            simulation_controller.timer().num_simulation_steps_performed_for_current_frame()
-        ));
-        if let SimulationControllerStatus::RecordingWithFixedFrameLength { .. } = simulation_controller.status() {
+
+        ui.horizontal(|ui| {
+            ui.label("num simulation steps current frame:");
             ui.add(
                 egui::Label::new(format!(
-                    "OFFLINE RECORDING - rendered time forced to {:.2}fps",
-                    1.0 / simulation_controller.timer().frame_delta().as_secs_f64()
+                    "{}",
+                    simulation_controller.timer().num_simulation_steps_performed_for_current_frame()
                 ))
-                .text_color(egui::Color32::RED),
+                .strong(),
             );
-        } else {
-            ui.label(format!(
-                "rendered time:  {:.2}",
-                simulation_controller.timer().total_render_time().as_secs_f64()
-            ));
-        }
-        ui.label(format!(
-            "simulated time: {:.2}",
-            simulation_controller.timer().total_simulated_time().as_secs_f64()
-        ));
+        });
+
+        egui::Grid::new("timers").show(ui, |ui| {
+            if let SimulationControllerStatus::RecordingWithFixedFrameLength { .. } = simulation_controller.status() {
+                ui.colored_label(
+                    egui::Color32::RED,
+                    egui::Label::new(format!(
+                        "OFFLINE RECORDING ({:.2}fps)",
+                        1.0 / simulation_controller.timer().frame_delta().as_secs_f64()
+                    )),
+                );
+            } else {
+                ui.label("rendered time:");
+                ui.add(egui::Label::new(format!("{:.2}", simulation_controller.timer().total_render_time().as_secs_f64())).strong());
+            }
+            ui.end_row();
+
+            ui.label("simulated time:");
+            ui.label(egui::Label::new(format!("{:.2}", simulation_controller.timer().total_simulated_time().as_secs_f64())).strong());
+        });
     }
 
     fn setup_ui_solver_stats(ui: &mut egui::Ui, stats: &VecDeque<SolverStatisticSample>, max_iterations: i32, error_tolerance: f32) {
@@ -170,7 +178,7 @@ impl GUI {
 
     fn setup_ui_solver(ui: &mut egui::Ui, fluid: &mut HybridFluid) {
         {
-            ui.label("pressure solver, primary (from velocity)");
+            ui.heading("pressure solver, primary (via velocity)");
             let max_num_iterations = fluid.pressure_solver_config_velocity().max_num_iterations;
             let error_tolerance = fluid.pressure_solver_config_velocity().error_tolerance;
             Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_velocity(), max_num_iterations, error_tolerance);
@@ -178,7 +186,7 @@ impl GUI {
         }
         ui.separator();
         {
-            ui.label("pressure solver, secondary (from density)");
+            ui.heading("pressure solver, secondary (via density)");
             let max_num_iterations = fluid.pressure_solver_config_density().max_num_iterations;
             let error_tolerance = fluid.pressure_solver_config_density().error_tolerance;
             Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_density(), max_num_iterations, error_tolerance);
@@ -198,34 +206,6 @@ impl GUI {
         simulation_controller: &mut SimulationController,
         event_loop_proxy: &EventLoopProxy<ApplicationEvent>,
     ) {
-        ui.label(format!(
-            "total num simulation steps: {}",
-            simulation_controller.timer().num_simulation_steps_performed()
-        ));
-
-        ui.horizontal(|ui| {
-            let mut simulation_time_seconds = simulation_controller.simulation_stop_time.as_secs_f32();
-            ui.add(egui::DragValue::f32(&mut simulation_time_seconds).speed(0.1));
-            simulation_controller.simulation_stop_time = std::time::Duration::from_secs_f32(simulation_time_seconds);
-            ui.label("target simulation time (s)");
-        });
-
-        ui.horizontal(|ui| {
-            let mut simulation_steps_per_second = simulation_controller.simulation_steps_per_second() as i32;
-            ui.add(egui::DragValue::i32(&mut simulation_steps_per_second).speed(10.0));
-            simulation_controller.set_simulation_steps_per_second(simulation_steps_per_second.max(20).min(60 * 20) as u64);
-            ui.label("simulation steps per second");
-        });
-
-        ui.horizontal(|ui| {
-            ui.add(
-                egui::DragValue::f32(&mut simulation_controller.time_scale)
-                    .speed(0.05)
-                    .clamp_range(0.01..=100.0),
-            );
-            ui.label("time scale");
-        });
-
         ui.horizontal(|ui| {
             if ui.button("Reset").clicked() {
                 event_loop_proxy.send_event(ApplicationEvent::ResetScene).unwrap();
@@ -241,6 +221,37 @@ impl GUI {
                 simulation_controller.pause_or_resume();
             }
         });
+
+        ui.horizontal(|ui| {
+            ui.label("total num simulation steps:");
+            ui.add(egui::Label::new(format!("{}", simulation_controller.timer().num_simulation_steps_performed())).strong());
+        });
+
+        ui.separator();
+
+        egui::Grid::new("simulation controls").show(ui, |ui| {
+            ui.label("target simulation time (s)");
+            let mut simulation_time_seconds = simulation_controller.simulation_stop_time.as_secs_f32();
+            ui.add(egui::DragValue::f32(&mut simulation_time_seconds).speed(0.1));
+            simulation_controller.simulation_stop_time = std::time::Duration::from_secs_f32(simulation_time_seconds);
+            ui.end_row();
+
+            ui.label("simulation steps per second");
+            let mut simulation_steps_per_second = simulation_controller.simulation_steps_per_second() as i32;
+            ui.add(egui::DragValue::i32(&mut simulation_steps_per_second).speed(10.0));
+            simulation_controller.set_simulation_steps_per_second(simulation_steps_per_second.max(20).min(60 * 20) as u64);
+            ui.end_row();
+
+            ui.label("time scale");
+            ui.add(
+                egui::DragValue::f32(&mut simulation_controller.time_scale)
+                    .speed(0.05)
+                    .clamp_range(0.01..=100.0),
+            );
+            ui.end_row();
+        });
+
+        ui.separator();
 
         ui.horizontal(|ui| {
             let min_jump = 1.0 / simulation_controller.simulation_steps_per_second() as f32;
@@ -283,22 +294,44 @@ impl GUI {
     }
 
     fn setup_ui_rendersettings(ui: &mut egui::Ui, scene_renderer: &mut SceneRenderer) {
-        egui::combo_box_with_label(ui, "Fluid Rendering", format!("{:?}", scene_renderer.fluid_rendering_mode), |ui| {
-            for mode in FluidRenderingMode::iter() {
-                ui.selectable_value(&mut scene_renderer.fluid_rendering_mode, mode, format!("{:?}", mode));
-            }
+        egui::Grid::new("render settings").show(ui, |ui| {
+            ui.label("Fluid Rendering");
+            egui::combo_box(
+                ui,
+                ui.make_persistent_id("Fluid Rendering"),
+                format!("{:?}", scene_renderer.fluid_rendering_mode),
+                |ui| {
+                    for mode in FluidRenderingMode::iter() {
+                        ui.selectable_value(&mut scene_renderer.fluid_rendering_mode, mode, format!("{:?}", mode));
+                    }
+                },
+            );
+            ui.end_row();
+
+            ui.label("Particle Radius Factor");
+            ui.add(egui::Slider::f32(&mut scene_renderer.particle_radius_factor, 0.0..=1.0).text(""));
+            ui.end_row();
+
+            ui.label("Volume Visualization");
+            egui::combo_box(
+                ui,
+                ui.make_persistent_id("Volume Visualization"),
+                format!("{:?}", scene_renderer.volume_visualization),
+                |ui| {
+                    for mode in VolumeVisualizationMode::iter() {
+                        ui.selectable_value(&mut scene_renderer.volume_visualization, mode, format!("{:?}", mode));
+                    }
+                },
+            );
+            ui.end_row();
+
+            ui.label("Velocity Visualization Scale");
+            ui.add(
+                egui::Slider::f32(&mut scene_renderer.velocity_visualization_scale, 0.001..=5.0)
+                    .logarithmic(true)
+                    .text(""),
+            );
         });
-        ui.add(egui::Slider::f32(&mut scene_renderer.particle_radius_factor, 0.0..=1.0).text("Particle Radius Factor"));
-        egui::combo_box_with_label(ui, "Volume Visualization", format!("{:?}", scene_renderer.volume_visualization), |ui| {
-            for mode in VolumeVisualizationMode::iter() {
-                ui.selectable_value(&mut scene_renderer.volume_visualization, mode, format!("{:?}", mode));
-            }
-        });
-        ui.add(
-            egui::Slider::f32(&mut scene_renderer.velocity_visualization_scale, 0.001..=5.0)
-                .logarithmic(true)
-                .text("Velocity Visualization Scale"),
-        );
         ui.checkbox(&mut scene_renderer.enable_mesh_rendering, "Render meshes");
         ui.checkbox(&mut scene_renderer.enable_box_lines, "Show Fluid Domain Bounds");
     }
@@ -318,21 +351,24 @@ impl GUI {
         self.platform.begin_frame();
 
         // Draw gui
-        egui::Window::new("Blub").show(&self.platform.context(), |ui| {
-            Self::setup_ui_timer(ui, &mut self.state, simulation_controller, event_loop_proxy);
+        egui::Window::new("Blub")
+            .resizable(false)
+            .title_bar(false)
+            .show(&self.platform.context(), |ui| {
+                Self::setup_ui_timer(ui, &mut self.state, simulation_controller, event_loop_proxy);
 
-            egui::CollapsingHeader::new("Solver").show(ui, |ui| {
-                Self::setup_ui_solver(ui, scene.fluid_mut());
-            });
-            egui::CollapsingHeader::new("Simulation Controller & Recording")
-                .default_open(true)
-                .show(ui, |ui| {
-                    Self::setup_ui_simulation_control(ui, &mut self.state, simulation_controller, event_loop_proxy);
+                egui::CollapsingHeader::new("Solver").show(ui, |ui| {
+                    Self::setup_ui_solver(ui, scene.fluid_mut());
                 });
-            egui::CollapsingHeader::new("Rendering Settings").default_open(true).show(ui, |ui| {
-                Self::setup_ui_rendersettings(ui, scene_renderer);
+                egui::CollapsingHeader::new("Simulation Controller & Recording")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        Self::setup_ui_simulation_control(ui, &mut self.state, simulation_controller, event_loop_proxy);
+                    });
+                egui::CollapsingHeader::new("Rendering Settings").default_open(true).show(ui, |ui| {
+                    Self::setup_ui_rendersettings(ui, scene_renderer);
+                });
             });
-        });
 
         // End the UI frame.
         let (_output, paint_commands) = self.platform.end_frame();

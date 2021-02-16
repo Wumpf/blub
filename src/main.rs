@@ -87,7 +87,7 @@ impl Application {
             .await
             .unwrap();
 
-        let (device, mut command_queue) = adapter
+        let (device, command_queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("main device"),

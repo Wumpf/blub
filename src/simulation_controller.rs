@@ -75,10 +75,6 @@ impl SimulationController {
         }
     }
 
-    pub fn resume_realtime(&mut self) {
-        self.status = SimulationControllerStatus::Realtime;
-    }
-
     pub fn start_recording_with_fixed_frame_length(&mut self, frames_per_second: f64) {
         self.status = SimulationControllerStatus::RecordingWithFixedFrameLength(Duration::from_secs_f64(1.0 / frames_per_second));
     }
