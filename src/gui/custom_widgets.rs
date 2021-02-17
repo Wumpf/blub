@@ -1,6 +1,13 @@
 use egui::*;
 
-pub fn plot_histogram(ui: &mut egui::Ui, height: f32, values: &[f32], top_value: f32, value_unit: &'static str) -> egui::Response {
+pub fn plot_barchart(
+    ui: &mut egui::Ui,
+    height: f32,
+    values: &[f32],
+    top_value: f32,
+    value_unit: &'static str,
+    value_decimals: usize,
+) -> egui::Response {
     let size = vec2(ui.available_size_before_wrap_finite().x, height);
     let (rect, response) = ui.allocate_at_least(size, Sense::hover());
     let style = ui.style().noninteractive();
@@ -13,38 +20,48 @@ pub fn plot_histogram(ui: &mut egui::Ui, height: f32, values: &[f32], top_value:
     }];
 
     let rect = rect.shrink(4.0);
-    // tooltip.
-    if let Some(pointer_pos) = ui.input().pointer.tooltip_pos() {
-        if rect.contains(pointer_pos) {
-            let color = ui.visuals().text_color();
-            let line_stroke = Stroke::new(1.0, color);
-
-            let y = pointer_pos.y;
-            shapes.push(Shape::line_segment([pos2(rect.left(), y), pos2(rect.right(), y)], line_stroke));
-            let value = remap(y, rect.bottom_up_range(), 0.0..=top_value);
-            let text = format!("{:.1} {}", value, value_unit);
-            shapes.push(Shape::text(
-                ui.fonts(),
-                pos2(rect.left(), y),
-                egui::Align2::LEFT_BOTTOM,
-                text,
-                TextStyle::Monospace,
-                color,
-            ));
-        }
-    }
-
-    let line_stroke = Stroke::new(1.0, ui.visuals().weak_text_color());
-    let circle_color = ui.visuals().strong_text_color();
-    let radius = 2.0;
+    let half_bar_width = rect.width() / values.len() as f32 * 0.5;
 
     for (i, &value) in values.iter().rev().enumerate() {
         let x = remap(i as f32, values.len() as f32..=0.0, rect.x_range());
+        let x_min = ui.painter().round_to_pixel(x - half_bar_width);
+        let x_max = ui.painter().round_to_pixel(x + half_bar_width);
         let y = remap_clamp(value, 0.0..=top_value, rect.bottom_up_range());
+        let bar = Rect {
+            min: pos2(x_min, y),
+            max: pos2(x_max, rect.bottom()),
+        };
 
-        shapes.push(Shape::line_segment([pos2(x, rect.bottom()), pos2(x, y)], line_stroke));
-        if value < top_value {
-            shapes.push(Shape::circle_filled(pos2(x, y), radius, circle_color));
+        let mut fill_color = ui.visuals().weak_text_color();
+
+        let tooltip = if let Some(pointer_pos) = ui.input().pointer.tooltip_pos() {
+            if bar.contains(pointer_pos) {
+                fill_color = ui.visuals().text_color();
+                Some(Shape::text(
+                    ui.fonts(),
+                    pointer_pos,
+                    egui::Align2::LEFT_BOTTOM,
+                    format!("{:.*} {}", value_decimals, value, value_unit),
+                    TextStyle::Body,
+                    ui.visuals().strong_text_color(),
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        shapes.push(Shape::Rect {
+            rect: bar,
+            corner_radius: 0.0,
+            fill: fill_color,
+            stroke: Default::default(),
+        });
+
+        // tooltip.
+        if let Some(tooltip) = tooltip {
+            shapes.push(tooltip);
         }
     }
 

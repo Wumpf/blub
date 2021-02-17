@@ -104,7 +104,7 @@ impl GUI {
             .iter()
             .map(|d| d.as_secs_f32() * 1000.0)
             .collect::<Vec<f32>>();
-        custom_widgets::plot_histogram(ui, 40.0, &frame_times, frame_times.iter().cloned().fold(0.0, f32::max), "ms");
+        custom_widgets::plot_barchart(ui, 40.0, &frame_times, frame_times.iter().cloned().fold(0.0, f32::max), "ms", 1);
 
         if ui.checkbox(&mut state.wait_for_vblank, "wait for vsync").clicked() {
             let present_mode = match state.wait_for_vblank {
@@ -151,21 +151,23 @@ impl GUI {
             Some(&sample) => sample,
             None => Default::default(),
         };
-        custom_widgets::plot_histogram(
+        custom_widgets::plot_barchart(
             ui,
             40.0,
             &stats.iter().map(|sample| sample.error).collect::<Vec<f32>>(),
             error_tolerance * 3.0,
             "",
+            4,
         );
         ui.label(&format!("max residual error - {}", newest_sample.error));
 
-        custom_widgets::plot_histogram(
+        custom_widgets::plot_barchart(
             ui,
             40.0,
             &stats.iter().map(|sample| sample.iteration_count as f32).collect::<Vec<f32>>(),
             max_iterations as f32,
             "",
+            0,
         );
         ui.label(&format!("# solver iterations - {}", newest_sample.iteration_count));
     }
