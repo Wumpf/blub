@@ -2,13 +2,12 @@ use egui::*;
 
 pub fn plot_barchart(
     ui: &mut egui::Ui,
-    height: f32,
+    size: Vec2,
     values: &[f32],
     top_value: f32,
     value_unit: &'static str,
     value_decimals: usize,
 ) -> egui::Response {
-    let size = vec2(ui.available_size_before_wrap_finite().x, height);
     let (rect, response) = ui.allocate_at_least(size, Sense::hover());
     let style = ui.style().noninteractive();
 

@@ -52,12 +52,15 @@ impl epi::RepaintSignal for DummyRepaintSignal {
 
 impl GUI {
     pub fn new(device: &wgpu::Device, window: &winit::window::Window) -> Self {
+        let mut style = egui::Style::default();
+        style.visuals.code_bg_color = egui::Color32::from_rgb(64, 64, 100);
+
         let platform = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
             physical_width: window.inner_size().width as u32,
             physical_height: window.inner_size().height as u32,
             scale_factor: window.scale_factor(),
             font_definitions: egui::FontDefinitions::default(),
-            style: Default::default(),
+            style,
         });
 
         let render_pass = egui_wgpu_backend::RenderPass::new(device, Screen::FORMAT_BACKBUFFER);
@@ -104,7 +107,14 @@ impl GUI {
             .iter()
             .map(|d| d.as_secs_f32() * 1000.0)
             .collect::<Vec<f32>>();
-        custom_widgets::plot_barchart(ui, 40.0, &frame_times, frame_times.iter().cloned().fold(0.0, f32::max), "ms", 1);
+        custom_widgets::plot_barchart(
+            ui,
+            egui::vec2(ui.available_size_before_wrap_finite().x, 40.0),
+            &frame_times,
+            frame_times.iter().cloned().fold(0.0, f32::max),
+            "ms",
+            1,
+        );
 
         if ui.checkbox(&mut state.wait_for_vblank, "wait for vsync").clicked() {
             let present_mode = match state.wait_for_vblank {
@@ -151,36 +161,55 @@ impl GUI {
             Some(&sample) => sample,
             None => Default::default(),
         };
-        custom_widgets::plot_barchart(
-            ui,
-            40.0,
-            &stats.iter().map(|sample| sample.error).collect::<Vec<f32>>(),
-            error_tolerance * 3.0,
-            "",
-            4,
-        );
-        ui.label(&format!("max residual error - {}", newest_sample.error));
-
-        custom_widgets::plot_barchart(
-            ui,
-            40.0,
-            &stats.iter().map(|sample| sample.iteration_count as f32).collect::<Vec<f32>>(),
-            max_iterations as f32,
-            "",
-            0,
-        );
-        ui.label(&format!("# solver iterations - {}", newest_sample.iteration_count));
+        ui.horizontal(|ui| {
+            custom_widgets::plot_barchart(
+                ui,
+                egui::vec2(240.0, 40.0),
+                &stats.iter().map(|sample| sample.error).collect::<Vec<f32>>(),
+                error_tolerance * 3.0,
+                "",
+                4,
+            );
+            ui.vertical(|ui| {
+                ui.add(egui::Label::new("max residual error").wrap(false));
+                ui.label(format!("{}", newest_sample.error));
+            });
+        });
+        ui.horizontal(|ui| {
+            custom_widgets::plot_barchart(
+                ui,
+                egui::vec2(240.0, 40.0),
+                &stats.iter().map(|sample| sample.iteration_count as f32).collect::<Vec<f32>>(),
+                max_iterations as f32,
+                "",
+                0,
+            );
+            ui.vertical(|ui| {
+                ui.add(egui::Label::new("# solver iterations").wrap(false));
+                ui.label(format!("{}", newest_sample.iteration_count));
+            });
+        });
     }
 
     fn setup_ui_solver_config(ui: &mut egui::Ui, config: &mut SolverConfig) {
-        ui.add(egui::Slider::f32(&mut config.error_tolerance, 0.0001..=1.0).text("error tolerance"));
-        ui.add(egui::Slider::i32(&mut config.max_num_iterations, 2..=128).text("max iteration count"));
-        ui.add(egui::Slider::i32(&mut config.error_check_frequency, 1..=config.max_num_iterations).text("error check frequency count"));
+        egui::Grid::new("solver config").show(ui, |ui| {
+            ui.label("error tolerance");
+            ui.add(egui::Slider::f32(&mut config.error_tolerance, 0.0001..=1.0).text(""));
+            ui.end_row();
+
+            ui.label("max iteration count");
+            ui.add(egui::Slider::i32(&mut config.max_num_iterations, 2..=128).text(""));
+            ui.end_row();
+
+            ui.label("error check frequency count");
+            ui.add(egui::Slider::i32(&mut config.error_check_frequency, 1..=config.max_num_iterations).text(""));
+            ui.end_row();
+        });
     }
 
     fn setup_ui_solver(ui: &mut egui::Ui, fluid: &mut HybridFluid) {
         {
-            ui.heading("pressure solver, primary (via velocity)");
+            ui.label("pressure solver, primary (via velocity)");
             let max_num_iterations = fluid.pressure_solver_config_velocity().max_num_iterations;
             let error_tolerance = fluid.pressure_solver_config_velocity().error_tolerance;
             Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_velocity(), max_num_iterations, error_tolerance);
@@ -188,7 +217,7 @@ impl GUI {
         }
         ui.separator();
         {
-            ui.heading("pressure solver, secondary (via density)");
+            ui.label("pressure solver, secondary (via density)");
             let max_num_iterations = fluid.pressure_solver_config_density().max_num_iterations;
             let error_tolerance = fluid.pressure_solver_config_density().error_tolerance;
             Self::setup_ui_solver_stats(ui, fluid.pressure_solver_stats_density(), max_num_iterations, error_tolerance);
