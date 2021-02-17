@@ -50,13 +50,14 @@ impl ShaderDirectory {
         .unwrap();
         watcher.watch(path, notify::RecursiveMode::Recursive).unwrap();
 
-        let _ = std::fs::create_dir_all(cache_dir);
+        let cache_dir = PathBuf::from(cache_dir).join(if cfg!(debug_assertions) { "debug" } else { "release" });
+        let _ = std::fs::create_dir_all(&cache_dir);
 
         ShaderDirectory {
             watcher,
             changed_files,
             directory: PathBuf::from(path),
-            cache_dir: PathBuf::from(cache_dir),
+            cache_dir,
         }
     }
 
@@ -91,6 +92,7 @@ impl ShaderDirectory {
         // Check for cache hit.
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         glsl_code.hash(&mut hasher);
+
         let cache_path = self.cache_dir.join(format!(
             "{:X}.{}.cache",
             hasher.finish(),
