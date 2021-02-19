@@ -326,6 +326,8 @@ impl GUI {
 
     fn setup_ui_rendersettings(ui: &mut egui::Ui, scene_renderer: &mut SceneRenderer) {
         egui::Grid::new("render settings").show(ui, |ui| {
+            ui.spacing_mut().slider_width = 200.0;
+
             ui.label("Fluid Rendering");
             egui::combo_box(
                 ui,
