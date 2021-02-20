@@ -333,7 +333,7 @@ impl GUI {
 
     fn setup_ui_rendersettings(ui: &mut egui::Ui, scene_renderer: &mut SceneRenderer) {
         egui::Grid::new("render settings").show(ui, |ui| {
-            ui.spacing_mut().slider_width = 200.0;
+            ui.spacing_mut().slider_width = 170.0;
 
             ui.label("Fluid Rendering");
             egui::combo_box(
@@ -376,25 +376,24 @@ impl GUI {
         ui.checkbox(&mut scene_renderer.enable_box_lines, "Show Fluid Domain Bounds");
     }
 
-    fn setup_ui_profiler(ui: &mut egui::Ui, profiling_data: &Vec<GpuTimerScopeResult>, grid_id: &str) {
-        egui::Grid::new(format!("grid-{}", grid_id))
-            .striped(true)
-            .spacing([40.0, 4.0])
-            .show(ui, |ui| {
-                for scope in profiling_data.iter() {
-                    let time = format!("{:.3}ms", (scope.time.end - scope.time.start) * 1000.0);
-                    if scope.nested_scopes.is_empty() {
-                        ui.label(&scope.label);
+    fn setup_ui_profiler(ui: &mut egui::Ui, profiling_data: &Vec<GpuTimerScopeResult>) {
+        for scope in profiling_data.iter() {
+            let time = format!("{:.3}ms", (scope.time.end - scope.time.start) * 1000.0);
+            if scope.nested_scopes.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label(&scope.label);
+                    ui.with_layout(egui::Layout::default().with_cross_align(egui::Align::Max), |ui| {
                         ui.label(time);
-                    } else {
-                        egui::CollapsingHeader::new(format!("{}   {}", scope.label, time))
-                            .id_source(&scope.label)
-                            .default_open(true)
-                            .show(ui, |ui| Self::setup_ui_profiler(ui, &scope.nested_scopes, &scope.label));
-                    }
-                    ui.end_row();
-                }
-            });
+                    });
+                });
+            } else {
+                egui::CollapsingHeader::new(format!("{}  -  {}", scope.label, time))
+                    .id_source(&scope.label)
+                    .default_open(true)
+                    .show(ui, |ui| Self::setup_ui_profiler(ui, &scope.nested_scopes));
+            }
+            ui.end_row();
+        }
     }
 
     pub fn draw(
@@ -430,7 +429,7 @@ impl GUI {
                     Self::setup_ui_rendersettings(ui, scene_renderer);
                 });
                 egui::CollapsingHeader::new("Profiler (Rendering)").default_open(false).show(ui, |ui| {
-                    Self::setup_ui_profiler(ui, &self.state.rendering_profiling_data, "Profiler (Rendering)");
+                    Self::setup_ui_profiler(ui, &self.state.rendering_profiling_data);
                 });
             });
 
