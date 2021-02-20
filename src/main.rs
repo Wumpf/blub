@@ -347,6 +347,10 @@ impl Application {
         if self.simulation_controller.status() == SimulationControllerStatus::Paused {
             self.screenshot_recorder.stop_recording();
         }
+
+        if let Some(rendering_profiling_data) = self.rendering_profiler.process_finished_frame() {
+            self.gui.report_rendering_profiling_data(rendering_profiling_data);
+        }
     }
 
     fn draw(&mut self, event_loop_proxy: &EventLoopProxy<ApplicationEvent>) {
@@ -407,18 +411,6 @@ impl Application {
         self.simulation_controller.on_frame_submitted();
 
         self.rendering_profiler.end_frame().unwrap();
-
-        if let Some(scopes) = self.rendering_profiler.process_finished_queries() {
-            for scope in scopes {
-                // println!(
-                //     "{}: {} - {} ({})",
-                //     scope.label,
-                //     scope.time.start,
-                //     scope.time.end,
-                //     scope.time.end - scope.time.start
-                // );
-            }
-        }
     }
 }
 

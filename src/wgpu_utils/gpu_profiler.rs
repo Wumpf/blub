@@ -135,7 +135,7 @@ impl GpuProfiler {
             }
         }
 
-        let new_pool = if let Some(reused_pool) = self.unused_pools.pop() {
+        let mut new_pool = if let Some(reused_pool) = self.unused_pools.pop() {
             reused_pool
         } else {
             QueryPool::new(
@@ -148,6 +148,7 @@ impl GpuProfiler {
                 device,
             )
         };
+        new_pool.num_used_queries += 2;
         self.active_frame.query_pools.push(new_pool);
 
         QueryPoolQueryAddress {
@@ -287,7 +288,7 @@ impl GpuProfiler {
     }
 
     /// Checks if all timer queries for the oldest pending finished frame are done and returns that snapshot if any.
-    pub fn process_finished_queries(&mut self) -> Option<Vec<GpuTimerScopeResult>> {
+    pub fn process_finished_frame(&mut self) -> Option<Vec<GpuTimerScopeResult>> {
         let frame = self.pending_frames.first_mut()?;
 
         // We only process if all mappings succeed.

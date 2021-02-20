@@ -1,10 +1,13 @@
 use crate::renderer::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
-use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use crate::{
     render_output::screen::Screen,
     scene::Scene,
     simulation::{HybridFluid, SolverConfig, SolverStatisticSample},
     ApplicationEvent,
+};
+use crate::{
+    simulation_controller::{SimulationController, SimulationControllerStatus},
+    wgpu_utils::gpu_profiler::GpuTimerScopeResult,
 };
 use std::{collections::VecDeque, path::PathBuf, time::Duration};
 use strum::IntoEnumIterator;
@@ -36,6 +39,8 @@ pub struct GUIState {
     selected_scene_idx: usize,
     known_scene_files: Vec<PathBuf>,
     wait_for_vblank: bool,
+
+    rendering_profiling_data: Vec<GpuTimerScopeResult>,
 }
 
 pub struct GUI {
@@ -74,6 +79,8 @@ impl GUI {
                 selected_scene_idx: 0,
                 known_scene_files: list_scene_files(),
                 wait_for_vblank: Screen::DEFAULT_PRESENT_MODE == wgpu::PresentMode::Fifo,
+
+                rendering_profiling_data: Vec::new(),
             },
         }
     }
@@ -369,6 +376,27 @@ impl GUI {
         ui.checkbox(&mut scene_renderer.enable_box_lines, "Show Fluid Domain Bounds");
     }
 
+    fn setup_ui_profiler(ui: &mut egui::Ui, profiling_data: &Vec<GpuTimerScopeResult>, grid_id: &str) {
+        egui::Grid::new(format!("grid-{}", grid_id))
+            .striped(true)
+            .spacing([40.0, 4.0])
+            .show(ui, |ui| {
+                for scope in profiling_data.iter() {
+                    let time = format!("{:.3}ms", (scope.time.end - scope.time.start) * 1000.0);
+                    if scope.nested_scopes.is_empty() {
+                        ui.label(&scope.label);
+                        ui.label(time);
+                    } else {
+                        egui::CollapsingHeader::new(format!("{}   {}", scope.label, time))
+                            .id_source(&scope.label)
+                            .default_open(true)
+                            .show(ui, |ui| Self::setup_ui_profiler(ui, &scope.nested_scopes, &scope.label));
+                    }
+                    ui.end_row();
+                }
+            });
+    }
+
     pub fn draw(
         &mut self,
         device: &mut wgpu::Device,
@@ -401,6 +429,9 @@ impl GUI {
                 egui::CollapsingHeader::new("Rendering Settings").default_open(true).show(ui, |ui| {
                     Self::setup_ui_rendersettings(ui, scene_renderer);
                 });
+                egui::CollapsingHeader::new("Profiler (Rendering)").default_open(false).show(ui, |ui| {
+                    Self::setup_ui_profiler(ui, &self.state.rendering_profiling_data, "Profiler (Rendering)");
+                });
             });
 
         // End the UI frame.
@@ -419,5 +450,9 @@ impl GUI {
 
         // Record all render passes.
         self.render_pass.execute(encoder, view, &paint_jobs, &screen_descriptor, None);
+    }
+
+    pub fn report_rendering_profiling_data(&mut self, rendering_profiling_data: Vec<GpuTimerScopeResult>) {
+        self.state.rendering_profiling_data = rendering_profiling_data;
     }
 }
