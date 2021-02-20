@@ -87,7 +87,7 @@ pub struct GpuProfiler {
     active_frame: PendingFrame,
     open_scopes: Vec<UnprocessedTimerScope>,
 
-    max_num_queries_per_frame_so_far: u32,
+    size_for_new_query_pools: u32,
 
     max_num_pending_frames: usize,
     timestamp_to_sec: f64,
@@ -115,7 +115,7 @@ impl GpuProfiler {
             },
             open_scopes: Vec::new(),
 
-            max_num_queries_per_frame_so_far: QueryPool::MIN_CAPACITY,
+            size_for_new_query_pools: QueryPool::MIN_CAPACITY,
 
             max_num_pending_frames,
             timestamp_to_sec: timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0,
@@ -148,7 +148,8 @@ impl GpuProfiler {
                     .iter()
                     .map(|pool| pool.capacity)
                     .sum::<u32>()
-                    .max(self.max_num_queries_per_frame_so_far),
+                    .max(self.size_for_new_query_pools)
+                    .min(wgpu::QUERY_SET_MAX_QUERIES),
                 device,
             )
         };
@@ -219,14 +220,17 @@ impl GpuProfiler {
     fn cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
         // If a pool was less than half of the size of the max frame, then we don't keep it.
         // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
-        let capacity_threshold = self.max_num_queries_per_frame_so_far / 2;
-        for mut pool in query_pools.drain(..).filter(|pool| pool.capacity >= capacity_threshold) {
+        let capacity_threshold = self.size_for_new_query_pools / 2;
+        for mut pool in query_pools.drain(..) {
             pool.reset();
-            self.unused_pools.push(pool);
+            if pool.capacity >= capacity_threshold {
+                self.unused_pools.push(pool);
+            }
         }
     }
 
     /// Marks the end of a frame.
+    /// Needs to be called AFTER submitting any encoder used in the current frame.
     pub fn end_frame(&mut self) -> Result<(), ()> {
         // TODO: Error messages
         if !self.open_scopes.is_empty() {
@@ -241,9 +245,10 @@ impl GpuProfiler {
             return Err(());
         }
 
-        self.max_num_queries_per_frame_so_far = self
-            .max_num_queries_per_frame_so_far
-            .max(self.active_frame.query_pools.iter().map(|pool| pool.num_used_queries).sum());
+        self.size_for_new_query_pools = self
+            .size_for_new_query_pools
+            .max(self.active_frame.query_pools.iter().map(|pool| pool.num_used_queries).sum())
+            .min(wgpu::QUERY_SET_MAX_QUERIES);
 
         // Make sure we don't overflow
         if self.pending_frames.len() == self.max_num_pending_frames {
