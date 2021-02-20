@@ -2,6 +2,7 @@ pub mod binding_builder;
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 pub mod binding_glsl;
+pub mod gpu_profiler;
 pub mod pipelines;
 pub mod shader;
 pub mod uniformbuffer;
@@ -28,6 +29,18 @@ macro_rules! wgpu_scope {
         $encoder_or_pass.push_debug_group($label);
         let ret = $code();
         $encoder_or_pass.pop_debug_group();
+        ret
+    }};
+
+    ($label:expr, $profiler:expr, $encoder_or_pass:ident, $device:expr) => {
+        $profiler.begin_scope($label, $encoder_or_pass, $device);
+        #[allow(unused_mut)]
+        let mut $encoder_or_pass = scopeguard::guard($encoder_or_pass, |mut encoder_or_pass| $profiler.end_scope($encoder_or_pass));
+    };
+    ($label:expr, $profiler:expr, $encoder_or_pass:expr, $device:expr, $code:expr) => {{
+        $profiler.begin_scope($label, $encoder_or_pass, $device);
+        let ret = $code;
+        $profiler.end_scope($encoder_or_pass);
         ret
     }};
 }

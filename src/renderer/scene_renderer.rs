@@ -10,7 +10,7 @@ use crate::{
     render_output::hdr_backbuffer::HdrBackbuffer,
     scene::Scene,
     simulation::HybridFluid,
-    wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
+    wgpu_utils::{gpu_profiler::GpuProfiler, pipelines::PipelineManager, shader::ShaderDirectory},
 };
 
 use cgmath::EuclideanSpace;
@@ -179,16 +179,17 @@ impl SceneRenderer {
     pub fn draw(
         &self,
         scene: &Scene,
+        profiler: &mut GpuProfiler,
+        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         pipeline_manager: &PipelineManager,
         backbuffer: &HdrBackbuffer,
         depthbuffer: &wgpu::TextureView,
         global_bind_group: &wgpu::BindGroup,
     ) {
-        wgpu_scope!(encoder, "SceneRenderer.draw");
-        {
+        wgpu_scope!("SceneRenderer.draw", profiler, encoder, device, {
             // Opaque
-            wgpu_scope!(encoder, "opaque", || {
+            wgpu_scope!("opaque", profiler, encoder, device, {
                 let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("opaque"),
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -242,10 +243,10 @@ impl SceneRenderer {
             });
 
             // Transparent
-            wgpu_scope!(encoder, "transparent", || {
+            wgpu_scope!("transparent", profiler, encoder, device, {
                 if let FluidRenderingMode::ScreenSpaceFluid = self.fluid_rendering_mode {
                     self.screenspace_fluid.draw(
-                        &mut encoder,
+                        encoder,
                         pipeline_manager,
                         depthbuffer,
                         global_bind_group,
@@ -255,6 +256,6 @@ impl SceneRenderer {
                     );
                 }
             });
-        }
+        });
     }
 }

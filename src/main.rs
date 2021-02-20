@@ -29,7 +29,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use wgpu_utils::{pipelines, shader};
+use wgpu_utils::{gpu_profiler::GpuProfiler, pipelines, shader};
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
@@ -55,6 +55,8 @@ struct Application {
 
     device: wgpu::Device,
     command_queue: wgpu::Queue,
+
+    rendering_profiler: GpuProfiler,
 
     shader_dir: shader::ShaderDirectory,
     pipeline_manager: pipelines::PipelineManager,
@@ -95,7 +97,8 @@ impl Application {
                         | wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY
                         | wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING
                         | wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING
-                        | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+                        | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+                        | wgpu::Features::TIMESTAMP_QUERY,
                     limits: wgpu::Limits {
                         max_push_constant_size: 8,
                         ..Default::default()
@@ -130,6 +133,7 @@ impl Application {
             &hdr_backbuffer,
         );
         let gui = gui::GUI::new(&device, &window);
+        let rendering_profiler = GpuProfiler::new(4, command_queue.get_timestamp_period());
 
         // Load initial scene. Gui already needs to list all scenes, so we go there to grab the default selected.
         let scene = scene::Scene::new(
@@ -153,6 +157,7 @@ impl Application {
 
             device,
             command_queue,
+            rendering_profiler,
 
             shader_dir,
             pipeline_manager,
@@ -366,8 +371,11 @@ impl Application {
             self.scene_renderer.fill_global_uniform_buffer(&self.scene),
             self.screen.fill_global_uniform_buffer(),
         );
+
         self.scene_renderer.draw(
             &self.scene,
+            &mut self.rendering_profiler,
+            &self.device,
             &mut encoder,
             &self.pipeline_manager,
             &self.hdr_backbuffer,
@@ -393,9 +401,24 @@ impl Application {
         );
 
         self.screen.copy_to_swapchain(&frame, &mut encoder, &self.pipeline_manager);
+        self.rendering_profiler.resolve_queries(&mut encoder);
         self.command_queue.submit(Some(encoder.finish()));
         self.screen.end_frame(frame);
         self.simulation_controller.on_frame_submitted();
+
+        self.rendering_profiler.end_frame().unwrap();
+
+        if let Some(scopes) = self.rendering_profiler.process_finished_queries() {
+            for scope in scopes {
+                // println!(
+                //     "{}: {} - {} ({})",
+                //     scope.label,
+                //     scope.time.start,
+                //     scope.time.end,
+                //     scope.time.end - scope.time.start
+                // );
+            }
+        }
     }
 }
 
