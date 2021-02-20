@@ -35,7 +35,7 @@ struct QueryPool {
 }
 
 impl QueryPool {
-    const MIN_CAPACITY: u32 = 64;
+    const MIN_CAPACITY: u32 = 32;
 
     fn new(capacity: u32, device: &wgpu::Device) -> Self {
         info!("Creating new GpuProfiler QueryPool with {} elements", capacity);
@@ -87,6 +87,8 @@ pub struct GpuProfiler {
     active_frame: PendingFrame,
     open_scopes: Vec<UnprocessedTimerScope>,
 
+    max_num_queries_per_frame_so_far: u32,
+
     max_num_pending_frames: usize,
     timestamp_to_sec: f64,
 }
@@ -112,6 +114,8 @@ impl GpuProfiler {
                 closed_scopes: Vec::new(),
             },
             open_scopes: Vec::new(),
+
+            max_num_queries_per_frame_so_far: QueryPool::MIN_CAPACITY,
 
             max_num_pending_frames,
             timestamp_to_sec: timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0,
@@ -144,7 +148,7 @@ impl GpuProfiler {
                     .iter()
                     .map(|pool| pool.capacity)
                     .sum::<u32>()
-                    .max(QueryPool::MIN_CAPACITY),
+                    .max(self.max_num_queries_per_frame_so_far),
                 device,
             )
         };
@@ -213,11 +217,13 @@ impl GpuProfiler {
     }
 
     fn cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
-        // TODO: Drop query pools that are clearly too small
-        for pool in query_pools.iter_mut() {
+        // If a pool was less than half of the size of the max frame, then we don't keep it.
+        // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
+        let capacity_threshold = self.max_num_queries_per_frame_so_far / 2;
+        for mut pool in query_pools.drain(..).filter(|pool| pool.capacity >= capacity_threshold) {
             pool.reset();
+            self.unused_pools.push(pool);
         }
-        self.unused_pools.append(&mut query_pools);
     }
 
     /// Marks the end of a frame.
@@ -234,6 +240,10 @@ impl GpuProfiler {
         {
             return Err(());
         }
+
+        self.max_num_queries_per_frame_so_far = self
+            .max_num_queries_per_frame_so_far
+            .max(self.active_frame.query_pools.iter().map(|pool| pool.num_used_queries).sum());
 
         // Make sure we don't overflow
         if self.pending_frames.len() == self.max_num_pending_frames {
