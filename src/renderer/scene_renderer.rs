@@ -187,66 +187,75 @@ impl SceneRenderer {
         depthbuffer: &wgpu::TextureView,
         global_bind_group: &wgpu::BindGroup,
     ) {
-        wgpu_scope!("SceneRenderer.draw", profiler, encoder, device, {
-            // Opaque
-            wgpu_scope!("opaque", profiler, encoder, device, {
-                let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("opaque"),
-                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: backbuffer.texture_view(),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: true,
-                        },
-                    }],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                        attachment: depthbuffer,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: true,
-                        }),
-                        stencil_ops: None,
+        // Opaque
+        wgpu_scope!("opaque", profiler, encoder, device, {
+            let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("opaque"),
+                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                    attachment: backbuffer.texture_view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                    attachment: depthbuffer,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
                     }),
-                });
-                rpass_backbuffer.set_bind_group(0, global_bind_group, &[]);
+                    stencil_ops: None,
+                }),
+            });
+            rpass_backbuffer.set_bind_group(0, global_bind_group, &[]);
 
-                match self.fluid_rendering_mode {
-                    FluidRenderingMode::None => {}
-                    FluidRenderingMode::ScreenSpaceFluid => {
-                        // Handled earlier!
-                    }
-                    FluidRenderingMode::Particles => {
-                        self.particle_renderer.draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid());
-                    }
+            match self.fluid_rendering_mode {
+                FluidRenderingMode::None => {}
+                FluidRenderingMode::ScreenSpaceFluid => {
+                    // Handled earlier!
                 }
+                FluidRenderingMode::Particles => {
+                    wgpu_scope!("particles", profiler, &mut rpass_backbuffer, device, {
+                        self.particle_renderer.draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid());
+                    });
+                }
+            }
 
-                if self.enable_mesh_rendering {
+            if self.enable_mesh_rendering {
+                wgpu_scope!("meshes", profiler, &mut rpass_backbuffer, device, {
                     self.mesh_renderer.draw(
                         &mut rpass_backbuffer,
                         pipeline_manager,
                         self.background_and_lighting.bind_group(),
                         &scene.models,
                     );
-                }
+                });
+            }
+
+            wgpu_scope!("volume visualization", profiler, &mut rpass_backbuffer, device, {
                 self.volume_renderer
                     .draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid(), self.volume_visualization);
-
-                if self.enable_box_lines {
-                    self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
-                }
-
-                // Background.. not really opaque but we re-use the same rpass.
-                // Note that we could do all the background rendering in the ScreenSpaceFluid pass. However, we want to be able to disable it without disabling the background.
-                // Also, background rendering could be last, but for that ScreenSpaceFluid pass would need to write out depth [...]
-                self.background_and_lighting.draw(&mut rpass_backbuffer, pipeline_manager);
             });
 
-            // Transparent
-            wgpu_scope!("transparent", profiler, encoder, device, {
-                if let FluidRenderingMode::ScreenSpaceFluid = self.fluid_rendering_mode {
+            if self.enable_box_lines {
+                self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
+            }
+
+            // Background.. not really opaque but we re-use the same rpass.
+            // Note that we could do all the background rendering in the ScreenSpaceFluid pass. However, we want to be able to disable it without disabling the background.
+            // Also, background rendering could be last, but for that ScreenSpaceFluid pass would need to write out depth [...]
+            self.background_and_lighting.draw(&mut rpass_backbuffer, pipeline_manager);
+        });
+
+        // Transparent
+        wgpu_scope!("transparent", profiler, encoder, device, {
+            if let FluidRenderingMode::ScreenSpaceFluid = self.fluid_rendering_mode {
+                wgpu_scope!("ScreenSpaceFluid", profiler, encoder, device, {
                     self.screenspace_fluid.draw(
                         encoder,
+                        device,
+                        profiler,
                         pipeline_manager,
                         depthbuffer,
                         global_bind_group,
@@ -254,8 +263,8 @@ impl SceneRenderer {
                         &scene.fluid(),
                         backbuffer,
                     );
-                }
-            });
+                });
+            }
         });
     }
 }

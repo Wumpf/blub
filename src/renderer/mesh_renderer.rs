@@ -80,8 +80,6 @@ impl MeshRenderer {
         background_and_lighting_bind_group: &'a wgpu::BindGroup,
         scene_models: &'a SceneModels,
     ) {
-        wgpu_scope!(rpass, "MeshRenderer");
-
         rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
         rpass.set_bind_group(1, background_and_lighting_bind_group, &[]);
 

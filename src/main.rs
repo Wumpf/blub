@@ -376,33 +376,39 @@ impl Application {
             self.screen.fill_global_uniform_buffer(),
         );
 
-        self.scene_renderer.draw(
-            &self.scene,
-            &mut self.rendering_profiler,
-            &self.device,
-            &mut encoder,
-            &self.pipeline_manager,
-            &self.hdr_backbuffer,
-            self.screen.depthbuffer(),
-            self.global_bindings.bind_group(),
-        );
+        wgpu_scope!("scene", self.rendering_profiler, &mut encoder, &self.device, {
+            self.scene_renderer.draw(
+                &self.scene,
+                &mut self.rendering_profiler,
+                &self.device,
+                &mut encoder,
+                &self.pipeline_manager,
+                &self.hdr_backbuffer,
+                self.screen.depthbuffer(),
+                self.global_bindings.bind_group(),
+            );
+        });
 
-        self.hdr_backbuffer
-            .tonemap(&self.screen.backbuffer(), &mut encoder, &self.pipeline_manager);
+        wgpu_scope!("tonemap", self.rendering_profiler, &mut encoder, &self.device, {
+            self.hdr_backbuffer
+                .tonemap(&self.screen.backbuffer(), &mut encoder, &self.pipeline_manager);
+        });
 
         self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
 
-        self.gui.draw(
-            &mut self.device,
-            &self.window,
-            &mut encoder,
-            &mut self.command_queue,
-            &self.screen.backbuffer(),
-            &mut self.simulation_controller,
-            &mut self.scene_renderer,
-            &mut self.scene,
-            event_loop_proxy,
-        );
+        wgpu_scope!("gui", self.rendering_profiler, &mut encoder, &self.device, {
+            self.gui.draw(
+                &mut self.device,
+                &self.window,
+                &mut encoder,
+                &mut self.command_queue,
+                &self.screen.backbuffer(),
+                &mut self.simulation_controller,
+                &mut self.scene_renderer,
+                &mut self.scene,
+                event_loop_proxy,
+            );
+        });
 
         self.screen.copy_to_swapchain(&frame, &mut encoder, &self.pipeline_manager);
         self.rendering_profiler.resolve_queries(&mut encoder);

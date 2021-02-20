@@ -36,7 +36,6 @@ impl ParticleRenderer {
     }
 
     pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager, fluid: &'a HybridFluid) {
-        wgpu_scope!(rpass, "ParticleRenderer.draw");
         rpass.set_pipeline(pipeline_manager.get_render(&self.render_pipeline));
         rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
         rpass.draw(0..4, 0..fluid.num_particles());
