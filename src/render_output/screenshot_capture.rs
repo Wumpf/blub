@@ -32,15 +32,18 @@ impl PendingScreenshot {
             std::thread::spawn(move || {
                 let start_time = std::time::Instant::now();
 
-                let screenshot_buffer_slice = buffer.slice(..);
-                let padded_buffer = screenshot_buffer_slice.get_mapped_range().to_vec();
-                let padded_row_size = ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(resolution) as usize;
-                let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, std::vec::Vec<_>>::new(resolution.width, resolution.height);
-                for (image_row, buffer_chunk) in imgbuf.rows_mut().zip(padded_buffer.chunks(padded_row_size)) {
-                    for (image_pixel, buffer_pixel) in image_row.zip(buffer_chunk.chunks(4)) {
-                        *image_pixel = image::Rgb([buffer_pixel[0], buffer_pixel[1], buffer_pixel[2]]);
+                let imgbuf = {
+                    let screenshot_buffer_slice = buffer.slice(..);
+                    let padded_buffer = screenshot_buffer_slice.get_mapped_range();
+                    let padded_row_size = ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(resolution) as usize;
+                    let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, std::vec::Vec<_>>::new(resolution.width, resolution.height);
+                    for (image_row, buffer_chunk) in imgbuf.rows_mut().zip(padded_buffer.chunks(padded_row_size)) {
+                        for (image_pixel, buffer_pixel) in image_row.zip(buffer_chunk.chunks(4)) {
+                            *image_pixel = image::Rgb([buffer_pixel[0], buffer_pixel[1], buffer_pixel[2]]);
+                        }
                     }
-                }
+                    imgbuf
+                };
 
                 buffer.unmap();
                 completion_sender_clone.send(buffer).unwrap();
