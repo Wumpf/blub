@@ -40,7 +40,8 @@ pub struct GUIState {
     known_scene_files: Vec<PathBuf>,
     wait_for_vblank: bool,
 
-    rendering_profiling_data: Vec<GpuTimerScopeResult>,
+    profiling_data_rendering: Vec<GpuTimerScopeResult>,
+    profiling_data_simulation: Vec<GpuTimerScopeResult>,
 }
 
 pub struct GUI {
@@ -80,7 +81,8 @@ impl GUI {
                 known_scene_files: list_scene_files(),
                 wait_for_vblank: Screen::DEFAULT_PRESENT_MODE == wgpu::PresentMode::Fifo,
 
-                rendering_profiling_data: Vec::new(),
+                profiling_data_rendering: Vec::new(),
+                profiling_data_simulation: Vec::new(),
             },
         }
     }
@@ -376,7 +378,7 @@ impl GUI {
         ui.checkbox(&mut scene_renderer.enable_box_lines, "Show Fluid Domain Bounds");
     }
 
-    fn setup_ui_profiler(ui: &mut egui::Ui, profiling_data: &Vec<GpuTimerScopeResult>) {
+    fn setup_ui_profiler(ui: &mut egui::Ui, profiling_data: &Vec<GpuTimerScopeResult>, levels_default_open: i32) {
         for scope in profiling_data.iter() {
             let time = format!("{:.3}ms", (scope.time.end - scope.time.start) * 1000.0);
             if scope.nested_scopes.is_empty() {
@@ -389,8 +391,8 @@ impl GUI {
             } else {
                 egui::CollapsingHeader::new(format!("{}  -  {}", scope.label, time))
                     .id_source(&scope.label)
-                    .default_open(true)
-                    .show(ui, |ui| Self::setup_ui_profiler(ui, &scope.nested_scopes));
+                    .default_open(levels_default_open > 0)
+                    .show(ui, |ui| Self::setup_ui_profiler(ui, &scope.nested_scopes, levels_default_open - 1));
             }
             ui.end_row();
         }
@@ -412,7 +414,9 @@ impl GUI {
 
         // Draw gui
         egui::Window::new("Blub")
-            .resizable(false)
+            .default_size([340.0, 700.0])
+            .resizable(true)
+            .scroll(true)
             .title_bar(false)
             .show(&self.platform.context(), |ui| {
                 Self::setup_ui_timer(ui, &mut self.state, simulation_controller, event_loop_proxy);
@@ -428,8 +432,13 @@ impl GUI {
                 egui::CollapsingHeader::new("Rendering Settings").default_open(true).show(ui, |ui| {
                     Self::setup_ui_rendersettings(ui, scene_renderer);
                 });
-                egui::CollapsingHeader::new("Profiler (Rendering)").default_open(false).show(ui, |ui| {
-                    Self::setup_ui_profiler(ui, &self.state.rendering_profiling_data);
+                egui::CollapsingHeader::new("Profiler - Single Simulation Frame")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        Self::setup_ui_profiler(ui, &self.state.profiling_data_simulation, 2);
+                    });
+                egui::CollapsingHeader::new("Profiler - Rendering").default_open(false).show(ui, |ui| {
+                    Self::setup_ui_profiler(ui, &self.state.profiling_data_rendering, 4);
                 });
             });
 
@@ -451,7 +460,10 @@ impl GUI {
         self.render_pass.execute(encoder, view, &paint_jobs, &screen_descriptor, None);
     }
 
-    pub fn report_rendering_profiling_data(&mut self, rendering_profiling_data: Vec<GpuTimerScopeResult>) {
-        self.state.rendering_profiling_data = rendering_profiling_data;
+    pub fn report_profiling_data_rendering(&mut self, profiling_data_rendering: Vec<GpuTimerScopeResult>) {
+        self.state.profiling_data_rendering = profiling_data_rendering;
+    }
+    pub fn report_profiling_data_simulation(&mut self, profiling_data_simulation: Vec<GpuTimerScopeResult>) {
+        self.state.profiling_data_simulation = profiling_data_simulation;
     }
 }

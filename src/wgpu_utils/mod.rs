@@ -20,17 +20,6 @@ pub fn compute_group_size_1d(resource_size: u32, group_local_size: u32) -> u32 {
 }
 
 macro_rules! wgpu_scope {
-    ($encoder_or_pass:ident, $label:expr) => {
-        $encoder_or_pass.push_debug_group($label);
-        #[allow(unused_mut)]
-        let mut $encoder_or_pass = scopeguard::guard($encoder_or_pass, |mut encoder_or_pass| encoder_or_pass.pop_debug_group());
-    };
-    ($encoder_or_pass:ident, $label:expr, $code:expr) => {{
-        $encoder_or_pass.push_debug_group($label);
-        let ret = $code();
-        $encoder_or_pass.pop_debug_group();
-        ret
-    }};
     ($label:expr, $profiler:expr, $encoder_or_pass:expr, $device:expr, $code:expr) => {{
         $profiler.begin_scope($label, $encoder_or_pass, $device);
         let ret = $code;

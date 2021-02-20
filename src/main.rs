@@ -56,7 +56,8 @@ struct Application {
     device: wgpu::Device,
     command_queue: wgpu::Queue,
 
-    rendering_profiler: GpuProfiler,
+    profiler_rendering: GpuProfiler,
+    profiler_simulation: GpuProfiler,
 
     shader_dir: shader::ShaderDirectory,
     pipeline_manager: pipelines::PipelineManager,
@@ -133,7 +134,9 @@ impl Application {
             &hdr_backbuffer,
         );
         let gui = gui::GUI::new(&device, &window);
-        let rendering_profiler = GpuProfiler::new(4, command_queue.get_timestamp_period());
+
+        let profiler_rendering = GpuProfiler::new(4, command_queue.get_timestamp_period());
+        let profiler_simulation = GpuProfiler::new(16, command_queue.get_timestamp_period());
 
         // Load initial scene. Gui already needs to list all scenes, so we go there to grab the default selected.
         let scene = scene::Scene::new(
@@ -157,7 +160,9 @@ impl Application {
 
             device,
             command_queue,
-            rendering_profiler,
+
+            profiler_rendering,
+            profiler_simulation,
 
             shader_dir,
             pipeline_manager,
@@ -341,6 +346,7 @@ impl Application {
             &self.device,
             &self.command_queue,
             &self.pipeline_manager,
+            &mut self.profiler_simulation,
             self.global_bindings.bind_group(),
         );
 
@@ -348,8 +354,15 @@ impl Application {
             self.screenshot_recorder.stop_recording();
         }
 
-        if let Some(rendering_profiling_data) = self.rendering_profiler.process_finished_frame() {
-            self.gui.report_rendering_profiling_data(rendering_profiling_data);
+        if let Some(profiling_data_rendering) = self.profiler_rendering.process_finished_frame() {
+            self.gui.report_profiling_data_rendering(profiling_data_rendering);
+        }
+        loop {
+            if let Some(simulation_profiling_data) = self.profiler_simulation.process_finished_frame() {
+                self.gui.report_profiling_data_simulation(simulation_profiling_data);
+            } else {
+                break;
+            }
         }
     }
 
@@ -376,10 +389,10 @@ impl Application {
             self.screen.fill_global_uniform_buffer(),
         );
 
-        wgpu_scope!("scene", self.rendering_profiler, &mut encoder, &self.device, {
+        wgpu_scope!("scene", self.profiler_rendering, &mut encoder, &self.device, {
             self.scene_renderer.draw(
                 &self.scene,
-                &mut self.rendering_profiler,
+                &mut self.profiler_rendering,
                 &self.device,
                 &mut encoder,
                 &self.pipeline_manager,
@@ -389,14 +402,14 @@ impl Application {
             );
         });
 
-        wgpu_scope!("tonemap", self.rendering_profiler, &mut encoder, &self.device, {
+        wgpu_scope!("tonemap", self.profiler_rendering, &mut encoder, &self.device, {
             self.hdr_backbuffer
                 .tonemap(&self.screen.backbuffer(), &mut encoder, &self.pipeline_manager);
         });
 
         self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
 
-        wgpu_scope!("gui", self.rendering_profiler, &mut encoder, &self.device, {
+        wgpu_scope!("gui", self.profiler_rendering, &mut encoder, &self.device, {
             self.gui.draw(
                 &mut self.device,
                 &self.window,
@@ -410,13 +423,15 @@ impl Application {
             );
         });
 
-        self.screen.copy_to_swapchain(&frame, &mut encoder, &self.pipeline_manager);
-        self.rendering_profiler.resolve_queries(&mut encoder);
+        wgpu_scope!("copy to swapchain", self.profiler_rendering, &mut encoder, &self.device, {
+            self.screen.copy_to_swapchain(&frame, &mut encoder, &self.pipeline_manager);
+        });
+        self.profiler_rendering.resolve_queries(&mut encoder);
         self.command_queue.submit(Some(encoder.finish()));
         self.screen.end_frame(frame);
         self.simulation_controller.on_frame_submitted();
 
-        self.rendering_profiler.end_frame().unwrap();
+        self.profiler_rendering.end_frame().unwrap();
     }
 }
 

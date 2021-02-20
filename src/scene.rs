@@ -1,7 +1,7 @@
 use crate::{
     scene_models::*,
     simulation::HybridFluid,
-    wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
+    wgpu_utils::{gpu_profiler::GpuProfiler, pipelines::PipelineManager, shader::ShaderDirectory},
 };
 
 use serde::Deserialize;
@@ -122,13 +122,11 @@ impl Scene {
         &mut self,
         simulation_delta: Duration,
         device: &wgpu::Device,
+        profiler: &mut GpuProfiler,
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
         global_bind_group: &wgpu::BindGroup,
     ) {
-        // Poll device to update mapped buffers which may feed back into what a step does.
-        device.poll(wgpu::Maintain::Poll);
-
         if self.distance_field_dirty {
             self.hybrid_fluid.update_signed_distance_field_for_static(
                 device,
@@ -144,9 +142,20 @@ impl Scene {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Scene Step"),
         });
-        self.hybrid_fluid
-            .step(simulation_delta, &mut encoder, pipeline_manager, queue, global_bind_group);
+        wgpu_scope!("HybridFluid step", profiler, &mut encoder, device, {
+            self.hybrid_fluid.step(
+                simulation_delta,
+                &mut encoder,
+                device,
+                queue,
+                global_bind_group,
+                pipeline_manager,
+                profiler,
+            );
+        });
+        profiler.resolve_queries(&mut encoder);
         queue.submit(Some(encoder.finish()));
+        profiler.end_frame().unwrap();
         self.hybrid_fluid.update_statistics();
     }
 

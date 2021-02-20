@@ -239,13 +239,17 @@ impl SceneRenderer {
             });
 
             if self.enable_box_lines {
-                self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
+                wgpu_scope!("box lines", profiler, &mut rpass_backbuffer, device, {
+                    self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
+                });
             }
 
             // Background.. not really opaque but we re-use the same rpass.
             // Note that we could do all the background rendering in the ScreenSpaceFluid pass. However, we want to be able to disable it without disabling the background.
             // Also, background rendering could be last, but for that ScreenSpaceFluid pass would need to write out depth [...]
-            self.background_and_lighting.draw(&mut rpass_backbuffer, pipeline_manager);
+            wgpu_scope!("skybox", profiler, &mut rpass_backbuffer, device, {
+                self.background_and_lighting.draw(&mut rpass_backbuffer, pipeline_manager);
+            });
         });
 
         // Transparent

@@ -253,7 +253,6 @@ impl Background {
     }
 
     pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager) {
-        wgpu_scope!(rpass, "CubemapRenderer.draw");
         rpass.set_bind_group(1, &self.bind_group, &[]);
         rpass.set_pipeline(pipeline_manager.get_render(&self.pipeline));
         rpass.draw(0..3, 0..1);

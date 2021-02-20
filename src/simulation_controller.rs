@@ -1,4 +1,4 @@
-use crate::scene::Scene;
+use crate::{scene::Scene, wgpu_utils::gpu_profiler::GpuProfiler};
 use crate::{
     timer::{SimulationStepResult, Timer},
     wgpu_utils::pipelines::PipelineManager,
@@ -118,6 +118,10 @@ impl SimulationController {
         self.simulation_stop_time = self.timer.total_simulated_time() + simulation_jump_length.max(self.timer.simulation_delta());
         let num_expected_steps = simulation_jump_length.max(self.timer.simulation_delta()).as_nanos() / self.timer.simulation_delta().as_nanos();
 
+        let mut dummy_profiler = GpuProfiler::new(1, 0.0);
+        dummy_profiler.enable_timer = false;
+        dummy_profiler.enable_debug_marker = false;
+
         self.start_simulation_frame();
         {
             let start_time = Instant::now();
@@ -126,7 +130,7 @@ impl SimulationController {
                 let mut batch_size = MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE;
                 {
                     for i in 0..MAX_FAST_FORWARD_SIMULATION_BATCH_SIZE {
-                        if !self.single_step(scene, device, queue, pipeline_manager, global_bind_group) {
+                        if !self.single_step(scene, device, queue, pipeline_manager, &mut dummy_profiler, global_bind_group) {
                             batch_size = i;
                             break;
                         }
@@ -157,13 +161,14 @@ impl SimulationController {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         pipeline_manager: &PipelineManager,
+        profiler: &mut GpuProfiler,
         global_bind_group: &wgpu::BindGroup,
     ) {
         if !self.start_simulation_frame() {
             return;
         }
 
-        while self.single_step(scene, device, queue, pipeline_manager, global_bind_group) {}
+        while self.single_step(scene, device, queue, pipeline_manager, profiler, global_bind_group) {}
     }
 
     fn start_simulation_frame(&mut self) -> bool {
@@ -189,6 +194,7 @@ impl SimulationController {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         pipeline_manager: &'a PipelineManager,
+        profiler: &mut GpuProfiler,
         global_bind_group: &wgpu::BindGroup,
     ) -> bool {
         // frame drops are only relevant in realtime mode.
@@ -204,7 +210,14 @@ impl SimulationController {
         }
 
         if self.timer.simulation_frame_loop(max_total_step_per_frame) == SimulationStepResult::PerformStepAndCallAgain {
-            scene.step(self.timer.simulation_delta(), device, pipeline_manager, queue, global_bind_group);
+            scene.step(
+                self.timer.simulation_delta(),
+                device,
+                profiler,
+                pipeline_manager,
+                queue,
+                global_bind_group,
+            );
             return true;
         }
         return false;

@@ -172,8 +172,6 @@ impl Screen {
     }
 
     pub fn copy_to_swapchain(&mut self, output: &wgpu::SwapChainTexture, encoder: &mut wgpu::CommandEncoder, pipeline_manager: &PipelineManager) {
-        wgpu_scope!(encoder, "Screen.copy_to_swapchain");
-
         // why this extra copy?
         // Webgpu doesn't allow us to do anything with the swapchain target but read from it!
         // That means that we can never take a screenshot.
