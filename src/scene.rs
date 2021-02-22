@@ -1,8 +1,9 @@
 use crate::{
     scene_models::*,
     simulation::HybridFluid,
-    wgpu_utils::{gpu_profiler::GpuProfiler, pipelines::PipelineManager, shader::ShaderDirectory},
+    wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
+use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 
 use serde::Deserialize;
 use std::{error, fs::File, io::BufReader, path::Path, path::PathBuf, time::Duration};
@@ -142,7 +143,7 @@ impl Scene {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Scene Step"),
         });
-        wgpu_scope!("HybridFluid step", profiler, &mut encoder, device, {
+        wgpu_profiler!("HybridFluid step", profiler, &mut encoder, device, {
             self.hybrid_fluid.step(
                 simulation_delta,
                 &mut encoder,

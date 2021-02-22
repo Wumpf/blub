@@ -1,16 +1,14 @@
 use crate::renderer::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
+use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use crate::{
     render_output::screen::Screen,
     scene::Scene,
     simulation::{HybridFluid, SolverConfig, SolverStatisticSample},
     ApplicationEvent,
 };
-use crate::{
-    simulation_controller::{SimulationController, SimulationControllerStatus},
-    wgpu_utils::gpu_profiler::GpuTimerScopeResult,
-};
 use std::{collections::VecDeque, path::PathBuf, time::Duration};
 use strum::IntoEnumIterator;
+use wgpu_profiler::GpuTimerScopeResult;
 use winit::event_loop::EventLoopProxy;
 
 mod custom_widgets;

@@ -1,9 +1,10 @@
-use crate::{scene::Scene, wgpu_utils::gpu_profiler::GpuProfiler};
+use crate::scene::Scene;
 use crate::{
     timer::{SimulationStepResult, Timer},
     wgpu_utils::pipelines::PipelineManager,
 };
 use std::time::{Duration, Instant};
+use wgpu_profiler::GpuProfiler;
 
 // The simulation controller orchestrates simulation steps.
 // It holds the central timer and as such is responsible for glueing rendering frames and simulation together.

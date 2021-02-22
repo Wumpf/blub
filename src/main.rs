@@ -19,6 +19,7 @@ mod simulation;
 mod simulation_controller;
 mod timer;
 mod utils;
+use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 
 use global_bindings::*;
 use global_ubo::*;
@@ -29,7 +30,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use wgpu_utils::{gpu_profiler::GpuProfiler, pipelines, shader};
+use wgpu_utils::{pipelines, shader};
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
@@ -389,7 +390,7 @@ impl Application {
             self.screen.fill_global_uniform_buffer(),
         );
 
-        wgpu_scope!("scene", self.profiler_rendering, &mut encoder, &self.device, {
+        wgpu_profiler!("scene", self.profiler_rendering, &mut encoder, &self.device, {
             self.scene_renderer.draw(
                 &self.scene,
                 &mut self.profiler_rendering,
@@ -402,14 +403,14 @@ impl Application {
             );
         });
 
-        wgpu_scope!("tonemap", self.profiler_rendering, &mut encoder, &self.device, {
+        wgpu_profiler!("tonemap", self.profiler_rendering, &mut encoder, &self.device, {
             self.hdr_backbuffer
                 .tonemap(&self.screen.backbuffer(), &mut encoder, &self.pipeline_manager);
         });
 
         self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
 
-        wgpu_scope!("gui", self.profiler_rendering, &mut encoder, &self.device, {
+        wgpu_profiler!("gui", self.profiler_rendering, &mut encoder, &self.device, {
             self.gui.draw(
                 &mut self.device,
                 &self.window,
@@ -423,7 +424,7 @@ impl Application {
             );
         });
 
-        wgpu_scope!("copy to swapchain", self.profiler_rendering, &mut encoder, &self.device, {
+        wgpu_profiler!("copy to swapchain", self.profiler_rendering, &mut encoder, &self.device, {
             self.screen.copy_to_swapchain(&frame, &mut encoder, &self.pipeline_manager);
         });
         self.profiler_rendering.resolve_queries(&mut encoder);

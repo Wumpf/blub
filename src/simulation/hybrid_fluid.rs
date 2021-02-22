@@ -1,7 +1,8 @@
 use super::{pressure_solver::*, signed_distance_field::SignedDistanceField};
-use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, gpu_profiler::GpuProfiler, pipelines::*, shader::*, uniformbuffer::*};
+use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, shader::*, uniformbuffer::*};
 use rand::prelude::*;
 use std::{collections::VecDeque, path::Path, rc::Rc, time::Duration};
+use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -712,7 +713,7 @@ impl HybridFluid {
         pipeline_manager: &PipelineManager,
         profiler: &mut GpuProfiler,
     ) {
-        wgpu_scope!("update uniforms", profiler, encoder, device, {
+        wgpu_profiler!("update uniforms", profiler, encoder, device, {
             self.pressure_field_from_density.update_uniforms(queue, simulation_delta);
             self.pressure_field_from_velocity.update_uniforms(queue, simulation_delta);
             self.simulation_properties_uniformbuffer.update_content(queue, self.simulation_properties);
@@ -728,44 +729,44 @@ impl HybridFluid {
             cpass.set_bind_group(0, global_bind_group, &[]);
             cpass.set_bind_group(1, &self.bind_group_general, &[]);
 
-            wgpu_scope!("transfer particle velocity to grid", profiler, &mut cpass, device, {
+            wgpu_profiler!("transfer particle velocity to grid", profiler, &mut cpass, device, {
                 for i in 0..3 {
-                    wgpu_scope!(&format!("dimension {}", ["x", "y", "z"][i]), profiler, &mut cpass, device, {
+                    wgpu_profiler!(&format!("dimension {}", ["x", "y", "z"][i]), profiler, &mut cpass, device, {
                         cpass.set_bind_group(2, &self.bind_group_transfer_velocity[i], &[]);
                         let scope_label = &format!("clear linked list grid{}", if i == 0 { " & marker" } else { "" });
-                        wgpu_scope!(scope_label, profiler, &mut cpass, device, {
+                        wgpu_profiler!(scope_label, profiler, &mut cpass, device, {
                             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
                             cpass.set_push_constants(0, bytemuck::bytes_of(&[i as u32]));
                             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                         });
 
-                        wgpu_scope!("create particle linked lists", profiler, &mut cpass, device, {
+                        wgpu_profiler!("create particle linked lists", profiler, &mut cpass, device, {
                             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_build_linkedlist));
                             cpass.dispatch(particle_work_groups, 1, 1);
                         });
 
                         if i == 0 {
-                            wgpu_scope!("set boundary marker", profiler, &mut cpass, device, {
+                            wgpu_profiler!("set boundary marker", profiler, &mut cpass, device, {
                                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
                                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                             });
                         }
 
-                        wgpu_scope!("gather velocity & apply global forces", profiler, &mut cpass, device, {
+                        wgpu_profiler!("gather velocity & apply global forces", profiler, &mut cpass, device, {
                             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather_velocity));
                             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                         });
                     });
                 }
             });
-            wgpu_scope!("compute divergence", profiler, &mut cpass, device, {
+            wgpu_profiler!("compute divergence", profiler, &mut cpass, device, {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_compute));
                 cpass.set_bind_group(1, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             });
         }
 
-        wgpu_scope!("primary pressure solver (divergence)", profiler, encoder, device, {
+        wgpu_profiler!("primary pressure solver (divergence)", profiler, encoder, device, {
             self.pressure_solver.solve(
                 simulation_delta,
                 encoder,
@@ -786,41 +787,41 @@ impl HybridFluid {
             {
                 cpass.set_bind_group(2, &self.bind_group_divergence_projection_write_velocity, &[]);
 
-                wgpu_scope!("make velocity grid divergence free", profiler, &mut cpass, device, {
+                wgpu_profiler!("make velocity grid divergence free", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_remove));
                     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 });
 
-                wgpu_scope!("extrapolate velocity grid", profiler, &mut cpass, device, {
+                wgpu_profiler!("extrapolate velocity grid", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
                     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 });
             }
-            wgpu_scope!("clear marker & linked list grids", profiler, &mut cpass, device, {
+            wgpu_profiler!("clear marker & linked list grids", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             });
-            wgpu_scope!("advect particles & write new linked list grid", profiler, &mut cpass, device, {
+            wgpu_profiler!("advect particles & write new linked list grid", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_advect_particles, &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_advect_particles));
                 cpass.dispatch(particle_work_groups, 1, 1);
             });
 
-            wgpu_scope!("density projection: set boundary marker", profiler, &mut cpass, device, {
+            wgpu_profiler!("density projection: set boundary marker", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             });
-            wgpu_scope!("density projection: compute density error via gather", profiler, &mut cpass, device, {
+            wgpu_profiler!("density projection: compute density error via gather", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_density_projection_gather_error, &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather_error));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             });
         }
 
-        wgpu_scope!("secondary pressure solver (density)", profiler, encoder, device, {
+        wgpu_profiler!("secondary pressure solver (density)", profiler, encoder, device, {
             self.pressure_solver.solve(
                 simulation_delta,
                 encoder,
@@ -840,16 +841,16 @@ impl HybridFluid {
             {
                 cpass.set_bind_group(2, &self.bind_group_density_projection_write_velocity, &[]);
 
-                wgpu_scope!("compute position change", profiler, &mut cpass, device, {
+                wgpu_profiler!("compute position change", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_position_change));
                     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 });
-                wgpu_scope!("extrapolate velocity grid", profiler, &mut cpass, device, {
+                wgpu_profiler!("extrapolate velocity grid", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
                     cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
                 });
             }
-            wgpu_scope!("correct particle density error", profiler, &mut cpass, device, {
+            wgpu_profiler!("correct particle density error", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_density_projection_correct_particles, &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_correct_particles));
                 cpass.dispatch(particle_work_groups, 1, 1);

@@ -1,6 +1,6 @@
+use crate::render_output::hdr_backbuffer::HdrBackbuffer;
 use crate::render_output::screen::Screen;
 use crate::wgpu_utils::pipelines::*;
-use crate::{render_output::hdr_backbuffer::HdrBackbuffer, wgpu_utils::gpu_profiler::GpuProfiler};
 use crate::{
     simulation::HybridFluid,
     wgpu_utils::{
@@ -12,6 +12,7 @@ use crate::{
 };
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 
 struct ScreenDependentProperties {
     texture_view_fluid_view: [wgpu::TextureView; 2],
@@ -370,7 +371,7 @@ impl ScreenSpaceFluid {
             },
         );
 
-        wgpu_scope!("particles", profiler, encoder, device, {
+        wgpu_profiler!("particles", profiler, encoder, device, {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("particles"),
                 color_attachments: &[
@@ -406,7 +407,7 @@ impl ScreenSpaceFluid {
             rpass.draw(0..4, 0..fluid.num_particles());
         });
 
-        wgpu_scope!("clear intermediate blur targets", profiler, encoder, device, {
+        wgpu_profiler!("clear intermediate blur targets", profiler, encoder, device, {
             {
                 encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -441,7 +442,7 @@ impl ScreenSpaceFluid {
             }
         });
 
-        wgpu_scope!("fluid filters & render", profiler, encoder, device, {
+        wgpu_profiler!("fluid filters & render", profiler, encoder, device, {
             let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("fluid filters & render"),
             });
@@ -461,8 +462,8 @@ impl ScreenSpaceFluid {
             let work_group_filter_1d_x = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D_X);
             let work_group_filter_1d_y = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D_Y);
 
-            wgpu_scope!("depth filter", profiler, &mut cpass, device, {
-                wgpu_scope!("filter 1D", profiler, &mut cpass, device, {
+            wgpu_profiler!("depth filter", profiler, &mut cpass, device, {
+                wgpu_profiler!("filter 1D", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_1d));
 
                     // Filter Y
@@ -474,7 +475,7 @@ impl ScreenSpaceFluid {
                     cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
                     cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
                 });
-                wgpu_scope!("filter 2D", profiler, &mut cpass, device, {
+                wgpu_profiler!("filter 2D", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_2d));
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
                     const LOCAL_SIZE_FILTER_2D: wgpu::Extent3d = wgpu::Extent3d {
@@ -486,7 +487,7 @@ impl ScreenSpaceFluid {
                     cpass.dispatch(work_group.width, work_group.height, work_group.depth);
                 });
             });
-            wgpu_scope!("thickness filter", profiler, &mut cpass, device, {
+            wgpu_profiler!("thickness filter", profiler, &mut cpass, device, {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_thickness_filter));
 
                 // Filter Y
@@ -499,7 +500,7 @@ impl ScreenSpaceFluid {
                 cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
             });
 
-            wgpu_scope!("compose & render", profiler, &mut cpass, device, {
+            wgpu_profiler!("compose & render", profiler, &mut cpass, device, {
                 const LOCAL_SIZE_COMPOSE: wgpu::Extent3d = wgpu::Extent3d {
                     width: 32,
                     height: 32,

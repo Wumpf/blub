@@ -25,19 +25,25 @@ more-asserts = "0.2"
 notify = "5.0.0-pre.2"
 rand = {version = "0.7.3", features = ["small_rng"]}
 regex = "1"
-scopeguard = "1.1"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 shaderc = "0.7"
 strum = "0.20"
 strum_macros = "0.20.1"
 tobj = "2.0.3"
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "6864c0be84a7a9994486ac6704d390ffbd271641", features = ["trace"]}
+wgpu = "0.7.0"
+wgpu-profiler = {git = "https://github.com/Wumpf/wgpu-profiler.git", rev = "91bdafea7c18b5a75e7b49347a2a745deddd9a7a"}
 winit = "0.24"
 
 [profile.dev.package."*"]
 opt-level = 3
 
+[patch.crates-io]
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev = "6864c0be84a7a9994486ac6704d390ffbd271641"}
+
 [patch."https://github.com/gfx-rs/wgpu"]
 wgpu-core = {version = "0.7", path = "../wgpu/wgpu-core"}
 wgpu-types = {version = "0.7", path = "../wgpu/wgpu-types"}
+
+#[patch."https://github.com/Wumpf/wgpu-profiler"]
+#wgpu-profiler = {version = "0.1", path = "../wgpu-profiler"}

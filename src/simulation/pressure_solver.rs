@@ -1,9 +1,10 @@
-use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, gpu_profiler::GpuProfiler, pipelines::*, shader::ShaderDirectory};
+use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, shader::ShaderDirectory};
 use futures::Future;
 use futures::*;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::{path::Path, pin::Pin, time::Duration};
+use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 use wgpu_utils::uniformbuffer::UniformBuffer;
 
 fn create_volume_texture_desc(label: &str, grid_dimension: wgpu::Extent3d, format: wgpu::TextureFormat) -> wgpu::TextureDescriptor {
@@ -612,7 +613,7 @@ impl PressureSolver {
 
         // For optimization various steps are collapsed as far as possible to avoid expensive buffer/texture read/writes
         // This makes the algorithm a lot faster but also a bit harder to read.
-        wgpu_scope!("init", profiler, &mut cpass, device, {
+        wgpu_profiler!("init", profiler, &mut cpass, device, {
             let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_VOLUME);
 
             // We use pressure from last frame, but set explicitly set all pressure values to zero wherever there is not fluid right now.
@@ -635,7 +636,7 @@ impl PressureSolver {
 
             // Apply preconditioner on (r), store result to search vector (s) and start dotproduct of <s; r>
             // Note that we don't use the auxillary vector here as in-between storage!
-            wgpu_scope!("preconditioner(r) ➡ s, start s·r", profiler, &mut cpass, device, {
+            wgpu_profiler!("preconditioner(r) ➡ s, start s·r", profiler, &mut cpass, device, {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
@@ -645,36 +646,36 @@ impl PressureSolver {
                 cpass.set_bind_group(2, &self.bind_group_preconditioner[2], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
             });
-            wgpu_scope!("reduce_add: finish s·r ➡ sigma", profiler, &mut cpass, device, {
+            wgpu_profiler!("reduce_add: finish s·r ➡ sigma", profiler, &mut cpass, device, {
                 self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_INIT);
             });
         });
 
-        wgpu_scope!("solver iterations", profiler, &mut cpass, device, {
+        wgpu_profiler!("solver iterations", profiler, &mut cpass, device, {
             const DISPATCH_BUFFER_OFFSET: u64 = 4 * 4;
 
             let mut i = 0;
-            while wgpu_scope!(
+            while wgpu_profiler!(
                 &format!("iteration {}", i),
                 profiler,
                 &mut cpass,
                 device,
                 (|| {
-                    wgpu_scope!("sA ➡ z, start s·z", profiler, &mut cpass, device, {
+                    wgpu_profiler!("sA ➡ z, start s·z", profiler, &mut cpass, device, {
                         // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s), i.e. compute <s; As>
                         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_coeff));
                         cpass.set_bind_group(2, &self.bind_group_apply_coeff, &[]);
                         cpass.set_push_constants(0, &bytemuck::bytes_of(&[0, reduce_pass_initial_group_size]));
                         cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                     });
-                    wgpu_scope!("reduce_add: finish s·z ➡ alpha", profiler, &mut cpass, device, {
+                    wgpu_profiler!("reduce_add: finish s·z ➡ alpha", profiler, &mut cpass, device, {
                         self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_ALPHA);
                     });
 
                     let iteration_with_error_computation =
                         pressure_field.config.max_num_iterations == i || (i > 0 && i % pressure_field.config.error_check_frequency == 0);
 
-                    wgpu_scope!("update pressure field (p) & residual field (r)", profiler, &mut cpass, device, {
+                    wgpu_profiler!("update pressure field (p) & residual field (r)", profiler, &mut cpass, device, {
                         const PRUPDATE_COMPUTE_MAX_ERROR: u32 = 1;
                         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
                         if iteration_with_error_computation {
@@ -690,7 +691,7 @@ impl PressureSolver {
                     if iteration_with_error_computation {
                         // Compute remaining error.
                         // Used for statistics. If below target, makes all upcoming dispatch_indirect no-ops.
-                        wgpu_scope!("reduce: compute max error", profiler, &mut cpass, device, {
+                        wgpu_profiler!("reduce: compute max error", profiler, &mut cpass, device, {
                             self.reduce_max(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_MAX_ERROR + i as u32);
                         });
 
@@ -699,7 +700,7 @@ impl PressureSolver {
                         }
                     }
 
-                    wgpu_scope!("preconditioner(r) ➡ (z), start z·r", profiler, &mut cpass, device, {
+                    wgpu_profiler!("preconditioner(r) ➡ (z), start z·r", profiler, &mut cpass, device, {
                         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
                         cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
                         cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
@@ -709,11 +710,11 @@ impl PressureSolver {
                         cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                     });
 
-                    wgpu_scope!("reduce_add: finish z·r ➡ beta", profiler, &mut cpass, device, {
+                    wgpu_profiler!("reduce_add: finish z·r ➡ beta", profiler, &mut cpass, device, {
                         self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_BETA);
                     });
 
-                    wgpu_scope!("Update search vector (s)", profiler, &mut cpass, device, {
+                    wgpu_profiler!("Update search vector (s)", profiler, &mut cpass, device, {
                         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_search));
                         cpass.set_bind_group(2, &self.bind_group_update_search, &[]);
                         cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
