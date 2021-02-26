@@ -104,19 +104,25 @@ impl ScreenSpaceFluid {
                     shader_relative_path: PathBuf::from("screenspace_fluid/particles.frag"),
                     targets: vec![
                         wgpu::ColorTargetState {
-                            color_blend: wgpu::BlendState {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::One,
-                                operation: wgpu::BlendOperation::Min,
-                            },
+                            blend: Some(wgpu::BlendState {
+                                color: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::One,
+                                    dst_factor: wgpu::BlendFactor::One,
+                                    operation: wgpu::BlendOperation::Min,
+                                },
+                                alpha: wgpu::BlendComponent::REPLACE,
+                            }),
                             ..Self::FORMAT_FLUID_DEPTH.into()
                         },
                         wgpu::ColorTargetState {
-                            color_blend: wgpu::BlendState {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::One,
-                                operation: wgpu::BlendOperation::Add,
-                            },
+                            blend: Some(wgpu::BlendState {
+                                color: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::One,
+                                    dst_factor: wgpu::BlendFactor::One,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                                alpha: wgpu::BlendComponent::REPLACE,
+                            }),
                             ..Self::FORMAT_FLUID_THICKNESS.into()
                         },
                     ],

@@ -103,7 +103,7 @@ impl ShaderDirectory {
                 module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                     label: Some(path.file_name().unwrap().to_str().unwrap()),
                     source: wgpu::ShaderSource::SpirV(Borrowed(bytemuck::cast_slice(&cached_shader))),
-                    flags: wgpu::ShaderFlags::VALIDATION,
+                    flags: wgpu::ShaderFlags::empty(),
                 }),
                 source_files: source_files.into_inner(),
             });
@@ -176,7 +176,7 @@ impl ShaderDirectory {
             module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some(path.file_name().unwrap().to_str().unwrap()),
                 source: wgpu::ShaderSource::SpirV(Borrowed(&compilation_artifact.as_binary())),
-                flags: wgpu::ShaderFlags::VALIDATION,
+                flags: wgpu::ShaderFlags::empty(),
             }),
             source_files: source_files.into_inner(),
         })

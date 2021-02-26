@@ -11,7 +11,7 @@ bytemuck = "1.4.1"
 cgmath = {git = "https://github.com/rustgd/cgmath", rev = "50a345b", features = ["rand", "serde"]}
 
 egui = "0.9"
-egui_wgpu_backend = {git = "https://github.com/Wumpf/egui_wgpu_backend", rev = "bce075329635ecac2e6e0eed7ed16fbd4e494e51"}
+egui_wgpu_backend = {git = "https://github.com/Wumpf/egui_wgpu_backend", rev = "f7784132e3f77d7d3206e359f4e298870b984f3f"}
 egui_winit_platform = {git = "https://github.com/Wumpf/egui_winit_platform", rev = "fcf3711fe77c409ba24b2eed086560cd492a9520"}
 epi = "0.9"
 
@@ -39,11 +39,11 @@ winit = "0.24"
 opt-level = 3
 
 [patch.crates-io]
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev = "6864c0be84a7a9994486ac6704d390ffbd271641"}
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev = "1509128f6dd027b392e76da15b430099fce26750"}
 
-[patch."https://github.com/gfx-rs/wgpu"]
-wgpu-core = {version = "0.7", path = "../wgpu/wgpu-core"}
-wgpu-types = {version = "0.7", path = "../wgpu/wgpu-types"}
+# [patch."https://github.com/gfx-rs/wgpu"]
+# wgpu-core = {version = "0.7", path = "../wgpu/wgpu-core"}
+# wgpu-types = {version = "0.7", path = "../wgpu/wgpu-types"}
 
-#[patch."https://github.com/Wumpf/wgpu-profiler"]
-#wgpu-profiler = {version = "0.1", path = "../wgpu-profiler"}
+# [patch."https://github.com/Wumpf/wgpu-profiler"]
+# wgpu-profiler = {version = "0.1", path = "../wgpu-profiler"}
