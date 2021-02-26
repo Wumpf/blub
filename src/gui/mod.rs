@@ -6,7 +6,11 @@ use crate::{
     simulation::{HybridFluid, SolverConfig, SolverStatisticSample},
     ApplicationEvent,
 };
-use std::{collections::VecDeque, path::PathBuf, time::Duration};
+use std::{
+    collections::VecDeque,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use strum::IntoEnumIterator;
 use wgpu_profiler::GpuTimerScopeResult;
 use winit::event_loop::EventLoopProxy;
@@ -433,9 +437,21 @@ impl GUI {
                 egui::CollapsingHeader::new("Profiler - Single Simulation Frame")
                     .default_open(false)
                     .show(ui, |ui| {
+                        if ui.button("Write Chrometrace").clicked() {
+                            let filename = Path::new("simulation-trace.json");
+                            info!("Writing chrome trace file to {:?}", filename);
+                            wgpu_profiler::chrometrace::write_chrometrace(filename, &self.state.profiling_data_simulation)
+                                .expect("Failed to write chrometrace");
+                        }
                         Self::setup_ui_profiler(ui, &self.state.profiling_data_simulation, 2);
                     });
                 egui::CollapsingHeader::new("Profiler - Rendering").default_open(false).show(ui, |ui| {
+                    if ui.button("Write Chrometrace").clicked() {
+                        let filename = Path::new("rendering-trace.json");
+                        info!("Writing chrome trace file to {:?}", filename);
+                        wgpu_profiler::chrometrace::write_chrometrace(filename, &self.state.profiling_data_rendering)
+                            .expect("Failed to write chrometrace");
+                    }
                     Self::setup_ui_profiler(ui, &self.state.profiling_data_rendering, 4);
                 });
             });

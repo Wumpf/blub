@@ -32,7 +32,7 @@ strum = "0.20"
 strum_macros = "0.20.1"
 tobj = "2.0.3"
 wgpu = "0.7.0"
-wgpu-profiler = {git = "https://github.com/Wumpf/wgpu-profiler.git", rev = "91bdafea7c18b5a75e7b49347a2a745deddd9a7a"}
+wgpu-profiler = "0.2.0"
 winit = "0.24"
 
 [profile.dev.package."*"]
