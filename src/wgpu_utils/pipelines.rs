@@ -104,7 +104,7 @@ impl RenderPipelineCreationDesc {
 
     fn try_create_pipeline(&self, device: &wgpu::Device, shader_dir: &ShaderDirectory) -> Result<PipelineAndSourceFiles<wgpu::RenderPipeline>, ()> {
         let shader_vs = shader_dir.load_shader_module(device, &self.vertex.shader_relative_path)?;
-        let shader_fs = shader_dir.load_shader_module(device, &self.fragment.shader_relative_path)?;
+        let mut shader_fs = shader_dir.load_shader_module(device, &self.fragment.shader_relative_path)?;
 
         let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
             label: Some(self.label),
@@ -124,9 +124,12 @@ impl RenderPipelineCreationDesc {
             }),
         };
 
+        let mut shader_sources = shader_vs.source_files;
+        shader_sources.append(&mut shader_fs.source_files);
+
         Ok(PipelineAndSourceFiles {
             pipeline: device.create_render_pipeline(&render_pipeline_descriptor),
-            shader_sources: shader_vs.source_files,
+            shader_sources,
         })
     }
 }
