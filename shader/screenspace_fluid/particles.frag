@@ -9,9 +9,6 @@ layout(location = 2) in float in_Radius;
 layout(location = 0) out float out_ViewSpaceDepth;
 layout(location = 1) out float out_Thickness;
 
-// Note that we promise to only lessen the depth value, so gpu can still do some hi-z/early depth culling
-layout(depth_less) out float gl_FragDepth;
-
 void main() {
     vec3 rayDir = normalize(in_WorldPosition - Camera.Position);
     float cameraDistance;
@@ -21,12 +18,6 @@ void main() {
         discard;
 
     vec3 cameraPosToSpherePos = cameraDistance * rayDir;
-    vec3 sphereWorldPos = Camera.Position + cameraPosToSpherePos;
-    vec3 normal = (sphereWorldPos - in_ParticleWorldPosition) / in_Radius;
-
-    // Adjust depth buffer value.
-    vec2 projected_zw = (Camera.ViewProjection * vec4(sphereWorldPos, 1.0)).zw; // (trusting optimizer to pick the right thing ;-))
-    gl_FragDepth = projected_zw.x / projected_zw.y;
 
     out_ViewSpaceDepth = dot(Camera.Direction, cameraPosToSpherePos);
     // quadratic splats. Compensate a bit for particle overlap
