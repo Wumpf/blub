@@ -37,6 +37,15 @@ void main() {
         return;
     }
 
+    // A relatively easy way to mesh boundaries would be to take into account volume fractions here and in the pressure solve (i.e. the coefficient
+    // matrix) The idea is described in Bridson's book. Basically instead of treating the marker grid entirely binary, a fluid volume fraction is
+    // introduced. Note though that is is all about lack of solid - a fully filled air cell has the volume fraction 1.
+    //
+    // My hunch is that this wouldn't add visually much to blub since with the direct rendering method particle size is the bigger issue - reducing it
+    // also increases grid resolution, lessening again the need for volume fractions. (might be more important when rendering a surface level set).
+    // Regardless, it would improve accuracy quite a bit though especially for thin passages between solid, where today no fluid can go through. I
+    // could imagine this having more drastic effect for smoke effects, where the rendering might be less forgiving with air/solid gaps.
+
     // Since we know the cell at gridCoord is a fluid cell, we know that the velocities at the positive and negative boundary are well defined.
     vec3 velocityPositiveBoundary;
     velocityPositiveBoundary.x = texelFetch(VelocityVolumeX, gridCoord, 0).x;
