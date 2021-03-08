@@ -335,7 +335,35 @@ impl GUI {
         }
     }
 
-    fn setup_ui_rendersettings(ui: &mut egui::Ui, scene_renderer: &mut SceneRenderer) {
+    fn setup_ui_scene_settings(ui: &mut egui::Ui, state: &mut GUIState, event_loop_proxy: &EventLoopProxy<ApplicationEvent>) {
+        ui.spacing_mut().slider_width = 250.0;
+        egui::combo_box(
+            ui,
+            ui.make_persistent_id("Scene Selection"),
+            format!(
+                "{:?}",
+                state.known_scene_files[state.selected_scene_idx].strip_prefix(SCENE_DIRECTORY).unwrap()
+            ),
+            |ui| {
+                for (i, scene_file) in state.known_scene_files.iter().enumerate() {
+                    if ui
+                        .selectable_value(
+                            &mut state.selected_scene_idx,
+                            i,
+                            format!("{:?}", scene_file.strip_prefix(SCENE_DIRECTORY).unwrap()),
+                        )
+                        .clicked()
+                    {
+                        event_loop_proxy
+                            .send_event(ApplicationEvent::LoadScene(state.known_scene_files[state.selected_scene_idx].clone()))
+                            .unwrap();
+                    }
+                }
+            },
+        );
+    }
+
+    fn setup_ui_render_settings(ui: &mut egui::Ui, scene_renderer: &mut SceneRenderer) {
         egui::Grid::new("render settings").show(ui, |ui| {
             ui.spacing_mut().slider_width = 170.0;
 
@@ -431,8 +459,11 @@ impl GUI {
                     .show(ui, |ui| {
                         Self::setup_ui_simulation_control(ui, &mut self.state, simulation_controller, event_loop_proxy);
                     });
+                egui::CollapsingHeader::new("Scene Settings").default_open(true).show(ui, |ui| {
+                    Self::setup_ui_scene_settings(ui, &mut self.state, event_loop_proxy);
+                });
                 egui::CollapsingHeader::new("Rendering Settings").default_open(true).show(ui, |ui| {
-                    Self::setup_ui_rendersettings(ui, scene_renderer);
+                    Self::setup_ui_render_settings(ui, scene_renderer);
                 });
                 egui::CollapsingHeader::new("Profiler - Single Simulation Frame")
                     .default_open(false)
