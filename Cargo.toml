@@ -32,7 +32,7 @@ strum = "0.20"
 strum_macros = "0.20.1"
 tobj = "2.0.3"
 wgpu = "0.7.0"
-wgpu-profiler = "0.2.0"
+wgpu-profiler = "0.3.1"
 winit = "0.24"
 
 [profile.dev.package."*"]
