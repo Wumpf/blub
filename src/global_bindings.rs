@@ -1,5 +1,8 @@
-use crate::wgpu_utils::*;
-use crate::{global_ubo::GlobalUBO, scene_models::SceneModels, wgpu_utils::binding_builder::*};
+use crate::{
+    global_ubo::GlobalUBO,
+    scene::models::SceneModels,
+    wgpu_utils::{binding_builder::*, binding_glsl},
+};
 
 pub struct GlobalBindings {
     bind_group_layout: BindGroupLayoutWithDesc,

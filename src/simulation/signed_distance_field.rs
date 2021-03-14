@@ -2,6 +2,7 @@ use futures::FutureExt;
 use std::{io::Read, io::Write, path::Path, rc::Rc};
 
 use crate::{
+    scene::models::MeshData,
     utils::round_to_multiple,
     wgpu_utils::{
         self,
@@ -126,7 +127,7 @@ impl SignedDistanceField {
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
         global_bind_group: &wgpu::BindGroup,
-        meshes: &Vec<crate::scene_models::MeshData>,
+        meshes: &Vec<MeshData>,
     ) {
         // Brute force signed distance field computation.
         // Chunked up into several operations each with full wait so we don't run into TDR.

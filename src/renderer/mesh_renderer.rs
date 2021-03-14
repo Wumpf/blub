@@ -2,7 +2,7 @@ use std::{path::PathBuf, rc::Rc};
 
 use crate::{
     render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen},
-    scene_models::*,
+    scene::models::{MeshVertex, SceneModels},
     wgpu_utils::{pipelines::*, shader::ShaderDirectory},
 };
 

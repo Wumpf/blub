@@ -14,7 +14,6 @@ mod gui;
 mod render_output;
 mod renderer;
 mod scene;
-mod scene_models;
 mod simulation;
 mod simulation_controller;
 mod timer;

@@ -1,10 +1,12 @@
-use crate::renderer::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode};
 use crate::simulation_controller::{SimulationController, SimulationControllerStatus};
 use crate::{
     render_output::screen::Screen,
-    scene::Scene,
     simulation::{HybridFluid, SolverConfig, SolverStatisticSample},
     ApplicationEvent,
+};
+use crate::{
+    renderer::{FluidRenderingMode, SceneRenderer, VolumeVisualizationMode},
+    scene::Scene,
 };
 use std::{
     collections::VecDeque,

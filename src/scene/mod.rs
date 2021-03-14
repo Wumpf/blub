@@ -1,5 +1,7 @@
+pub mod models;
+pub mod voxelization;
+
 use crate::{
-    scene_models::*,
     simulation::HybridFluid,
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
@@ -7,6 +9,8 @@ use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 
 use serde::Deserialize;
 use std::{error, fs::File, io::BufReader, path::Path, path::PathBuf, time::Duration};
+
+use self::models::{SceneModels, StaticObjectConfig};
 
 #[derive(Deserialize)]
 pub struct Box {

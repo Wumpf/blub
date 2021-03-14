@@ -616,7 +616,7 @@ impl HybridFluid {
         pipeline_manager: &PipelineManager,
         queue: &wgpu::Queue,
         global_bind_group: &wgpu::BindGroup,
-        static_meshes: &Vec<crate::scene_models::MeshData>,
+        static_meshes: &Vec<crate::scene::models::MeshData>,
         scene_path: &Path,
     ) {
         let cache_filename = scene_path.parent().unwrap().join(format!(
