@@ -1,0 +1,12 @@
+#version 460
+
+#include "../global_bindings.glsl"
+#include "../utilities.glsl"
+
+layout(set = 1, binding = 0, r16f) uniform restrict image3D SolidSignedDistances;
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+void main() {
+    // imageStore(SolidSignedDistances, ivec3(gl_GlobalInvocationID), vec4(dist));
+}

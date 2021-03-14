@@ -61,6 +61,11 @@ impl Default for MeshVertex {
     }
 }
 
+pub struct Model {
+    pub meshes: Vec<MeshData>,
+    pub distance_field: SignedDistanceFieldBlock,
+}
+
 // Data for _all_ meshes/models in a scene.
 pub struct SceneModels {
     // Since we don't add/remove models while running, we can put everything into a single large vertex+index buffer
@@ -70,7 +75,7 @@ pub struct SceneModels {
 
     pub texture_views: Vec<wgpu::TextureView>,
 
-    pub meshes: Vec<MeshData>,
+    pub model: Vec<Model>,
 }
 
 fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &Path) -> wgpu::Texture {

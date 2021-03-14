@@ -353,7 +353,7 @@ impl GUI {
                             format!("{:?}", scene_file.strip_prefix(SCENE_DIRECTORY).unwrap()),
                         )
                         .clicked()
-                    {git 
+                    {
                         event_loop_proxy
                             .send_event(ApplicationEvent::LoadScene(state.known_scene_files[state.selected_scene_idx].clone()))
                             .unwrap();
