@@ -62,7 +62,7 @@ mod cubemap_loader {
             size: wgpu::Extent3d {
                 width: resolution,
                 height: resolution,
-                depth: 6,
+                depth_or_array_layers: 6,
             },
             mip_level_count: 1,
             sample_count: 1,
@@ -86,7 +86,7 @@ mod cubemap_loader {
             wgpu::Extent3d {
                 width: resolution,
                 height: resolution,
-                depth: 6,
+                depth_or_array_layers: 6,
             },
         );
 
@@ -120,7 +120,7 @@ mod cubemap_loader {
                     size: wgpu::Extent3d {
                         width: resolution,
                         height: resolution,
-                        depth: 6,
+                        depth_or_array_layers: 6,
                     },
                     mip_level_count: 1,
                     sample_count: 1,
@@ -154,7 +154,7 @@ mod cubemap_loader {
                 wgpu::Extent3d {
                     width: resolution,
                     height: resolution,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 },
             );
         }

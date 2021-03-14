@@ -71,7 +71,7 @@ impl VolumeRenderer {
     }
 
     fn num_grid_cells(dimension: wgpu::Extent3d) -> u32 {
-        dimension.width * dimension.height * dimension.depth
+        dimension.width * dimension.height * dimension.depth_or_array_layers
     }
 
     pub fn draw<'a>(

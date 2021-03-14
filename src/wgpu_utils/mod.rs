@@ -10,7 +10,8 @@ pub fn compute_group_size(resource_size: wgpu::Extent3d, group_local_size: wgpu:
     wgpu::Extent3d {
         width: (resource_size.width + group_local_size.width - 1) / group_local_size.width,
         height: (resource_size.height + group_local_size.height - 1) / group_local_size.height,
-        depth: (resource_size.depth + group_local_size.depth - 1) / group_local_size.depth,
+        depth_or_array_layers: (resource_size.depth_or_array_layers + group_local_size.depth_or_array_layers - 1)
+            / group_local_size.depth_or_array_layers,
     }
 }
 

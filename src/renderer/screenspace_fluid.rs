@@ -231,7 +231,7 @@ impl ScreenSpaceFluid {
         let target_textures_resolution = wgpu::Extent3d {
             width: backbuffer.resolution().width,
             height: backbuffer.resolution().height,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let texture_fluid_depth = [
             device.create_texture(&wgpu::TextureDescriptor {
@@ -258,7 +258,7 @@ impl ScreenSpaceFluid {
             size: wgpu::Extent3d {
                 width: backbuffer.resolution().width,
                 height: backbuffer.resolution().height,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
             mip_level_count: 1,
             sample_count: 1,
@@ -373,7 +373,7 @@ impl ScreenSpaceFluid {
             wgpu::Extent3d {
                 width: backbuffer.resolution().width,
                 height: backbuffer.resolution().height,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
         );
 
@@ -458,12 +458,12 @@ impl ScreenSpaceFluid {
             const LOCAL_SIZE_FILTER_1D_X: wgpu::Extent3d = wgpu::Extent3d {
                 width: 64,
                 height: 1,
-                depth: 1,
+                depth_or_array_layers: 1,
             };
             const LOCAL_SIZE_FILTER_1D_Y: wgpu::Extent3d = wgpu::Extent3d {
                 width: 1, // xy not actually swizzled in the local_size shader definition but we treat it like that
                 height: 64,
-                depth: 1,
+                depth_or_array_layers: 1,
             };
             let work_group_filter_1d_x = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D_X);
             let work_group_filter_1d_y = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_1D_Y);
@@ -475,11 +475,19 @@ impl ScreenSpaceFluid {
                     // Filter Y
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
                     cpass.set_push_constants(0, &bytemuck::bytes_of(&[1 as u32]));
-                    cpass.dispatch(work_group_filter_1d_y.width, work_group_filter_1d_y.height, work_group_filter_1d_y.depth);
+                    cpass.dispatch(
+                        work_group_filter_1d_y.width,
+                        work_group_filter_1d_y.height,
+                        work_group_filter_1d_y.depth_or_array_layers,
+                    );
                     // Filter X - note that since filter is not really separable, order makes a difference. Found this order visually more pleasing.
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[1], &[]);
                     cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
-                    cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
+                    cpass.dispatch(
+                        work_group_filter_1d_x.width,
+                        work_group_filter_1d_x.height,
+                        work_group_filter_1d_x.depth_or_array_layers,
+                    );
                 });
                 wgpu_profiler!("filter 2D", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_narrow_range_filter_2d));
@@ -487,10 +495,10 @@ impl ScreenSpaceFluid {
                     const LOCAL_SIZE_FILTER_2D: wgpu::Extent3d = wgpu::Extent3d {
                         width: 16,
                         height: 16,
-                        depth: 1,
+                        depth_or_array_layers: 1,
                     };
                     let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_FILTER_2D);
-                    cpass.dispatch(work_group.width, work_group.height, work_group.depth);
+                    cpass.dispatch(work_group.width, work_group.height, work_group.depth_or_array_layers);
                 });
             });
             wgpu_profiler!("thickness filter", profiler, &mut cpass, device, {
@@ -499,25 +507,33 @@ impl ScreenSpaceFluid {
                 // Filter Y
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[0], &[]);
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[1 as u32]));
-                cpass.dispatch(work_group_filter_1d_y.width, work_group_filter_1d_y.height, work_group_filter_1d_y.depth);
+                cpass.dispatch(
+                    work_group_filter_1d_y.width,
+                    work_group_filter_1d_y.height,
+                    work_group_filter_1d_y.depth_or_array_layers,
+                );
                 // Filter X
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[1], &[]);
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
-                cpass.dispatch(work_group_filter_1d_x.width, work_group_filter_1d_x.height, work_group_filter_1d_x.depth);
+                cpass.dispatch(
+                    work_group_filter_1d_x.width,
+                    work_group_filter_1d_x.height,
+                    work_group_filter_1d_x.depth_or_array_layers,
+                );
             });
 
             wgpu_profiler!("compose & render", profiler, &mut cpass, device, {
                 const LOCAL_SIZE_COMPOSE: wgpu::Extent3d = wgpu::Extent3d {
                     width: 32,
                     height: 32,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 };
 
                 cpass.set_bind_group(1, background_and_lighting_bind_group, &[]);
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_compose, &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.screen_independent.pipeline_fluid));
                 let work_group = wgpu_utils::compute_group_size(self.screen_dependent.target_textures_resolution, LOCAL_SIZE_COMPOSE);
-                cpass.dispatch(work_group.width, work_group.height, work_group.depth);
+                cpass.dispatch(work_group.width, work_group.height, work_group.depth_or_array_layers);
             });
         });
     }

@@ -217,7 +217,7 @@ impl PressureSolver {
     const COMPUTE_LOCAL_SIZE_VOLUME: wgpu::Extent3d = wgpu::Extent3d {
         width: 8,
         height: 8,
-        depth: 1,
+        depth_or_array_layers: 1,
     };
     const COMPUTE_LOCAL_SIZE_REDUCE: u32 = 1024;
     const REDUCE_READS_PER_THREAD: u32 = 16; // 32 was distinctively slower, 16 about same as than 8, 4 clearly slower (gtx1070 ti)
@@ -348,7 +348,7 @@ impl PressureSolver {
             wgpu::TextureFormat::R32Float,
         ));
 
-        let num_cells = (grid_dimension.width * grid_dimension.height * grid_dimension.depth) as u64;
+        let num_cells = (grid_dimension.width * grid_dimension.height * grid_dimension.depth_or_array_layers) as u64;
         let dotproduct_reduce_step_buffers = [
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Buffer: DotProduct Reduce 0"),
@@ -545,7 +545,7 @@ impl PressureSolver {
         result_mode: u32,
         pipeline: &ComputePipelineHandle,
     ) {
-        let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32;
+        let mut num_entries_remaining = (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth_or_array_layers) as u32;
         assert!(num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP);
         let mut source_buffer_index = 0;
 
@@ -604,7 +604,8 @@ impl PressureSolver {
         pressure_field.retrieve_new_error_samples(simulation_delta);
 
         let reduce_pass_initial_group_size = wgpu_utils::compute_group_size_1d(
-            (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth) as u32 / Self::REDUCE_READS_PER_THREAD,
+            (self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth_or_array_layers) as u32
+                / Self::REDUCE_READS_PER_THREAD,
             Self::COMPUTE_LOCAL_SIZE_REDUCE,
         );
 
@@ -632,7 +633,7 @@ impl PressureSolver {
                 cpass.set_push_constants(0, bytemuck::bytes_of(&[NOT_FIRST_STEP]));
             }
             cpass.set_bind_group(2, &self.bind_group_init, &[]);
-            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
 
             // Apply preconditioner on (r), store result to search vector (s) and start dotproduct of <s; r>
             // Note that we don't use the auxillary vector here as in-between storage!
@@ -641,10 +642,10 @@ impl PressureSolver {
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
                 cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]));
                 cpass.set_bind_group(2, &self.bind_group_preconditioner[2], &[]);
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
             wgpu_profiler!("reduce_add: finish s·r ➡ sigma", profiler, &mut cpass, device, {
                 self.reduce_add(&mut cpass, pipeline_manager, Self::REDUCE_RESULTMODE_INIT);

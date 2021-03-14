@@ -157,7 +157,7 @@ impl ScreenshotCapture {
             wgpu::Extent3d {
                 width: self.resolution.width,
                 height: self.resolution.height,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
         );
 

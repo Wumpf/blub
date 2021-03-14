@@ -1,7 +1,7 @@
 use super::timer::Timer;
 use super::wgpu_utils::uniformbuffer::*;
 use cgmath::prelude::*;
-use enumflags2::BitFlags;
+use enumflags2::{bitflags, BitFlags};
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -14,7 +14,9 @@ const OPENGL_PROJECTION_TO_WGPU_PROJECTION: cgmath::Matrix4<f32> = cgmath::Matri
 
 const VERTICAL_FOV: cgmath::Deg<f32> = cgmath::Deg(80f32);
 
-#[derive(BitFlags, Copy, Clone, Debug, PartialEq)]
+#[bitflags]
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum MoveCommands {
     Left = 0b0001,
     Right = 0b0010,

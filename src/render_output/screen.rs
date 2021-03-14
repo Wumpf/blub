@@ -57,7 +57,7 @@ impl Screen {
         let size = wgpu::Extent3d {
             width: resolution.width,
             height: resolution.height,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
 
         let backbuffer = device.create_texture(&wgpu::TextureDescriptor {

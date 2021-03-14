@@ -40,17 +40,17 @@ impl MeshRenderer {
                         step_mode: wgpu::InputStepMode::Vertex,
                         attributes: &[
                             wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float3,
+                                format: wgpu::VertexFormat::Float32x3,
                                 offset: 0,
                                 shader_location: 0,
                             },
                             wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float3,
+                                format: wgpu::VertexFormat::Float32x3,
                                 offset: 4 * 3,
                                 shader_location: 1,
                             },
                             wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float2,
+                                format: wgpu::VertexFormat::Float32x2,
                                 offset: 4 * 6,
                                 shader_location: 2,
                             },

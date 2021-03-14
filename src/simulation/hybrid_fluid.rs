@@ -545,7 +545,7 @@ impl HybridFluid {
         cgmath::Point3::new(
             (self.grid_dimension.width - 1).min(grid_cor.x as u32).max(1),
             (self.grid_dimension.height - 1).min(grid_cor.y as u32).max(1),
-            (self.grid_dimension.depth - 1).min(grid_cor.z as u32).max(1),
+            (self.grid_dimension.depth_or_array_layers - 1).min(grid_cor.z as u32).max(1),
         )
     }
 
@@ -676,7 +676,7 @@ impl HybridFluid {
     const COMPUTE_LOCAL_SIZE_FLUID: wgpu::Extent3d = wgpu::Extent3d {
         width: 8,
         height: 8,
-        depth: 8,
+        depth_or_array_layers: 8,
     };
     const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 64;
 
@@ -737,7 +737,7 @@ impl HybridFluid {
                         wgpu_profiler!(scope_label, profiler, &mut cpass, device, {
                             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
                             cpass.set_push_constants(0, bytemuck::bytes_of(&[i as u32]));
-                            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                         });
 
                         wgpu_profiler!("create particle linked lists", profiler, &mut cpass, device, {
@@ -748,13 +748,13 @@ impl HybridFluid {
                         if i == 0 {
                             wgpu_profiler!("set boundary marker", profiler, &mut cpass, device, {
                                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
-                                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                             });
                         }
 
                         wgpu_profiler!("gather velocity & apply global forces", profiler, &mut cpass, device, {
                             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_gather_velocity));
-                            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                            cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                         });
                     });
                 }
@@ -762,7 +762,7 @@ impl HybridFluid {
             wgpu_profiler!("compute divergence", profiler, &mut cpass, device, {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_compute));
                 cpass.set_bind_group(1, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
         }
 
@@ -789,19 +789,19 @@ impl HybridFluid {
 
                 wgpu_profiler!("make velocity grid divergence free", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_divergence_remove));
-                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                 });
 
                 wgpu_profiler!("extrapolate velocity grid", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
-                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                 });
             }
             wgpu_profiler!("clear marker & linked list grids", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
                 cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
             wgpu_profiler!("advect particles & write new linked list grid", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_advect_particles, &[]);
@@ -812,12 +812,12 @@ impl HybridFluid {
             wgpu_profiler!("density projection: set boundary marker", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_set_boundary_marker));
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
             wgpu_profiler!("density projection: compute density error via gather", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_density_projection_gather_error, &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_gather_error));
-                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
         }
 
@@ -843,11 +843,11 @@ impl HybridFluid {
 
                 wgpu_profiler!("compute position change", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_density_projection_position_change));
-                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                 });
                 wgpu_profiler!("extrapolate velocity grid", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_extrapolate_velocity));
-                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                 });
             }
             wgpu_profiler!("correct particle density error", profiler, &mut cpass, device, {

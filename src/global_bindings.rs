@@ -65,7 +65,7 @@ impl GlobalBindings {
                 size: wgpu::Extent3d {
                     width: 1,
                     height: 1,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
                 sample_count: 1,

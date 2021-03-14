@@ -85,7 +85,7 @@ impl Scene {
             wgpu::Extent3d {
                 width: config.fluid.grid_dimension.x,
                 height: config.fluid.grid_dimension.y,
-                depth: config.fluid.grid_dimension.z,
+                depth_or_array_layers: config.fluid.grid_dimension.z,
             },
             config.fluid.max_num_particles,
             shader_dir,

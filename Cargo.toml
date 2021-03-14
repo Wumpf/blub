@@ -8,14 +8,8 @@ version = "0.1.0"
 
 [dependencies]
 bytemuck = "1.4.1"
-cgmath = {git = "https://github.com/rustgd/cgmath", rev = "50a345b", features = ["rand", "serde"]}
-
-egui = "0.9"
-egui_wgpu_backend = {git = "https://github.com/Wumpf/egui_wgpu_backend", rev = "f7784132e3f77d7d3206e359f4e298870b984f3f"}
-egui_winit_platform = {git = "https://github.com/Wumpf/egui_winit_platform", rev = "fcf3711fe77c409ba24b2eed086560cd492a9520"}
-epi = "0.9"
-
-enumflags2 = "0.6"
+cgmath = {version = "0.18.0", features = ["rand", "serde"]}
+enumflags2 = "0.7.1"
 env_logger = "0.8.2"
 futures = "0.3"
 image = {version = "0.23", default-features = false, features = ["png", "hdr"]}
@@ -23,7 +17,7 @@ lazy_static = "1.4"
 log = "0.4"
 more-asserts = "0.2"
 notify = "5.0.0-pre.2"
-rand = {version = "0.7.3", features = ["small_rng"]}
+rand = {version = "0.8.3", features = ["small_rng"]}
 regex = "1"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
@@ -32,14 +26,21 @@ strum = "0.20"
 strum_macros = "0.20.1"
 tobj = "2.0.3"
 wgpu = "0.7.0"
-wgpu-profiler = "0.2.0"
+wgpu-profiler = "0.3.1"
 winit = "0.24"
+# egui and related
+egui = "0.10.0"
+epi = "0.10.0"
+egui_wgpu_backend = {git = "https://github.com/Wumpf/egui_wgpu_backend", rev = "d470a209c0271459be0a50132487ebb848856d03"}
+egui_winit_platform = {git = "https://github.com/hasenbanck/egui_winit_platform", rev = "17298250e9721e8bf2c1d4a17b3e22777f8cb2e8"}
+
 
 [profile.dev.package."*"]
 opt-level = 3
 
 [patch.crates-io]
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev = "1509128f6dd027b392e76da15b430099fce26750"}
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev = "96ca1e41dd4ede12bcb3220712ab5c8c2fd688ad"}
+# wgpu = {version = "0.7", path = "../gfx-rs/wgpu-rs"}
 
 # [patch."https://github.com/gfx-rs/wgpu"]
 # wgpu-core = {version = "0.7", path = "../wgpu/wgpu-core"}

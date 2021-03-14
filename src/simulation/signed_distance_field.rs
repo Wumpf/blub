@@ -80,7 +80,7 @@ impl SignedDistanceField {
     }
 
     fn size_in_bytes(&self) -> u32 {
-        self.buffer_bytes_per_padded_row() * self.grid_dimension.height * self.grid_dimension.depth
+        self.buffer_bytes_per_padded_row() * self.grid_dimension.height * self.grid_dimension.depth_or_array_layers
     }
 
     pub fn load_signed_distance_field(&self, path: &Path, queue: &wgpu::Queue) -> Result<(), std::io::Error> {
@@ -117,7 +117,7 @@ impl SignedDistanceField {
     const COMPUTE_LOCAL_SIZE: wgpu::Extent3d = wgpu::Extent3d {
         width: 4,
         height: 4,
-        depth: 4,
+        depth_or_array_layers: 4,
     };
 
     pub fn compute_distance_field_for_static(
@@ -155,7 +155,7 @@ impl SignedDistanceField {
                     compute_pass.set_bind_group(0, global_bind_group, &[]);
                     compute_pass.set_bind_group(1, &self.bind_group_write_signed_distance_field, &[]);
                     compute_pass.set_push_constants(0, bytemuck::bytes_of(&[mesh_idx as u32, start_index]));
-                    compute_pass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth);
+                    compute_pass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
                 }
 
                 queue.submit(Some(encoder.finish()));

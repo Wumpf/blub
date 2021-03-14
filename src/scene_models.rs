@@ -85,7 +85,7 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
         size: wgpu::Extent3d {
             width: image.width(),
             height: image.height(),
-            depth: 1,
+            depth_or_array_layers: 1,
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -109,7 +109,7 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
         wgpu::Extent3d {
             width: image.width(),
             height: image.height(),
-            depth: 1,
+            depth_or_array_layers: 1,
         },
     );
 
