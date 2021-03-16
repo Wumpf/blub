@@ -2,15 +2,13 @@ use std::{path::PathBuf, rc::Rc};
 
 use crate::{
     render_output::{hdr_backbuffer::HdrBackbuffer, screen::Screen},
-    scene::models::{MeshVertex, SceneModels},
+    scene::models::SceneModels,
     wgpu_utils::{pipelines::*, shader::ShaderDirectory},
 };
 
 pub struct MeshRenderer {
     render_pipeline: RenderPipelineHandle,
 }
-
-const VERTEX_SIZE: wgpu::BufferAddress = std::mem::size_of::<MeshVertex>() as wgpu::BufferAddress;
 
 impl MeshRenderer {
     pub fn new(
@@ -35,27 +33,7 @@ impl MeshRenderer {
                 })),
                 vertex: VertexStateCreationDesc {
                     shader_relative_path: PathBuf::from("mesh.vert"),
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: VERTEX_SIZE,
-                        step_mode: wgpu::InputStepMode::Vertex,
-                        attributes: &[
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x3,
-                                offset: 0,
-                                shader_location: 0,
-                            },
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x3,
-                                offset: 4 * 3,
-                                shader_location: 1,
-                            },
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x2,
-                                offset: 4 * 6,
-                                shader_location: 2,
-                            },
-                        ],
-                    }],
+                    buffers: vec![SceneModels::vertex_buffer_layout()],
                 },
                 primitive: wgpu::PrimitiveState {
                     cull_mode: Some(wgpu::Face::Back),

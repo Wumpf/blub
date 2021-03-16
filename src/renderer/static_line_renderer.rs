@@ -51,7 +51,7 @@ impl StaticLineRenderer {
             Some(Screen::FORMAT_DEPTH),
         );
         render_pipeline_desc.primitive.topology = wgpu::PrimitiveTopology::LineList;
-        render_pipeline_desc.vertex.buffers = &[wgpu::VertexBufferLayout {
+        render_pipeline_desc.vertex.buffers = vec![wgpu::VertexBufferLayout {
             array_stride: LINE_VERTEX_SIZE as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
             attributes: &[

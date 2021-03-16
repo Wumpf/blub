@@ -5,6 +5,7 @@ use super::{
     screenspace_fluid::ScreenSpaceFluid,
     static_line_renderer::{LineVertex, StaticLineRenderer},
     volume_renderer::{VolumeRenderer, VolumeVisualizationMode},
+    voxel_renderer::VoxelRenderer,
 };
 use crate::{
     render_output::hdr_backbuffer::HdrBackbuffer,
@@ -40,6 +41,7 @@ pub struct SceneRenderer {
     particle_renderer: ParticleRenderer,
     screenspace_fluid: ScreenSpaceFluid,
     volume_renderer: VolumeRenderer,
+    voxel_renderer: VoxelRenderer,
     bounds_line_renderer: StaticLineRenderer,
     pub mesh_renderer: MeshRenderer,
     background_and_lighting: Background,
@@ -49,6 +51,7 @@ pub struct SceneRenderer {
     pub particle_radius_factor: f32,
     pub enable_box_lines: bool,
     pub enable_mesh_rendering: bool,
+    pub enable_voxel_rendering: bool,
     pub velocity_visualization_scale: f32,
 }
 
@@ -97,6 +100,7 @@ impl SceneRenderer {
                 global_bind_group_layout,
                 fluid_renderer_group_layout,
             ),
+            voxel_renderer: VoxelRenderer::new(device, shader_dir, pipeline_manager, global_bind_group_layout),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, global_bind_group_layout, 128),
             mesh_renderer: MeshRenderer::new(
                 device,
@@ -112,12 +116,13 @@ impl SceneRenderer {
             particle_radius_factor: 0.7,
             enable_box_lines: true,
             enable_mesh_rendering: true,
+            enable_voxel_rendering: true, // todo
             velocity_visualization_scale: 0.008,
         }
     }
 
     // Needs to be called whenever immutable scene properties change.
-    pub fn on_new_scene(&mut self, queue: &wgpu::Queue, scene: &Scene) {
+    pub fn on_new_scene(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) {
         let line_color = cgmath::vec3(0.0, 0.0, 0.0);
         let grid_extent = scene.config().fluid.grid_dimension;
         let min = scene.config().fluid.world_position;
@@ -156,6 +161,7 @@ impl SceneRenderer {
             ],
             queue,
         );
+        self.voxel_renderer.on_new_scene(device, scene);
     }
 
     pub fn fill_global_uniform_buffer(&self, scene: &Scene) -> GlobalRenderSettingsUniformBufferContent {
@@ -242,6 +248,13 @@ impl SceneRenderer {
             if self.enable_box_lines {
                 wgpu_profiler!("box lines", profiler, &mut rpass_backbuffer, device, {
                     self.bounds_line_renderer.draw(&mut rpass_backbuffer, pipeline_manager);
+                });
+            }
+
+            if self.enable_voxel_rendering {
+                wgpu_profiler!("voxels", profiler, &mut rpass_backbuffer, device, {
+                    self.voxel_renderer
+                        .draw(&mut rpass_backbuffer, pipeline_manager, &scene.config().fluid.grid_dimension);
                 });
             }
 

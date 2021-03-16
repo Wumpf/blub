@@ -148,7 +148,7 @@ impl Application {
             global_bindings.bind_group_layout(),
         )
         .unwrap();
-        scene_renderer.on_new_scene(&command_queue, &scene);
+        scene_renderer.on_new_scene(&device, &command_queue, &scene);
         global_bindings.create_bind_group(&device, &global_ubo, &scene.models);
 
         Application {
@@ -190,7 +190,7 @@ impl Application {
         match new_scene {
             Ok(scene) => {
                 self.scene = scene;
-                self.scene_renderer.on_new_scene(&self.command_queue, &self.scene);
+                self.scene_renderer.on_new_scene(&self.device, &self.command_queue, &self.scene);
                 self.global_bindings.create_bind_group(&self.device, &self.global_ubo, &self.scene.models);
             }
             Err(error) => {

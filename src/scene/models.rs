@@ -61,6 +61,10 @@ impl Default for MeshVertex {
     }
 }
 
+impl MeshVertex {
+    pub const SIZE: wgpu::BufferAddress = std::mem::size_of::<MeshVertex>() as wgpu::BufferAddress;
+}
+
 // Data for _all_ meshes/models in a scene.
 pub struct SceneModels {
     // Since we don't add/remove models while running, we can put everything into a single large vertex+index buffer
@@ -117,6 +121,42 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
 }
 
 impl SceneModels {
+    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: MeshVertex::SIZE,
+            step_mode: wgpu::InputStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 4 * 3,
+                    shader_location: 1,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 4 * 6,
+                    shader_location: 2,
+                },
+            ],
+        }
+    }
+
+    pub fn vertex_buffer_layout_position_only() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: MeshVertex::SIZE,
+            step_mode: wgpu::InputStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: 0,
+                shader_location: 0,
+            }],
+        }
+    }
+
     pub fn from_config(device: &wgpu::Device, queue: &wgpu::Queue, configs: &Vec<StaticObjectConfig>) -> Result<Self, Box<dyn Error>> {
         let mut vertices = Vec::new();
         let mut indices = Vec::<u32>::new();

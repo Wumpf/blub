@@ -11,6 +11,7 @@ use serde::Deserialize;
 use std::{error, fs::File, io::BufReader, path::Path, path::PathBuf, time::Duration};
 
 use self::models::{SceneModels, StaticObjectConfig};
+use self::voxelization::SceneVoxelization;
 
 #[derive(Deserialize)]
 pub struct Box {
@@ -43,6 +44,7 @@ pub struct Scene {
     hybrid_fluid: HybridFluid,
     config: SceneConfig,
     pub models: SceneModels,
+    pub voxelization: SceneVoxelization,
     distance_field_dirty: bool,
     path: PathBuf,
 }
@@ -63,10 +65,23 @@ impl Scene {
         let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, global_bind_group_layout);
         let models = SceneModels::from_config(&device, queue, &config.static_objects)?;
 
+        let voxelization = SceneVoxelization::new(
+            device,
+            shader_dir,
+            pipeline_manager,
+            global_bind_group_layout,
+            wgpu::Extent3d {
+                width: config.fluid.grid_dimension.x,
+                height: config.fluid.grid_dimension.y,
+                depth_or_array_layers: config.fluid.grid_dimension.z,
+            },
+        );
+
         Ok(Scene {
             hybrid_fluid,
             config,
             models,
+            voxelization,
             distance_field_dirty: true,
             path: path.to_path_buf(),
         })
@@ -144,9 +159,20 @@ impl Scene {
             self.distance_field_dirty = false;
         }
 
+        // todo: Animate everything that is animated.
+
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Scene Step"),
         });
+
+        wgpu_profiler!("Voxelize Scene", profiler, &mut encoder, device, {
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Voxelize Scene"),
+            });
+            cpass.set_bind_group(0, global_bind_group, &[]);
+            self.voxelization.update(&mut cpass, pipeline_manager);
+        });
+
         wgpu_profiler!("HybridFluid step", profiler, &mut encoder, device, {
             self.hybrid_fluid.step(
                 simulation_delta,

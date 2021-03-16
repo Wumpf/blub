@@ -129,7 +129,7 @@ impl Camera {
         let right = self.direction.cross(self.rotational_up).normalize();
         let up = right.cross(self.direction).normalize();
 
-        let view = cgmath::Matrix4::look_at_dir(self.position, self.direction, self.rotational_up);
+        let view = cgmath::Matrix4::look_to_rh(self.position, self.direction, self.rotational_up);
         let projection = OPENGL_PROJECTION_TO_WGPU_PROJECTION * cgmath::perspective(VERTICAL_FOV, aspect_ratio, 0.01, 1000.0);
         let view_projection = projection * view;
         let inverse_projection = projection.invert().unwrap();

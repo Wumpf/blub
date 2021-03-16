@@ -85,7 +85,7 @@ impl ScreenSpaceFluid {
 
                 vertex: VertexStateCreationDesc {
                     shader_relative_path: PathBuf::from("screenspace_fluid/particles.vert"),
-                    buffers: &[],
+                    buffers: Vec::new(),
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleStrip,

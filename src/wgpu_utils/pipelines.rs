@@ -42,7 +42,7 @@ pub struct VertexStateCreationDesc {
     /// Path to shader source file.
     pub shader_relative_path: PathBuf,
     /// The format of any vertex buffers used with this pipeline.
-    pub buffers: &'static [wgpu::VertexBufferLayout<'static>],
+    pub buffers: Vec<wgpu::VertexBufferLayout<'static>>,
 }
 
 /// Describes the fragment process in a render pipeline.
@@ -87,7 +87,7 @@ impl RenderPipelineCreationDesc {
             layout,
             vertex: VertexStateCreationDesc {
                 shader_relative_path: PathBuf::from(vertex_shader_relative_path),
-                buffers: &[],
+                buffers: Vec::new(),
             },
             primitive: Default::default(),
             depth_stencil: match depth_format {
@@ -112,7 +112,7 @@ impl RenderPipelineCreationDesc {
             vertex: wgpu::VertexState {
                 module: &shader_vs.module,
                 entry_point: SHADER_ENTRY_POINT_NAME,
-                buffers: self.vertex.buffers,
+                buffers: &self.vertex.buffers,
             },
             primitive: self.primitive.clone(),
             depth_stencil: self.depth_stencil.clone(),
