@@ -27,7 +27,6 @@ void main() {
     if (particleIndex >= NumParticles)
         return;
 
-    vec3 gridSize = textureSize(MarkerVolume, 0);
     vec3 originalPosition = Particles[particleIndex].Position;
 
     vec3 offsetPositions[] = {
@@ -35,7 +34,7 @@ void main() {
         max(vec3(0.0), originalPosition - vec3(0.0, 0.5, 0.0)),
         max(vec3(0.0), originalPosition - vec3(0.0, 0.0, 0.5)),
     };
-    vec3 texcoordSpaceFactor = 1.0 / vec3(gridSize);
+    vec3 texcoordSpaceFactor = 1.0 / vec3(Rendering.FluidGridResolution);
     vec3 positionChange = vec3(textureLod(sampler3D(VelocityVolumeX, SamplerTrilinearClamp), offsetPositions[0] * texcoordSpaceFactor, 0).x,
                                textureLod(sampler3D(VelocityVolumeY, SamplerTrilinearClamp), offsetPositions[1] * texcoordSpaceFactor, 0).x,
                                textureLod(sampler3D(VelocityVolumeZ, SamplerTrilinearClamp), offsetPositions[2] * texcoordSpaceFactor, 0).x);

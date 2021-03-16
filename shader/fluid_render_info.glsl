@@ -22,8 +22,3 @@ layout(set = 1, binding = 10) uniform texture3D SolidSignedDistances;
 #ifdef DEBUG
 layout(set = 1, binding = 11) uniform texture3D DebugVolume;
 #endif
-
-ivec3 getVolumeCoordinate(uint positionIndex) {
-    ivec3 volumeSize = textureSize(PressureVolume_Velocity, 0).xyz;
-    return ivec3(positionIndex % volumeSize.x, positionIndex / volumeSize.x % volumeSize.y, positionIndex / volumeSize.x / volumeSize.y);
-}

@@ -33,7 +33,7 @@ struct GlobalRenderingSettings {
     float FluidGridToWorldScale; // how big is a grid cell in world scale
     vec3 FluidWorldMax;
     float VelocityVisualizationScale;
-    vec3 _Padding;
+    uvec3 FluidGridResolution; // TODO: This is not a rendering setting
     float FluidParticleRadius; // particle size in world space
 };
 

@@ -31,7 +31,7 @@ pub struct GlobalRenderSettingsUniformBufferContent {
     fluid_grid_to_world_scale: f32,
     fluid_max: cgmath::Point3<f32>,
     velocity_visualization_scale: f32,
-    padding: cgmath::Point3<f32>,
+    fluid_grid_resolution: cgmath::Point3<u32>,
     fluid_particle_radius: f32,
 }
 
@@ -51,7 +51,7 @@ pub struct SceneRenderer {
     pub particle_radius_factor: f32,
     pub enable_box_lines: bool,
     pub enable_mesh_rendering: bool,
-    pub enable_voxel_rendering: bool,
+    pub enable_voxel_visualization: bool,
     pub velocity_visualization_scale: f32,
 }
 
@@ -116,7 +116,7 @@ impl SceneRenderer {
             particle_radius_factor: 0.7,
             enable_box_lines: true,
             enable_mesh_rendering: true,
-            enable_voxel_rendering: true, // todo
+            enable_voxel_visualization: true, // todo
             velocity_visualization_scale: 0.008,
         }
     }
@@ -175,7 +175,7 @@ impl SceneRenderer {
             fluid_grid_to_world_scale: fluid_config.grid_to_world_scale,
             velocity_visualization_scale: self.velocity_visualization_scale,
             fluid_particle_radius,
-            padding: cgmath::point3(0.0, 0.0, 0.0),
+            fluid_grid_resolution: fluid_config.grid_dimension,
         }
     }
 
@@ -251,7 +251,7 @@ impl SceneRenderer {
                 });
             }
 
-            if self.enable_voxel_rendering {
+            if self.enable_voxel_visualization {
                 wgpu_profiler!("voxels", profiler, &mut rpass_backbuffer, device, {
                     self.voxel_renderer
                         .draw(&mut rpass_backbuffer, pipeline_manager, &scene.config().fluid.grid_dimension);

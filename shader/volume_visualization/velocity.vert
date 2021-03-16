@@ -6,6 +6,7 @@
 #include "../global_bindings.glsl"
 #include "../simulation/hybrid_fluid.glsl"
 #include "../utilities.glsl"
+#include "volume_visualization.glsl"
 
 out gl_PerVertex { vec4 gl_Position; };
 

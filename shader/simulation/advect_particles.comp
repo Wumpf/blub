@@ -39,7 +39,7 @@ void main() {
     if (particleIndex >= NumParticles)
         return;
 
-    vec3 gridSize = textureSize(VelocityVolumeX, 0);
+    vec3 gridSize = Rendering.FluidGridResolution;
     vec3 gridTexelSizeNormalized = 1.0 / gridSize;
 
     // Sample all 8 neighboring velocity grid cells
