@@ -98,15 +98,18 @@ impl ShaderDirectory {
             hasher.finish(),
             path.extension().and_then(OsStr::to_str).unwrap()
         ));
+        let dependent_sources_cache_path = cache_path.with_extension("files.cache");
         if let Ok(cached_shader) = std::fs::read(&cache_path) {
-            return Ok(ShaderModuleWithSourceFiles {
-                module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                    label: Some(path.file_name().unwrap().to_str().unwrap()),
-                    source: wgpu::ShaderSource::SpirV(Borrowed(bytemuck::cast_slice(&cached_shader))),
-                    flags: wgpu::ShaderFlags::empty(),
-                }),
-                source_files: source_files.into_inner(),
-            });
+            if let Ok(sources_string) = std::fs::read_to_string(&dependent_sources_cache_path) {
+                return Ok(ShaderModuleWithSourceFiles {
+                    module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                        label: Some(path.file_name().unwrap().to_str().unwrap()),
+                        source: wgpu::ShaderSource::SpirV(Borrowed(bytemuck::cast_slice(&cached_shader))),
+                        flags: wgpu::ShaderFlags::empty(),
+                    }),
+                    source_files: sources_string.lines().map(|line| PathBuf::from(line)).collect(),
+                });
+            }
         }
 
         let compilation_artifact = {
@@ -169,6 +172,19 @@ impl ShaderDirectory {
 
         std::fs::write(&cache_path, compilation_artifact.as_binary_u8()).or_else(|e| {
             error!("failed to shader cache file {:?}: {}", cache_path, e);
+            Err(())
+        })?;
+        std::fs::write(
+            &dependent_sources_cache_path,
+            source_files
+                .borrow()
+                .iter()
+                .map(|path| path.to_str().unwrap())
+                .collect::<Vec<&str>>()
+                .join("\n"),
+        )
+        .or_else(|e| {
+            error!("failed to shader cache dependency file {:?}: {}", dependent_sources_cache_path, e);
             Err(())
         })?;
 
