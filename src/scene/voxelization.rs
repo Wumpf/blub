@@ -7,6 +7,9 @@ pub struct SceneVoxelization {
     voxelization_pipeline: RenderPipelineHandle,
     bind_group: wgpu::BindGroup,
     volume_view: wgpu::TextureView,
+
+    dummy_render_target: wgpu::TextureView,
+    viewport_extent: u32,
 }
 
 impl SceneVoxelization {
@@ -38,35 +41,67 @@ impl SceneVoxelization {
             .texture(&volume_view)
             .create(device, "BindGroup: Voxelization");
 
-        let mut desc = RenderPipelineCreationDesc {
-            label: "Voxelize Mesh",
-            layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Voxelize Mesh Pipeline Layout"),
-                bind_group_layouts: &[&global_bind_group_layout, &group_layout.layout],
-                push_constant_ranges: &[wgpu::PushConstantRange {
-                    stages: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
-                    range: 0..4,
-                }],
-            })),
-            vertex: VertexStateCreationDesc {
-                shader_relative_path: PathBuf::from("voxelize_mesh.vert"),
-                buffers: vec![SceneModels::vertex_buffer_layout_position_only()],
+        let voxelization_pipeline = pipeline_manager.create_render_pipeline(
+            device,
+            shader_dir,
+            RenderPipelineCreationDesc {
+                label: "Voxelize Mesh",
+                layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Voxelize Mesh Pipeline Layout"),
+                    bind_group_layouts: &[&global_bind_group_layout, &group_layout.layout],
+                    push_constant_ranges: &[wgpu::PushConstantRange {
+                        stages: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                        range: 0..4,
+                    }],
+                })),
+                vertex: VertexStateCreationDesc {
+                    shader_relative_path: PathBuf::from("voxelize_mesh.vert"),
+                    buffers: vec![SceneModels::vertex_buffer_layout_position_only()],
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                // Needed until https://github.com/gpuweb/gpuweb/issues/503 is resolved
+                fragment: FragmentStateCreationDesc {
+                    shader_relative_path: PathBuf::from("voxelize_mesh.frag"),
+                    targets: vec![wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        blend: None,
+                        write_mask: wgpu::ColorWrite::empty(),
+                    }],
+                },
             },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: FragmentStateCreationDesc {
-                shader_relative_path: PathBuf::from("voxelize_mesh.frag"),
-                targets: Vec::new(),
-            },
-        };
-        desc.primitive.topology = wgpu::PrimitiveTopology::TriangleStrip;
-        let voxelization_pipeline = pipeline_manager.create_render_pipeline(device, shader_dir, desc);
+        );
+
+        let viewport_extent = grid_dimension.width.max(grid_dimension.height).max(grid_dimension.depth_or_array_layers);
+
+        // Needed until https://github.com/gpuweb/gpuweb/issues/503 is resolved
+        let dummy_render_target = device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("dummy render target"),
+                size: wgpu::Extent3d {
+                    width: viewport_extent,
+                    height: viewport_extent,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            })
+            .create_view(&Default::default());
 
         SceneVoxelization {
             voxelization_pipeline,
             bind_group,
             volume_view,
+
+            viewport_extent,
+            dummy_render_target,
         }
     }
 
@@ -74,9 +109,42 @@ impl SceneVoxelization {
         &self.volume_view
     }
 
-    pub fn update<'a>(&'a self, cpass: &mut wgpu::ComputePass<'a>, pipeline_manager: &'a PipelineManager) {
-        cpass.set_bind_group(1, &self.bind_group, &[]);
-        cpass.set_pipeline(pipeline_manager.get_compute(&self.voxelization_pipeline));
-        // todo
+    pub fn update(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline_manager: &PipelineManager,
+        global_bind_group: &wgpu::BindGroup,
+        scene_models: &SceneModels,
+    ) {
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Voxelize"),
+            // Needed until https://github.com/gpuweb/gpuweb/issues/503 is resolved
+            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &self.dummy_render_target,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: false,
+                },
+            }],
+            depth_stencil_attachment: None,
+        });
+
+        rpass.set_viewport(0.0, 0.0, self.viewport_extent as f32, self.viewport_extent as f32, 0.0, 1.0);
+        rpass.set_scissor_rect(0, 0, self.viewport_extent, self.viewport_extent);
+        rpass.set_pipeline(pipeline_manager.get_render(&self.voxelization_pipeline));
+        rpass.set_bind_group(0, &global_bind_group, &[]);
+        rpass.set_bind_group(1, &self.bind_group, &[]);
+        rpass.set_index_buffer(scene_models.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        rpass.set_vertex_buffer(0, scene_models.vertex_buffer.slice(..));
+
+        for (i, mesh) in scene_models.meshes.iter().enumerate() {
+            rpass.set_push_constants(
+                wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                0,
+                bytemuck::cast_slice(&[i as u32]),
+            );
+            rpass.draw_indexed(mesh.index_buffer_range.clone(), mesh.vertex_buffer_range.start as i32, 0..3);
+        }
     }
 }

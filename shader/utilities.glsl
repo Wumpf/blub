@@ -52,6 +52,8 @@ bool sphereIntersect(vec3 spherePosition, float radius, vec3 rayOrigin, vec3 ray
 
 float dot2(in vec3 v) { return dot(v, v); }
 float max3(vec3 v) { return max(max(v.x, v.y), v.z); }
+float max3(ivec3 v) { return max(max(v.x, v.y), v.z); }
+float max3(uvec3 v) { return max(max(v.x, v.y), v.z); }
 float min3(vec3 v) { return min(min(v.x, v.y), v.z); }
 
 // https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm

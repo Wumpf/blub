@@ -18,16 +18,17 @@ impl VoxelRenderer {
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         global_bind_group_layout: &wgpu::BindGroupLayout,
+        background_and_lighting_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_fragment(binding_glsl::utexture3D())
+            .next_binding_vertex(binding_glsl::utexture3D())
             .create(device, "BindGroupLayout: Voxel Renderer");
 
         let mut desc = RenderPipelineCreationDesc::new(
             "Visualize Voxels",
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Visualize Voxels Pipeline Layout"),
-                bind_group_layouts: &[&global_bind_group_layout, &group_layout.layout],
+                bind_group_layouts: &[&global_bind_group_layout, background_and_lighting_group_layout, &group_layout.layout],
                 push_constant_ranges: &[],
             })),
             Path::new("volume_visualization/voxel_visualization.vert"),
@@ -53,7 +54,13 @@ impl VoxelRenderer {
         );
     }
 
-    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, pipeline_manager: &'a PipelineManager, grid_dimension: &cgmath::Point3<u32>) {
+    pub fn draw<'a>(
+        &'a self,
+        rpass: &mut wgpu::RenderPass<'a>,
+        pipeline_manager: &'a PipelineManager,
+        background_and_lighting_bind_group: &'a wgpu::BindGroup,
+        grid_dimension: &cgmath::Point3<u32>,
+    ) {
         let bind_group = match self.bind_group.as_ref() {
             Some(bind_group) => bind_group,
             None => {
@@ -62,7 +69,9 @@ impl VoxelRenderer {
         };
 
         rpass.set_pipeline(pipeline_manager.get_render(&self.pipeline));
-        rpass.set_bind_group(1, bind_group, &[]);
+        rpass.set_bind_group(1, background_and_lighting_bind_group, &[]);
+        rpass.set_bind_group(2, bind_group, &[]);
+
         // this is heavy, but fine for debug viz..
         rpass.draw(0..14, 0..(grid_dimension.x * grid_dimension.y * grid_dimension.z));
     }

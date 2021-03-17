@@ -399,6 +399,9 @@ impl GUI {
             );
             ui.end_row();
 
+            ui.checkbox(&mut scene_renderer.enable_voxel_visualization, "Voxel Visualization");
+            ui.end_row();
+
             ui.label("Velocity Visualization Scale");
             ui.add(
                 egui::Slider::f32(&mut scene_renderer.velocity_visualization_scale, 0.001..=5.0)

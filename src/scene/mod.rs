@@ -166,11 +166,7 @@ impl Scene {
         });
 
         wgpu_profiler!("Voxelize Scene", profiler, &mut encoder, device, {
-            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Voxelize Scene"),
-            });
-            cpass.set_bind_group(0, global_bind_group, &[]);
-            self.voxelization.update(&mut cpass, pipeline_manager);
+            self.voxelization.update(&mut encoder, pipeline_manager, global_bind_group, &self.models);
         });
 
         wgpu_profiler!("HybridFluid step", profiler, &mut encoder, device, {

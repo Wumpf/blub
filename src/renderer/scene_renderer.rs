@@ -100,7 +100,13 @@ impl SceneRenderer {
                 global_bind_group_layout,
                 fluid_renderer_group_layout,
             ),
-            voxel_renderer: VoxelRenderer::new(device, shader_dir, pipeline_manager, global_bind_group_layout),
+            voxel_renderer: VoxelRenderer::new(
+                device,
+                shader_dir,
+                pipeline_manager,
+                global_bind_group_layout,
+                background_and_lighting.bind_group_layout(),
+            ),
             bounds_line_renderer: StaticLineRenderer::new(device, shader_dir, pipeline_manager, global_bind_group_layout, 128),
             mesh_renderer: MeshRenderer::new(
                 device,
@@ -253,8 +259,12 @@ impl SceneRenderer {
 
             if self.enable_voxel_visualization {
                 wgpu_profiler!("voxels", profiler, &mut rpass_backbuffer, device, {
-                    self.voxel_renderer
-                        .draw(&mut rpass_backbuffer, pipeline_manager, &scene.config().fluid.grid_dimension);
+                    self.voxel_renderer.draw(
+                        &mut rpass_backbuffer,
+                        pipeline_manager,
+                        self.background_and_lighting.bind_group(),
+                        &scene.config().fluid.grid_dimension,
+                    );
                 });
             }
 
