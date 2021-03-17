@@ -145,18 +145,6 @@ impl SceneModels {
         }
     }
 
-    pub fn vertex_buffer_layout_position_only() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: MeshVertex::SIZE,
-            step_mode: wgpu::InputStepMode::Vertex,
-            attributes: &[wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: 0,
-                shader_location: 0,
-            }],
-        }
-    }
-
     pub fn from_config(device: &wgpu::Device, queue: &wgpu::Queue, configs: &Vec<StaticObjectConfig>) -> Result<Self, Box<dyn Error>> {
         let mut vertices = Vec::new();
         let mut indices = Vec::<u32>::new();

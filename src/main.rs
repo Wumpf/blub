@@ -99,6 +99,7 @@ impl Application {
                         | wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING
                         | wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING
                         | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+                        | wgpu::Features::CONSERVATIVE_RASTERIZATION
                         | wgpu::Features::TIMESTAMP_QUERY,
                     limits: wgpu::Limits {
                         max_push_constant_size: 8,

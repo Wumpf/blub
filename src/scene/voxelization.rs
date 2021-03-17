@@ -61,10 +61,11 @@ impl SceneVoxelization {
                 })),
                 vertex: VertexStateCreationDesc {
                     shader_relative_path: "voxelize_mesh.vert".into(),
-                    buffers: vec![SceneModels::vertex_buffer_layout_position_only()],
+                    buffers: Vec::new(),
                 },
                 primitive: wgpu::PrimitiveState {
                     cull_mode: None,
+                    conservative: true,
                     ..Default::default()
                 },
                 depth_stencil: None,
@@ -168,8 +169,9 @@ impl SceneVoxelization {
         rpass.set_pipeline(pipeline_manager.get_render(&self.voxelization_pipeline));
         rpass.set_bind_group(0, &global_bind_group, &[]);
         rpass.set_bind_group(1, &self.bind_group, &[]);
-        rpass.set_index_buffer(scene_models.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        rpass.set_vertex_buffer(0, scene_models.vertex_buffer.slice(..));
+
+        // Use programmable vertex fetching since for every triangle we want to decide independently which direction to use for rendering.
+        // (i.e. we may need to duplicate vertices that are otherwise shared with triangles)
 
         for (i, mesh) in scene_models.meshes.iter().enumerate() {
             rpass.set_push_constants(
@@ -177,7 +179,7 @@ impl SceneVoxelization {
                 0,
                 bytemuck::cast_slice(&[i as u32]),
             );
-            rpass.draw_indexed(mesh.index_buffer_range.clone(), mesh.vertex_buffer_range.start as i32, 0..3);
+            rpass.draw(mesh.index_buffer_range.clone(), 0..1);
         }
     }
 }

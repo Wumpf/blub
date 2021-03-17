@@ -30,8 +30,8 @@ impl GlobalBindings {
                 ty: binding_glsl::texture2D(),
                 count: std::num::NonZeroU32::new(Self::NUM_MESH_TEXTURES),
             })
-            .next_binding(wgpu::ShaderStage::COMPUTE, binding_glsl::buffer(true)) // Index buffer used for compute shader consuming the mesh
-            .next_binding(wgpu::ShaderStage::COMPUTE, binding_glsl::buffer(true)) // Vertex buffer used for compute shader consuming the mesh
+            .next_binding(wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::VERTEX, binding_glsl::buffer(true))
+            .next_binding(wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::VERTEX, binding_glsl::buffer(true))
             .create(device, "BindGroupLayout: GlobalBindings");
 
         GlobalBindings {
