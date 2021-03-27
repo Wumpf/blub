@@ -1,4 +1,4 @@
-use std::{path::PathBuf, rc::Rc};
+use std::rc::Rc;
 
 use crate::scene::SceneModels;
 use crate::wgpu_utils::{binding_builder::*, binding_glsl, pipelines::*, shader::ShaderDirectory};
@@ -15,7 +15,7 @@ pub struct SceneVoxelization {
 }
 
 impl SceneVoxelization {
-    const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Uint;
+    const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
     pub fn new(
         device: &wgpu::Device,
@@ -38,7 +38,7 @@ impl SceneVoxelization {
         let group_layout = BindGroupLayoutBuilder::new()
             .next_binding(
                 wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::FRAGMENT,
-                binding_glsl::image3D(Self::FORMAT, wgpu::StorageTextureAccess::ReadWrite),
+                binding_glsl::image3D(Self::FORMAT, wgpu::StorageTextureAccess::WriteOnly),
             )
             .create(device, "BindGroupLayout: Voxelization");
 

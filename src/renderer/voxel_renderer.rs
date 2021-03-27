@@ -21,7 +21,7 @@ impl VoxelRenderer {
         background_and_lighting_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let group_layout = BindGroupLayoutBuilder::new()
-            .next_binding_vertex(binding_glsl::utexture3D())
+            .next_binding_vertex(binding_glsl::texture3D())
             .create(device, "BindGroupLayout: Voxel Renderer");
 
         let mut desc = RenderPipelineCreationDesc::new(

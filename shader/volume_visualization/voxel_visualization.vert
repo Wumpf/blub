@@ -13,7 +13,7 @@ z = (0x31e3 & b) != 0
 #include "utilities.glsl"
 #include "volume_visualization.glsl"
 
-layout(set = 2, binding = 0) uniform utexture3D VoxelVolume;
+layout(set = 2, binding = 0) uniform texture3D VoxelVolume;
 layout(location = 0) out vec3 out_WorldPosition;
 
 vec3 getCubeCoordinate(uint vertexIndex) {
@@ -25,7 +25,7 @@ vec3 getCubeCoordinate(uint vertexIndex) {
 
 void main() {
     ivec3 volumeCoordinate = getVolumeCoordinate(gl_InstanceIndex);
-    uint voxelValue = texelFetch(VoxelVolume, volumeCoordinate, 0).r;
+    float voxelValue = texelFetch(VoxelVolume, volumeCoordinate, 0).r;
     if (voxelValue == 0) {
         gl_Position = vec4(-999999999.0);
         return;
