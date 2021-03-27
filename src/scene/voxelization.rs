@@ -38,7 +38,7 @@ impl SceneVoxelization {
         let group_layout = BindGroupLayoutBuilder::new()
             .next_binding(
                 wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::FRAGMENT,
-                binding_glsl::uimage3D(Self::FORMAT, wgpu::StorageTextureAccess::ReadWrite),
+                binding_glsl::image3D(Self::FORMAT, wgpu::StorageTextureAccess::ReadWrite),
             )
             .create(device, "BindGroupLayout: Voxelization");
 

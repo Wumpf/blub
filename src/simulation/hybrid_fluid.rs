@@ -159,10 +159,7 @@ impl HybridFluid {
         let group_layout_transfer_velocity = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(true)) // particles, velocity component
-            .next_binding_compute(binding_glsl::uimage3D(
-                wgpu::TextureFormat::R32Uint,
-                wgpu::StorageTextureAccess::ReadWrite,
-            )) // linkedlist_volume
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // linkedlist_volume
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, wgpu::StorageTextureAccess::ReadWrite)) // marker volume
             .next_binding_compute(binding_glsl::image3D(
                 wgpu::TextureFormat::R32Float,
@@ -202,18 +199,12 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::texture3D()) // velocityY
             .next_binding_compute(binding_glsl::texture3D()) // velocityZ
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, wgpu::StorageTextureAccess::ReadWrite)) // marker volume
-            .next_binding_compute(binding_glsl::uimage3D(
-                wgpu::TextureFormat::R32Uint,
-                wgpu::StorageTextureAccess::ReadWrite,
-            )) // linkedlist_volume
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // linkedlist_volume
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
-            .next_binding_compute(binding_glsl::uimage3D(
-                wgpu::TextureFormat::R32Uint,
-                wgpu::StorageTextureAccess::ReadWrite,
-            )) // penetration depth
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // penetration depth
             .next_binding_compute(binding_glsl::texture3D()) // Distance field
             .create(device, "BindGroupLayout: Advect to Particles");
 

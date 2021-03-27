@@ -103,42 +103,10 @@ pub fn image2DArray(format: wgpu::TextureFormat, access: wgpu::StorageTextureAcc
     }
 }
 
-pub fn iimage2D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
-    wgpu::BindingType::StorageTexture {
-        access,
-        view_dimension: wgpu::TextureViewDimension::D2,
-        format: format,
-    }
-}
-
-pub fn uimage2D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
-    wgpu::BindingType::StorageTexture {
-        access,
-        view_dimension: wgpu::TextureViewDimension::D2,
-        format: format,
-    }
-}
-
 pub fn image3D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
     wgpu::BindingType::StorageTexture {
         access,
         view_dimension: wgpu::TextureViewDimension::D3,
         format: format,
-    }
-}
-
-pub fn iimage3D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
-    wgpu::BindingType::StorageTexture {
-        access,
-        view_dimension: wgpu::TextureViewDimension::D3,
-        format: format,
-    }
-}
-
-pub fn uimage3D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) -> wgpu::BindingType {
-    wgpu::BindingType::StorageTexture {
-        access,
-        format: format,
-        view_dimension: wgpu::TextureViewDimension::D3,
     }
 }
