@@ -39,5 +39,35 @@ void main() {
                                textureLod(sampler3D(VelocityVolumeY, SamplerTrilinearClamp), offsetPositions[1] * texcoordSpaceFactor, 0).x,
                                textureLod(sampler3D(VelocityVolumeZ, SamplerTrilinearClamp), offsetPositions[2] * texcoordSpaceFactor, 0).x);
 
-    Particles[particleIndex].Position = originalPosition + positionChange;
+    vec3 newPosition = originalPosition + positionChange;
+
+    // For explanation see advect_particles
+    // Push-back only done there.
+    {
+        vec3 texcoord = newPosition * texcoordSpaceFactor;
+        // Wall penetration.
+        if (clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001)) != newPosition ||
+            texture(sampler3D(MarkerVolume, SamplerPointClamp), texcoord).x == CELL_SOLID) {
+            // the length can't be 0, otherwise we wouldn't enter here. But result may be inaccurate.
+            float currentStepLength = length(positionChange) + 1e-10;
+            vec3 movementDirection = positionChange / currentStepLength;
+            vec3 absMovementDirection = abs(movementDirection);
+
+            vec3 posInCell = fract(originalPosition);
+            float maxAllowedStep = currentStepLength;
+            maxAllowedStep = min(maxAllowedStep, (movementDirection.x > 0.0 ? posInCell.x : 1.0 - posInCell.x) / absMovementDirection.x - 0.001);
+            maxAllowedStep = min(maxAllowedStep, (movementDirection.y > 0.0 ? posInCell.y : 1.0 - posInCell.y) / absMovementDirection.y - 0.001);
+            maxAllowedStep = min(maxAllowedStep, (movementDirection.z > 0.0 ? posInCell.z : 1.0 - posInCell.z) / absMovementDirection.z - 0.001);
+
+            // Correct position so we really do not penetrate that cell.
+            positionChange = movementDirection * maxAllowedStep;
+
+            newPosition = originalPosition + positionChange;
+            newPosition = clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001));
+
+            // Do we also need to change the derivatives of velocity? Maybe just scale them?
+        }
+    }
+
+    Particles[particleIndex].Position = newPosition;
 }
