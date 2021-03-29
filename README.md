@@ -109,6 +109,8 @@ To my knowledge this is the only publicly available implementation as of writing
 
 ### Push Boundaries
 
+_Stopped using Push Boundaries in favor of dropping signed distance fields. Last use of Push Boundaries is at tag INSERT-TAG_
+
 Push boundaries as described in the paper are a bit challenging for a GPU implementation as they require to store the maximum penetration into a solid cell, thus requiring in theory another vec3 volume with data that needs to be written atomically.
 This displacement is clamped to the length of the cell (as in the paper) allowing us to accurately enough encode this value in a 32 bit value.
 As particles only rarely exit the volume (this happens only due to inaccuracies in the first place), I employ a atomic compare exchange loop for writing the max displacement of a cell.

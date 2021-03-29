@@ -62,9 +62,6 @@ impl Scene {
         let reader = BufReader::new(file);
         let config: SceneConfig = serde_json::from_reader(reader)?;
 
-        let hybrid_fluid = Self::create_fluid_from_config(&config, device, queue, shader_dir, pipeline_manager, global_bind_group_layout);
-        let models = SceneModels::from_config(&device, queue, &config.static_objects)?;
-
         let voxelization = SceneVoxelization::new(
             device,
             shader_dir,
@@ -76,6 +73,17 @@ impl Scene {
                 depth_or_array_layers: config.fluid.grid_dimension.z,
             },
         );
+
+        let hybrid_fluid = Self::create_fluid_from_config(
+            &config,
+            device,
+            queue,
+            shader_dir,
+            pipeline_manager,
+            global_bind_group_layout,
+            &voxelization,
+        );
+        let models = SceneModels::from_config(&device, queue, &config.static_objects)?;
 
         Ok(Scene {
             hybrid_fluid,
@@ -98,6 +106,7 @@ impl Scene {
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         global_bind_group_layout: &wgpu::BindGroupLayout,
+        voxelization: &SceneVoxelization,
     ) -> HybridFluid {
         let mut hybrid_fluid = HybridFluid::new(
             device,
@@ -110,6 +119,7 @@ impl Scene {
             shader_dir,
             pipeline_manager,
             global_bind_group_layout,
+            voxelization,
         );
 
         for cube in config.fluid.fluid_cubes.iter() {
@@ -134,7 +144,15 @@ impl Scene {
         pipeline_manager: &mut PipelineManager,
         global_bind_group_layout: &wgpu::BindGroupLayout,
     ) {
-        self.hybrid_fluid = Self::create_fluid_from_config(&self.config, device, queue, shader_dir, pipeline_manager, global_bind_group_layout);
+        self.hybrid_fluid = Self::create_fluid_from_config(
+            &self.config,
+            device,
+            queue,
+            shader_dir,
+            pipeline_manager,
+            global_bind_group_layout,
+            &self.voxelization,
+        );
         self.distance_field_dirty = true;
     }
 

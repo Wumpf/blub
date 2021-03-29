@@ -1,5 +1,8 @@
-use super::{pressure_solver::*, signed_distance_field::SignedDistanceField};
-use crate::wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, shader::*, uniformbuffer::*};
+use super::pressure_solver::*;
+use crate::{
+    scene::voxelization::SceneVoxelization,
+    wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, shader::*, uniformbuffer::*},
+};
 use rand::prelude::*;
 use std::{collections::VecDeque, path::Path, rc::Rc, time::Duration};
 use wgpu_profiler::{wgpu_profiler, GpuProfiler};
@@ -19,8 +22,6 @@ pub struct HybridFluid {
     pressure_solver: PressureSolver,
     pressure_field_from_velocity: PressureField,
     pressure_field_from_density: PressureField,
-
-    signed_distance_field: SignedDistanceField,
 
     particles_position_llindex: wgpu::Buffer,
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
@@ -78,6 +79,7 @@ impl HybridFluid {
         shader_dir: &ShaderDirectory,
         pipeline_manager: &mut PipelineManager,
         global_bind_group_layout: &wgpu::BindGroupLayout,
+        voxelization: &SceneVoxelization,
     ) -> Self {
         // Resources
         let simulation_properties_uniformbuffer = UniformBuffer::new(device);
@@ -235,8 +237,6 @@ impl HybridFluid {
         let pressure_field_from_velocity = PressureField::new("from velocity", device, grid_dimension, &pressure_solver, solver_config);
         let pressure_field_from_density = PressureField::new("from density", device, grid_dimension, &pressure_solver, solver_config);
 
-        let signed_distance_field = SignedDistanceField::new(device, grid_dimension, shader_dir, pipeline_manager, global_bind_group_layout);
-
         // Bind groups.
         let bind_group_general = match volume_debug_view.as_ref() {
             Some(volume_debug_view) => BindGroupBuilder::new(&group_layout_general)
@@ -253,7 +253,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_x)
-                .texture(signed_distance_field.texture_view())
+                .texture(voxelization.texture_view())
                 .create(device, "BindGroup: Transfer velocity to volume X"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .resource(particles_position_llindex.as_entire_binding())
@@ -261,7 +261,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_y)
-                .texture(signed_distance_field.texture_view())
+                .texture(voxelization.texture_view())
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
             BindGroupBuilder::new(&group_layout_transfer_velocity)
                 .resource(particles_position_llindex.as_entire_binding())
@@ -269,7 +269,7 @@ impl HybridFluid {
                 .texture(&volume_linked_lists_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_z)
-                .texture(signed_distance_field.texture_view())
+                .texture(voxelization.texture_view())
                 .create(device, "BindGroup: Transfer velocity to volume Z"),
         ];
         let bind_group_divergence_compute = BindGroupBuilder::new(&group_layout_divergence_compute)
@@ -306,7 +306,7 @@ impl HybridFluid {
             .resource(particles_velocity_y.as_entire_binding())
             .resource(particles_velocity_z.as_entire_binding())
             .texture(&volume_penetration_depth_view)
-            .texture(signed_distance_field.texture_view())
+            .texture(voxelization.texture_view())
             .create(device, "BindGroup: Write to Particles");
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .resource(particles_position_llindex.as_entire_binding())
@@ -334,7 +334,7 @@ impl HybridFluid {
             .texture(&volume_marker_view)
             .texture(&pressure_field_from_velocity.pressure_view())
             .texture(&pressure_field_from_density.pressure_view())
-            .texture(signed_distance_field.texture_view());
+            .texture(voxelization.texture_view());
         if let Some(volume_debug_view) = volume_debug_view.as_ref() {
             bind_group_renderer_builder = bind_group_renderer_builder.texture(volume_debug_view);
         }
@@ -404,8 +404,6 @@ impl HybridFluid {
             pressure_solver,
             pressure_field_from_velocity,
             pressure_field_from_density,
-
-            signed_distance_field,
 
             particles_position_llindex,
             simulation_properties_uniformbuffer,
@@ -603,25 +601,14 @@ impl HybridFluid {
 
     pub fn update_signed_distance_field_for_static(
         &self,
-        device: &wgpu::Device,
-        pipeline_manager: &PipelineManager,
-        queue: &wgpu::Queue,
-        global_bind_group: &wgpu::BindGroup,
-        static_meshes: &Vec<crate::scene::models::MeshData>,
-        scene_path: &Path,
+        _device: &wgpu::Device,
+        _pipeline_manager: &PipelineManager,
+        _queue: &wgpu::Queue,
+        _global_bind_group: &wgpu::BindGroup,
+        _static_meshes: &Vec<crate::scene::models::MeshData>,
+        _scene_path: &Path,
     ) {
-        let cache_filename = scene_path.parent().unwrap().join(format!(
-            ".{}.static_signed_distance_field.cache",
-            scene_path.file_name().unwrap().to_str().unwrap()
-        ));
-        match self.signed_distance_field.load_signed_distance_field(&cache_filename, queue) {
-            Ok(_) => {}
-            Err(_) => {
-                self.signed_distance_field
-                    .compute_distance_field_for_static(device, pipeline_manager, queue, global_bind_group, static_meshes);
-                self.signed_distance_field.save(&cache_filename, device, queue);
-            }
-        }
+        // todo remove.
     }
 
     pub fn set_gravity_grid(&mut self, gravity: cgmath::Vector3<f32>) {

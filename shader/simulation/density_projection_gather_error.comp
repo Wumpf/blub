@@ -191,20 +191,6 @@ void main() {
     // Clamp density as suggested in paper to avoid displacement of more than half a cell at a time
     density = clamp(density, -0.5, 0.5);
 
-    // Push boundaries
-    if (marker_px == CELL_SOLID)
-        density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(1, 0, 0), 0).x).x;
-    if (marker_py == CELL_SOLID)
-        density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(0, 1, 0), 0).x).y;
-    if (marker_pz == CELL_SOLID)
-        density += unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord + ivec3(0, 0, 1), 0).x).z;
-    if (marker_nx == CELL_SOLID)
-        density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(1, 0, 0), 0).x).x;
-    if (marker_ny == CELL_SOLID)
-        density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 1, 0), 0).x).y;
-    if (marker_nz == CELL_SOLID)
-        density -= unpackPushDisplacement(texelFetch(SolidPenetrationDepth, gridCoord - ivec3(0, 0, 1), 0).x).z;
-
     // We could remove the time factor on both sides of the equation (this is multiplied back during density_projection_position_change),
     // but by keeping it the pressure solver configuration becomes more similar to the configuration for the divergence projection.
     density /= Time.SimulationDelta;

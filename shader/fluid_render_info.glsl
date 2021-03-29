@@ -18,7 +18,7 @@ layout(set = 1, binding = 6) uniform texture3D VelocityVolumeZ;
 layout(set = 1, binding = 7) uniform texture3D MarkerVolume;
 layout(set = 1, binding = 8) uniform texture3D PressureVolume_Velocity;
 layout(set = 1, binding = 9) uniform texture3D PressureVolume_Density;
-layout(set = 1, binding = 10) uniform texture3D SolidSignedDistances;
+layout(set = 1, binding = 10) uniform texture3D VoxelVolume;
 #ifdef DEBUG
 layout(set = 1, binding = 11) uniform texture3D DebugVolume;
 #endif

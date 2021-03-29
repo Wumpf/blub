@@ -15,7 +15,7 @@ layout(set = 2, binding = 6) buffer restrict ParticleBufferVx { vec4 ParticleBuf
 layout(set = 2, binding = 7) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
 layout(set = 2, binding = 8) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
 layout(set = 2, binding = 9, r32ui) uniform restrict coherent uimage3D SolidPenetrationDepth;
-layout(set = 2, binding = 10) uniform texture3D SignedDistanceField;
+layout(set = 2, binding = 10) uniform texture3D SceneVoxelization;
 
 COMPUTE_PASS_PARTICLES
 
@@ -105,48 +105,58 @@ void main() {
     vec3 totalMovement = Time.SimulationDelta * (1.0 / 6.0) * (k1 + 2.0 * (k2 + k3) + k4);
     vec3 newPosition = originalPosition + totalMovement;
 
-    // if a particle managed to get outside of the volume, write to the next cell inside, so we can still give it treatment (with push boundaries!).
-    ivec3 newGridCoord = clamp(ivec3(newPosition), ivec3(0.0), ivec3(gridSize) - ivec3(1.0));
+    // Prevent entering solid cells.
+    // We would need to conservatively step along the movement line and check for any cell on the way if we are allowed to enter
+    // This is quite expensive (and complicated)! Instead we assume that particles are usually slow, so we just check the "target cell"
+    // If we're not allowed to be there, we set the particle to the border of its current cell (with some margin)
+    // (yes, truncating the movement vector like this doesn't do the RK4 we just did any justice)
+    {
+        vec3 texcoord = newPosition * gridTexelSizeNormalized;
+        // Wall penetration.
+        if (clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001)) != newPosition ||
+            // Solid penetration. Note that we use 0.5 as an isovalue with linear sampled grid to smooth things out a bit.
+            texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord).x > 0.5) {
+            // the length can't be inf, otherwise we wouldn't enter here. But result may be inaccurate.
+            float currentStepLength = length(totalMovement) + 1e-10;
+            vec3 movementDirection = totalMovement / currentStepLength;
+            vec3 absMovementDirection = abs(movementDirection);
+
+            vec3 posInCell = fract(originalPosition);
+            float maxAllowedStep = currentStepLength;
+            maxAllowedStep = min(maxAllowedStep, (movementDirection.x > 0.0 ? posInCell.x : 1.0 - posInCell.x) / absMovementDirection.x - 0.001);
+            maxAllowedStep = min(maxAllowedStep, (movementDirection.y > 0.0 ? posInCell.y : 1.0 - posInCell.y) / absMovementDirection.y - 0.001);
+            maxAllowedStep = min(maxAllowedStep, (movementDirection.z > 0.0 ? posInCell.z : 1.0 - posInCell.z) / absMovementDirection.z - 0.001);
+
+            // Correct position and velocity so we really do not penetrate that cell.
+            totalMovement = movementDirection * maxAllowedStep;
+
+            // If we were in this cell to begin with we are in the rare case of "stuck anyways"
+            if (ivec3(originalPosition) == ivec3(newPosition)) {
+                vec3 pushForce =
+                    vec3(texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).x -
+                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).x,
+                         texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(0.0, gridTexelSizeNormalized.y, 0.0)).x -
+                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(0.0, gridTexelSizeNormalized.y, 0.0)).x,
+                         texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(0.0, 0.0, gridTexelSizeNormalized.z)).x -
+                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(0.0, 0.0, gridTexelSizeNormalized.z)).x);
+                totalMovement += pushForce * (Time.SimulationDelta * 50.0);
+            }
+
+            newPosition = originalPosition + totalMovement;
+            newPosition = clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001));
+
+            newVelocity = (movementDirection * maxAllowedStep) / Time.SimulationDelta;
+
+            // Do we also need to change the derivatives of velocity? Maybe just scale them?
+        }
+    }
 
     // Write new LinkedList & marker grid for density projection step.
     {
         // TODO: Consider not changing, density_projection_gather_error step can do this easily by checking the linkedlist volume
-        imageStore(MarkerVolume, newGridCoord, vec4(CELL_FLUID, 0, 0, 0));
+        imageStore(MarkerVolume, ivec3(newPosition), vec4(CELL_FLUID, 0, 0, 0));
         ivec3 nearestDualGridCell = ivec3(newPosition - vec3(0.5));
         Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
-    }
-
-    // If we penetrated a solid, write max penetration into the penetration depth volume.
-    // Note that penetration is clamped out  from -1 to 1 for distance to the cell
-    //
-    // Domain bounds are treated separately - it would mess our distance field computation up quite a bit since it would mean that there's a "special"
-    // interior with positive sign. (can be done but I figured it's too messy)
-    {
-        vec3 penetration = max(vec3(0.0), vec3(1.0) - newPosition) - max(vec3(0.0), newPosition - vec3(gridSize - 1.0));
-        vec3 texcoord = newPosition * gridTexelSizeNormalized; // / (gridSize - vec3(1));
-        float solidDistance = texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord).x;
-        if (solidDistance < 0.0) {
-            vec3 solidDistanceGradient = normalize(vec3(
-                texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord + vec3(gridTexelSizeNormalized.x, 0, 0)).x - solidDistance,
-                texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord + vec3(0, gridTexelSizeNormalized.y, 0)).x - solidDistance,
-                texture(sampler3D(SignedDistanceField, SamplerTrilinearClamp), texcoord + vec3(0, 0, gridTexelSizeNormalized.z)).x - solidDistance));
-            penetration = -solidDistance * solidDistanceGradient;
-        }
-
-        // Write out max penetration.
-        if (any(notEqual(penetration, vec3(0.0)))) {
-            uint packedPenetrationVector = packPushDisplacement(penetration); // This is where clamp -1 to 1 happens
-            float penetrationLengthCompVal = displacementLengthComparisionValue(packedPenetrationVector);
-            uint previousPackedPenetrationVector = imageLoad(SolidPenetrationDepth, newGridCoord).x;
-            while (displacementLengthComparisionValue(previousPackedPenetrationVector) < penetrationLengthCompVal) {
-                uint expectedPackedPenetrationVector = previousPackedPenetrationVector;
-                previousPackedPenetrationVector =
-                    imageAtomicCompSwap(SolidPenetrationDepth, newGridCoord, previousPackedPenetrationVector, packedPenetrationVector);
-                if (expectedPackedPenetrationVector == previousPackedPenetrationVector) {
-                    break;
-                }
-            }
-        }
     }
 
     // Write out particle.
