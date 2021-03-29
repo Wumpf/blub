@@ -122,7 +122,7 @@ impl SceneRenderer {
             particle_radius_factor: 0.7,
             enable_box_lines: true,
             enable_mesh_rendering: true,
-            enable_voxel_visualization: true, // todo
+            enable_voxel_visualization: false,
             velocity_visualization_scale: 0.008,
         }
     }
