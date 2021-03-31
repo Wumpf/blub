@@ -13,8 +13,9 @@ z = (0x31e3 & b) != 0
 #include "utilities.glsl"
 #include "volume_visualization.glsl"
 
-layout(set = 2, binding = 0) uniform texture3D VoxelVolume;
+layout(set = 2, binding = 0) uniform texture3D SceneVoxelization;
 layout(location = 0) out vec3 out_WorldPosition;
+layout(location = 1) out flat ivec3 out_VolumeCoordinate;
 
 vec3 getCubeCoordinate(uint vertexIndex) {
     // Idea courtesy of Don Williamson
@@ -24,8 +25,8 @@ vec3 getCubeCoordinate(uint vertexIndex) {
 }
 
 void main() {
-    ivec3 volumeCoordinate = getVolumeCoordinate(gl_InstanceIndex);
-    float voxelValue = texelFetch(VoxelVolume, volumeCoordinate, 0).r;
+    out_VolumeCoordinate = getVolumeCoordinate(gl_InstanceIndex);
+    float voxelValue = texelFetch(SceneVoxelization, out_VolumeCoordinate, 0).w;
     if (voxelValue == 0) {
         gl_Position = vec4(-999999999.0);
         return;
@@ -33,7 +34,7 @@ void main() {
 
     vec3 cubeCoordinate = getCubeCoordinate(gl_VertexIndex);
 
-    out_WorldPosition = (vec3(volumeCoordinate) + cubeCoordinate) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldMin;
+    out_WorldPosition = (vec3(out_VolumeCoordinate) + cubeCoordinate) * Rendering.FluidGridToWorldScale + Rendering.FluidWorldMin;
 
     gl_Position = Camera.ViewProjection * vec4(out_WorldPosition, 1.0);
 }

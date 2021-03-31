@@ -1,0 +1,65 @@
+{
+    "gravity": {
+        "x": 0.0,
+        "y": -9.81,
+        "z": 0.0
+    },
+    "fluid": {
+        "world_position": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+        },
+        "grid_to_world_scale": 0.01,
+        "grid_dimension": {
+            "x": 128,
+            "y": 64,
+            "z": 64
+        },
+        "max_num_particles": 1238328,
+        "fluid_cubes": [
+            {
+                "min": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "max": {
+                    "x": 0.64,
+                    "y": 0.4,
+                    "z": 0.64
+                }
+            }
+        ]
+    },
+    "static_objects": [
+        {
+            "model": "cube.obj",
+            "world_position": {
+                "x": 0.8,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "scale": 0.64,
+            "rotation_angles": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "animation": {
+                "translation_target": {
+                    "x": 1.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "translation_curve": "Linear",
+                "translation_duration": 0.8,
+                "rotational_speed": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                }
+            }
+        }
+    ]
+}

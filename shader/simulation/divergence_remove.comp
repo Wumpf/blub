@@ -24,7 +24,11 @@ float samplePressure(ivec3 gridCoord, float cellType) {
         float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;                                                                   \
         if (centerCellType == CELL_FLUID || neighborCellType == CELL_FLUID) {                                                                        \
             float velocity = 0.0;                                                                                                                    \
-            if (neighborCellType != CELL_SOLID && centerCellType != CELL_SOLID) {                                                                    \
+            if (centerCellType == CELL_SOLID) {                                                                                                      \
+                velocity = texelFetch(SceneVoxelization, centerGridCoord, 0)[component];                                                             \
+            } else if (neighborCellType == CELL_SOLID) {                                                                                             \
+                velocity = texelFetch(SceneVoxelization, neighborGridCoord, 0)[component];                                                           \
+            } else {                                                                                                                                 \
                 velocity = imageLoad(velocityVolume, centerGridCoord).x;                                                                             \
                 velocity -= centerPressure - samplePressure(neighborGridCoord, neighborCellType);                                                    \
             }                                                                                                                                        \
@@ -43,7 +47,4 @@ void main() {
     correctVelocityForDirection(VelocityVolumeX, centerGridCoord, centerPressure, centerCellType, 0);
     correctVelocityForDirection(VelocityVolumeY, centerGridCoord, centerPressure, centerCellType, 1);
     correctVelocityForDirection(VelocityVolumeZ, centerGridCoord, centerPressure, centerCellType, 2);
-
-    // Clear penetration volume.. now is as good as any time?
-    imageStore(SolidPenetrationDepth, centerGridCoord, uvec4(0.0));
 }

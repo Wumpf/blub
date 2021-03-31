@@ -65,13 +65,14 @@ layout(set = 0, binding = 2) uniform sampler SamplerPointClamp;
 struct MeshData {
     // transposed so we can store them in 3 vec4s.
     mat3x4 Transform;
-    mat3x4 InverseTransform;
+    vec3 StepTranslation; // How much the object moved in the last/current physics step.
+    // float _Padding0;
 
     uvec2 VertexBufferRange;
     uvec2 IndexBufferRange;
 
     int TextureIndex;
-    vec3 _Padding;
+    // ivec3 _Padding1;
 };
 layout(set = 0, binding = 3) restrict readonly buffer Meshes_ { MeshData Meshes[]; };
 // Not going with dynamic size (UNSIZED_BINDING_ARRAY extension) for convenience in layout setup (which doesn't change per scene).

@@ -211,14 +211,7 @@ impl SimulationController {
         }
 
         if self.timer.simulation_frame_loop(max_total_step_per_frame) == SimulationStepResult::PerformStepAndCallAgain {
-            scene.step(
-                self.timer.simulation_delta(),
-                device,
-                profiler,
-                pipeline_manager,
-                queue,
-                global_bind_group,
-            );
+            scene.step(&self.timer, device, profiler, pipeline_manager, queue, global_bind_group);
             return true;
         }
         return false;

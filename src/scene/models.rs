@@ -1,19 +1,37 @@
 use cgmath::{EuclideanSpace, Matrix, SquareMatrix};
 use serde::Deserialize;
-use std::{error::Error, path::Path, path::PathBuf};
+use std::{error::Error, path::Path, path::PathBuf, time::Duration};
 use wgpu::util::DeviceExt;
 
+use crate::timer::Timer;
+
 // Data describing a model in the scene.
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct StaticObjectConfig {
     pub model: PathBuf,
     pub world_position: cgmath::Point3<f32>,
     pub scale: f32,
     pub rotation_angles: cgmath::Point3<cgmath::Deg<f32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animation: Option<RigidAnimation>,
 }
 
-pub struct MeshData {
-    pub transform: cgmath::Matrix4<f32>,            // todo? 3x4 is enough (rotation, scale, translation)
+#[derive(Deserialize, Clone)]
+pub enum AnimationCurve {
+    Linear,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct RigidAnimation {
+    pub translation_target: cgmath::Point3<f32>,
+    pub translation_curve: AnimationCurve,
+    pub translation_duration: f32, // time to reach the target_position in seconds
+                                   //pub rotational_speed: cgmath::Vector3<cgmath::Deg<f32>>, // TODO
+}
+
+pub struct StaticMeshData {
+    pub config: StaticObjectConfig,
+
     pub vertex_buffer_range: core::ops::Range<u32>, // range in number of vertices (not bytes!)
     pub index_buffer_range: core::ops::Range<u32>,  // range in number of indices (not bytes!)
 
@@ -21,23 +39,20 @@ pub struct MeshData {
     // But per loaded mesh we typically only have one.
     pub texture_index: i32,
 }
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct MeshDataGpu {
     transform_r0: cgmath::Vector4<f32>,
     transform_r1: cgmath::Vector4<f32>,
     transform_r2: cgmath::Vector4<f32>,
-
-    inverse_transform_r0: cgmath::Vector4<f32>,
-    inverse_transform_r1: cgmath::Vector4<f32>,
-    inverse_transform_r2: cgmath::Vector4<f32>,
+    step_translation: cgmath::Vector3<f32>,
+    padding0: f32,
 
     vertex_buffer_range: cgmath::Vector2<u32>,
     index_buffer_range: cgmath::Vector2<u32>,
 
     texture_index: i32,
-    padding: cgmath::Vector3<f32>,
+    padding1: cgmath::Vector3<i32>,
 }
 unsafe impl bytemuck::Pod for MeshDataGpu {}
 unsafe impl bytemuck::Zeroable for MeshDataGpu {}
@@ -74,7 +89,7 @@ pub struct SceneModels {
 
     pub texture_views: Vec<wgpu::TextureView>,
 
-    pub meshes: Vec<MeshData>,
+    pub meshes: Vec<StaticMeshData>,
 }
 
 fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &Path) -> wgpu::Texture {
@@ -118,6 +133,55 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
     );
 
     texture
+}
+
+impl StaticMeshData {
+    fn world_position_at_time(&self, total_simulated_time: Duration) -> cgmath::Point3<f32> {
+        if let Some(animation) = &self.config.animation {
+            let mut translation_progress = total_simulated_time.as_secs_f32() % (animation.translation_duration * 2.0);
+            if translation_progress > animation.translation_duration {
+                translation_progress = animation.translation_duration * 2.0 - translation_progress;
+            }
+            translation_progress /= animation.translation_duration;
+
+            self.config.world_position * (1.0 - translation_progress) + animation.translation_target.to_vec() * translation_progress
+        } else {
+            self.config.world_position
+        }
+    }
+
+    fn to_gpu(&self, total_simulated_time: Duration, simulation_delta: Duration) -> MeshDataGpu {
+        let world_position = self.world_position_at_time(total_simulated_time);
+
+        // Brute force way for getting a translation vector. Analytical derivative would probably be better.
+        let step_translation = if total_simulated_time > simulation_delta {
+            world_position - self.world_position_at_time(total_simulated_time - simulation_delta)
+        } else {
+            cgmath::vec3(0.0, 0.0, 0.0)
+        };
+
+        let transform = cgmath::Matrix4::from_translation(world_position.to_vec())
+            * cgmath::Matrix4::from_scale(self.config.scale)
+            * cgmath::Matrix4::from_angle_x(self.config.rotation_angles.x)
+            * cgmath::Matrix4::from_angle_y(self.config.rotation_angles.y)
+            * cgmath::Matrix4::from_angle_z(self.config.rotation_angles.z);
+
+        let transposed_transform = transform.transpose();
+        // let inverse_transform = transposed_transform
+        //     .invert()
+        //     .expect("Mesh matrix not invertible, this should never happen");
+        MeshDataGpu {
+            transform_r0: transposed_transform.x,
+            transform_r1: transposed_transform.y,
+            transform_r2: transposed_transform.z,
+            step_translation,
+            padding0: 0.0,
+            vertex_buffer_range: cgmath::vec2(self.vertex_buffer_range.start, self.vertex_buffer_range.end),
+            index_buffer_range: cgmath::vec2(self.index_buffer_range.start, self.index_buffer_range.end),
+            texture_index: self.texture_index,
+            padding1: cgmath::vec3(0, 0, 0),
+        }
+    }
 }
 
 impl SceneModels {
@@ -186,12 +250,8 @@ impl SceneModels {
                         -1
                     };
 
-                    meshes.push(MeshData {
-                        transform: cgmath::Matrix4::from_translation(static_object_config.world_position.to_vec())
-                            * cgmath::Matrix4::from_scale(static_object_config.scale)
-                            * cgmath::Matrix4::from_angle_x(static_object_config.rotation_angles.x)
-                            * cgmath::Matrix4::from_angle_y(static_object_config.rotation_angles.y)
-                            * cgmath::Matrix4::from_angle_z(static_object_config.rotation_angles.z),
+                    meshes.push(StaticMeshData {
+                        config: static_object_config.clone(),
                         vertex_buffer_range: (vertices.len() as u32)..(vertices.len() as u32),
                         index_buffer_range: (indices.len() as u32)..(indices.len() as u32),
                         texture_index,
@@ -226,24 +286,7 @@ impl SceneModels {
 
         let meshes_gpu: Vec<MeshDataGpu> = meshes
             .iter()
-            .map(|mesh| {
-                let transposed_transform = mesh.transform.transpose();
-                let inverse_transform = transposed_transform
-                    .invert()
-                    .expect("Mesh matrix not invertible, this should never happen");
-                MeshDataGpu {
-                    transform_r0: transposed_transform.x,
-                    transform_r1: transposed_transform.y,
-                    transform_r2: transposed_transform.z,
-                    inverse_transform_r0: inverse_transform.x,
-                    inverse_transform_r1: inverse_transform.y,
-                    inverse_transform_r2: inverse_transform.z,
-                    vertex_buffer_range: cgmath::vec2(mesh.vertex_buffer_range.start, mesh.vertex_buffer_range.end),
-                    index_buffer_range: cgmath::vec2(mesh.index_buffer_range.start, mesh.index_buffer_range.end),
-                    texture_index: mesh.texture_index,
-                    padding: cgmath::vec3(0.0, 0.0, 0.0),
-                }
-            })
+            .map(|mesh| mesh.to_gpu(Duration::from_secs(0), Duration::from_secs(0)))
             .collect();
 
         let texture_views = texture_paths
@@ -265,10 +308,20 @@ impl SceneModels {
             mesh_desc_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("SceneModel Mesh Data"),
                 contents: bytemuck::cast_slice(&meshes_gpu),
-                usage: wgpu::BufferUsage::STORAGE,
+                usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
             }),
             meshes,
             texture_views,
         })
+    }
+
+    pub fn step(&self, timer: &Timer, queue: &wgpu::Queue) {
+        // We typically don't have a lot of objects. So just overwrite the entire mesh desc.
+        let meshes_gpu: Vec<MeshDataGpu> = self
+            .meshes
+            .iter()
+            .map(|mesh| mesh.to_gpu(timer.total_simulated_time(), timer.simulation_delta()))
+            .collect();
+        queue.write_buffer(&self.mesh_desc_buffer, 0, bytemuck::cast_slice(&meshes_gpu));
     }
 }

@@ -9,19 +9,19 @@
 #include "../utilities.glsl"
 #include "hybrid_fluid.glsl"
 
-layout(set = 1, binding = 0) uniform texture3D MarkerVolume;
-layout(set = 1, binding = 1) uniform texture3D VelocityVolumeX;
-layout(set = 1, binding = 2) uniform texture3D VelocityVolumeY;
-layout(set = 1, binding = 3) uniform texture3D VelocityVolumeZ;
-layout(set = 1, binding = 4, r32f) uniform restrict image3D Divergence;
+layout(set = 2, binding = 0) uniform texture3D MarkerVolume;
+layout(set = 2, binding = 1) uniform texture3D VelocityVolumeX;
+layout(set = 2, binding = 2) uniform texture3D VelocityVolumeY;
+layout(set = 2, binding = 3) uniform texture3D VelocityVolumeZ;
+layout(set = 2, binding = 4, r32f) uniform restrict image3D Divergence;
 
 COMPUTE_PASS_VOLUME
 
-float solidWallContribution(ivec3 gridCoord, float wallVelocity) {
+float solidWallContribution(ivec3 gridCoord, float wallVelocity, float solidVelocity) {
     // (Moving solid will need to be treated here)
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker == CELL_SOLID)
-        return wallVelocity;
+        return wallVelocity - solidVelocity;
     else
         return 0.0;
 }
@@ -34,6 +34,7 @@ void main() {
     // place!
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
+        imageStore(DebugVolume, ivec3(gl_GlobalInvocationID), vec4(0.0));
         return;
     }
 
@@ -62,13 +63,27 @@ void main() {
     divergence += velocityPositiveBoundary.y - velocityNegativeBoundary.y;
     divergence += velocityPositiveBoundary.z - velocityNegativeBoundary.z;
 
+    // TODO? Solid velocity isn't available as a proper staggered grid right now
+
     // Account for solid walls.
-    divergence += solidWallContribution(gridCoord - ivec3(1, 0, 0), velocityNegativeBoundary.x).x;
-    divergence += solidWallContribution(gridCoord - ivec3(0, 1, 0), velocityNegativeBoundary.y).x;
-    divergence += solidWallContribution(gridCoord - ivec3(0, 0, 1), velocityNegativeBoundary.z).x;
-    divergence -= solidWallContribution(gridCoord + ivec3(1, 0, 0), velocityPositiveBoundary.x).x;
-    divergence -= solidWallContribution(gridCoord + ivec3(0, 1, 0), velocityPositiveBoundary.y).x;
-    divergence -= solidWallContribution(gridCoord + ivec3(0, 0, 1), velocityPositiveBoundary.z).x;
+    divergence +=
+        solidWallContribution(gridCoord - ivec3(1, 0, 0), velocityNegativeBoundary.x, texelFetch(SceneVoxelization, gridCoord - ivec3(1, 0, 0), 0).x)
+            .x;
+    divergence +=
+        solidWallContribution(gridCoord - ivec3(0, 1, 0), velocityNegativeBoundary.y, texelFetch(SceneVoxelization, gridCoord - ivec3(0, 1, 0), 0).y)
+            .x;
+    divergence +=
+        solidWallContribution(gridCoord - ivec3(0, 0, 1), velocityNegativeBoundary.z, texelFetch(SceneVoxelization, gridCoord - ivec3(0, 0, 1), 0).z)
+            .x;
+    divergence -=
+        solidWallContribution(gridCoord + ivec3(1, 0, 0), velocityPositiveBoundary.x, texelFetch(SceneVoxelization, gridCoord + ivec3(1, 0, 0), 0).x)
+            .x;
+    divergence -=
+        solidWallContribution(gridCoord + ivec3(0, 1, 0), velocityPositiveBoundary.y, texelFetch(SceneVoxelization, gridCoord + ivec3(0, 1, 0), 0).y)
+            .x;
+    divergence -=
+        solidWallContribution(gridCoord + ivec3(0, 0, 1), velocityPositiveBoundary.z, texelFetch(SceneVoxelization, gridCoord + ivec3(0, 0, 1), 0).z)
+            .x;
 
     imageStore(Divergence, gridCoord, divergence.xxxx);
 }

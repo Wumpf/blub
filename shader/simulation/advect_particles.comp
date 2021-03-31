@@ -14,8 +14,6 @@ layout(set = 2, binding = 5) buffer restrict ParticlePositionLlBuffer { Particle
 layout(set = 2, binding = 6) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
 layout(set = 2, binding = 7) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
 layout(set = 2, binding = 8) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
-layout(set = 2, binding = 9, r32ui) uniform restrict coherent uimage3D SolidPenetrationDepth;
-layout(set = 2, binding = 10) uniform texture3D SceneVoxelization;
 
 COMPUTE_PASS_PARTICLES
 
@@ -114,7 +112,7 @@ void main() {
         vec3 texcoord = newPosition * gridTexelSizeNormalized;
         // Wall penetration.
         if (clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001)) != newPosition ||
-            texture(sampler3D(SceneVoxelization, SamplerPointClamp), texcoord).x > 0.0) {
+            texture(sampler3D(SceneVoxelization, SamplerPointClamp), texcoord).w > 0.0) {
             // the length can't be 0, otherwise we wouldn't enter here. But result may be inaccurate.
             float currentStepLength = length(totalMovement) + 1e-10;
             vec3 movementDirection = totalMovement / currentStepLength;
@@ -133,12 +131,12 @@ void main() {
             if (ivec3(originalPosition) == ivec3(newPosition)) {
                 // Note, we're using smooth interpolation here.
                 vec3 pushForce =
-                    vec3(texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).x -
-                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).x,
-                         texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(0.0, gridTexelSizeNormalized.y, 0.0)).x -
-                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(0.0, gridTexelSizeNormalized.y, 0.0)).x,
-                         texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(0.0, 0.0, gridTexelSizeNormalized.z)).x -
-                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(0.0, 0.0, gridTexelSizeNormalized.z)).x);
+                    vec3(texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).w -
+                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).w,
+                         texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(0.0, gridTexelSizeNormalized.y, 0.0)).w -
+                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(0.0, gridTexelSizeNormalized.y, 0.0)).w,
+                         texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(0.0, 0.0, gridTexelSizeNormalized.z)).w -
+                             texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(0.0, 0.0, gridTexelSizeNormalized.z)).w);
                 totalMovement += pushForce * (Time.SimulationDelta * 50.0);
             }
 

@@ -3,15 +3,18 @@ pub mod voxelization;
 
 use crate::{
     simulation::HybridFluid,
+    timer::Timer,
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
 };
 use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 
 use serde::Deserialize;
-use std::{error, fs::File, io::BufReader, path::Path, path::PathBuf, time::Duration};
+use std::{error, fs::File, io::BufReader, path::Path, path::PathBuf};
 
-use self::models::{SceneModels, StaticObjectConfig};
-use self::voxelization::SceneVoxelization;
+use self::{
+    models::{SceneModels, StaticObjectConfig},
+    voxelization::SceneVoxelization,
+};
 
 #[derive(Deserialize)]
 pub struct Box {
@@ -158,7 +161,7 @@ impl Scene {
 
     pub fn step(
         &mut self,
-        simulation_delta: Duration,
+        timer: &Timer,
         device: &wgpu::Device,
         profiler: &mut GpuProfiler,
         pipeline_manager: &PipelineManager,
@@ -177,11 +180,13 @@ impl Scene {
             self.distance_field_dirty = false;
         }
 
-        // todo: Animate everything that is animated.
-
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Encoder: Scene Step"),
         });
+
+        //wgpu_profiler!("Animate Models", profiler, &mut encoder, device, {
+        self.models.step(timer, queue);
+        //});
 
         wgpu_profiler!("Voxelize Scene", profiler, &mut encoder, device, {
             self.voxelization.update(&mut encoder, pipeline_manager, global_bind_group, &self.models);
@@ -189,7 +194,7 @@ impl Scene {
 
         wgpu_profiler!("HybridFluid step", profiler, &mut encoder, device, {
             self.hybrid_fluid.step(
-                simulation_delta,
+                timer.simulation_delta(),
                 &mut encoder,
                 device,
                 queue,

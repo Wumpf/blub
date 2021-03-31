@@ -12,6 +12,3 @@ layout(set = 2, binding = 1, r32f) uniform restrict image3D VelocityVolumeX;
 layout(set = 2, binding = 2, r32f) uniform restrict image3D VelocityVolumeY;
 layout(set = 2, binding = 3, r32f) uniform restrict image3D VelocityVolumeZ;
 layout(set = 2, binding = 4) uniform texture3D PressureVolume;
-
-// TODO: Have this somewhere else?
-layout(set = 2, binding = 5, r32ui) uniform restrict coherent uimage3D SolidPenetrationDepth;

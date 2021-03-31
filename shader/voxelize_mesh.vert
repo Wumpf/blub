@@ -6,6 +6,7 @@
 layout(push_constant) uniform PushConstants_ { uint MeshIndex; };
 
 layout(location = 0) out flat uint out_SideIndex;
+layout(location = 1) out flat vec3 out_StepTranslation;
 
 out gl_PerVertex { vec4 gl_Position; };
 
@@ -20,6 +21,8 @@ void main() {
     vec3 triangleNormalAbs = abs(cross(trianglePosWorld[1] - trianglePosWorld[0], trianglePosWorld[2] - trianglePosWorld[0]));
     out_SideIndex = triangleNormalAbs.x > triangleNormalAbs.y ? 0 : 1;
     out_SideIndex = triangleNormalAbs[out_SideIndex] > triangleNormalAbs.z ? out_SideIndex : 2;
+
+    out_StepTranslation = Meshes[MeshIndex].StepTranslation / Rendering.FluidGridToWorldScale; // precompute?
 
     vec3 voxelCoordinates = (trianglePosWorld[gl_VertexIndex % 3] - Rendering.FluidWorldMin) / Rendering.FluidGridToWorldScale;
     vec3 swizzledVoxelCoordinates;

@@ -20,7 +20,6 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     neighborGridCoord[component] += 1;
     float neighborCellType = texelFetch(MarkerVolume, neighborGridCoord, 0).x;
 
-    // We want to deal with position changes, from here on as the penetration value is a position change as well.
     float positionChange = (samplePressure(neighborGridCoord, neighborCellType) - centerPressure) * Time.SimulationDelta;
 
     // Neumann boundary conditions
@@ -31,7 +30,7 @@ float computePositionChangeForDirection(float centerCellType, ivec3 centerGridCo
     } else if (centerCellType == CELL_SOLID && neighborCellType != CELL_SOLID) {
         positionChange = 0.0;
     } else {
-        // nop, already did that. todo restructure me
+        // todo restructure me
     }
 
     return positionChange;

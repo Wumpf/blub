@@ -3,13 +3,16 @@
 #define COMPUTE_PASS_VOLUME layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 
 #ifndef NO_SIMPROPS
+
 layout(set = 1, binding = 0) uniform SimulationProperties {
     vec3 GravityGridSpace;
     uint NumParticles;
 };
 
+layout(set = 1, binding = 1) uniform texture3D SceneVoxelization;
+
 #ifdef DEBUG
-layout(set = 1, binding = 1, r32f) uniform restrict image3D DebugVolume;
+layout(set = 1, binding = 2, r32f) uniform restrict image3D DebugVolume;
 #endif
 
 #endif

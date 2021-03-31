@@ -5,9 +5,10 @@
 
 layout(push_constant) uniform PushConstants_ { uint MeshIndex; };
 
-layout(set = 1, binding = 0, rgba16f) uniform restrict writeonly image3D VoxelVolume;
+layout(set = 1, binding = 0, rgba16f) uniform restrict writeonly image3D SceneVoxelization;
 
 layout(location = 0) in flat uint in_SideIndex;
+layout(location = 1) in flat vec3 in_StepTranslation;
 
 layout(location = 0) out float out_Dummy;
 
@@ -21,7 +22,7 @@ void main() {
     voxelPosSwizzled.xy = gl_FragCoord.xy;
     voxelPosSwizzled.z = gl_FragCoord.z * viewportSize;
 
-    imageStore(VoxelVolume, UnswizzlePos(ivec3(voxelPosSwizzled)), vec4(1));
+    imageStore(SceneVoxelization, UnswizzlePos(ivec3(voxelPosSwizzled)), vec4(in_StepTranslation, 1.0));
 
     // "Depth Conservative"
     // If there is a strong change in depth we need to mark extra more voxels
@@ -33,10 +34,10 @@ void main() {
     float maxChange = max(abs(depthDx), abs(depthDy));
 
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z - maxChange)) {
-        imageStore(VoxelVolume, UnswizzlePos(ivec3(voxelPosSwizzled - vec3(0, 0, 1))), vec4(1));
+        imageStore(SceneVoxelization, UnswizzlePos(ivec3(voxelPosSwizzled - vec3(0, 0, 1))), vec4(in_StepTranslation, 1.0));
     }
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z + maxChange)) {
-        imageStore(VoxelVolume, UnswizzlePos(ivec3(voxelPosSwizzled + vec3(0, 0, 1))), vec4(1));
+        imageStore(SceneVoxelization, UnswizzlePos(ivec3(voxelPosSwizzled + vec3(0, 0, 1))), vec4(in_StepTranslation, 1.0));
     }
 
     out_Dummy = 0.0;

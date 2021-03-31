@@ -7,6 +7,5 @@ layout(set = 2, binding = 1) buffer restrict readonly ParticleComp { vec4 Partic
 layout(set = 2, binding = 2, r32ui) uniform restrict uimage3D LinkedListDualGrid;
 layout(set = 2, binding = 3, r8_snorm) uniform restrict image3D MarkerVolume;
 layout(set = 2, binding = 4, r32f) uniform restrict image3D VelocityComponentVolume;
-layout(set = 2, binding = 5) uniform texture3D VoxelVolume;
 
 layout(push_constant) uniform PushConstants { uint VelocityTransferComponent; };
