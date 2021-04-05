@@ -1,7 +1,7 @@
 #version 460
 
-#include "global_bindings.glsl"
-#include "utilities.glsl"
+#include "../global_bindings.glsl"
+#include "../utilities.glsl"
 
 layout(push_constant) uniform PushConstants_ { uint MeshIndex; };
 
@@ -12,7 +12,9 @@ layout(location = 1) in flat vec3 in_StepTranslation;
 
 layout(location = 0) out float out_Dummy;
 
-ivec3 UnswizzlePos(ivec3 pos) { return in_SideIndex == 0 ? pos.zyx : (in_SideIndex == 1 ? pos.xzy : pos.xyz); }
+ivec3 UnswizzlePosAndClamp(ivec3 pos) {
+    return clamp(in_SideIndex == 0 ? pos.zyx : (in_SideIndex == 1 ? pos.xzy : pos.xyz), ivec3(0), ivec3(Rendering.FluidGridResolution) - ivec3(1));
+}
 
 void main() {
     // Retrieve voxel pos from gl_FragCoord
@@ -22,7 +24,12 @@ void main() {
     voxelPosSwizzled.xy = gl_FragCoord.xy;
     voxelPosSwizzled.z = gl_FragCoord.z * viewportSize;
 
-    imageStore(SceneVoxelization, UnswizzlePos(ivec3(voxelPosSwizzled)), vec4(in_StepTranslation, 1.0));
+    // New Idea:
+    // * Every voxel encodes "surface voxel distance" and an expansion direction
+    // * expansion step reads this out and expands, writing out new expansion dir, loop this a couple of times
+    //      * on every expansion we write the distance to the last cell in
+
+    imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled)), vec4(in_StepTranslation, -1.0));
 
     // "Depth Conservative"
     // If there is a strong change in depth we need to mark extra more voxels
@@ -34,10 +41,10 @@ void main() {
     float maxChange = max(abs(depthDx), abs(depthDy));
 
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z - maxChange)) {
-        imageStore(SceneVoxelization, UnswizzlePos(ivec3(voxelPosSwizzled - vec3(0, 0, 1))), vec4(in_StepTranslation, 1.0));
+        imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled - vec3(0, 0, 1))), vec4(in_StepTranslation, -1.0));
     }
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z + maxChange)) {
-        imageStore(SceneVoxelization, UnswizzlePos(ivec3(voxelPosSwizzled + vec3(0, 0, 1))), vec4(in_StepTranslation, 1.0));
+        imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled + vec3(0, 0, 1))), vec4(in_StepTranslation, -1.0));
     }
 
     out_Dummy = 0.0;

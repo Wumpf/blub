@@ -1,7 +1,7 @@
 #version 460
 
-#include "global_bindings.glsl"
-#include "utilities.glsl"
+#include "../global_bindings.glsl"
+#include "../utilities.glsl"
 
 layout(push_constant) uniform PushConstants_ { uint MeshIndex; };
 

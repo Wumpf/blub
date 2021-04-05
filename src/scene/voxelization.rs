@@ -5,7 +5,7 @@ use crate::wgpu_utils::{binding_builder::*, binding_glsl, pipelines::*, shader::
 
 pub struct SceneVoxelization {
     clear_pipeline: ComputePipelineHandle,
-    voxelization_pipeline: RenderPipelineHandle,
+    pipeline_conservative_hull: RenderPipelineHandle,
     bind_group: wgpu::BindGroup,
     volume_view: wgpu::TextureView,
 
@@ -46,7 +46,7 @@ impl SceneVoxelization {
             .texture(&volume_view)
             .create(device, "BindGroup: Voxelization");
 
-        let voxelization_pipeline = pipeline_manager.create_render_pipeline(
+        let pipeline_conservative_hull = pipeline_manager.create_render_pipeline(
             device,
             shader_dir,
             RenderPipelineCreationDesc {
@@ -60,7 +60,7 @@ impl SceneVoxelization {
                     }],
                 })),
                 vertex: VertexStateCreationDesc {
-                    shader_relative_path: "voxelize_mesh.vert".into(),
+                    shader_relative_path: "voxelize/conservative_hull.vert".into(),
                     buffers: Vec::new(),
                 },
                 primitive: wgpu::PrimitiveState {
@@ -72,7 +72,7 @@ impl SceneVoxelization {
                 multisample: wgpu::MultisampleState::default(),
                 // Needed until https://github.com/gpuweb/gpuweb/issues/503 is resolved
                 fragment: FragmentStateCreationDesc {
-                    shader_relative_path: "voxelize_mesh.frag".into(),
+                    shader_relative_path: "voxelize/conservative_hull.frag".into(),
                     targets: vec![wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Rgba8UnormSrgb,
                         blend: None,
@@ -92,7 +92,7 @@ impl SceneVoxelization {
                     bind_group_layouts: &[&group_layout.layout],
                     push_constant_ranges: &[],
                 })),
-                compute_shader_relative_path: "voxelize_clear.comp".into(),
+                compute_shader_relative_path: "voxelize/clear.comp".into(),
             },
         );
 
@@ -116,7 +116,7 @@ impl SceneVoxelization {
             .create_view(&Default::default());
 
         SceneVoxelization {
-            voxelization_pipeline,
+            pipeline_conservative_hull,
             clear_pipeline,
             bind_group,
             volume_view,
@@ -166,7 +166,7 @@ impl SceneVoxelization {
         });
 
         rpass.set_viewport(0.0, 0.0, self.viewport_extent as f32, self.viewport_extent as f32, 0.0, 1.0);
-        rpass.set_pipeline(pipeline_manager.get_render(&self.voxelization_pipeline));
+        rpass.set_pipeline(pipeline_manager.get_render(&self.pipeline_conservative_hull));
         rpass.set_bind_group(0, &global_bind_group, &[]);
         rpass.set_bind_group(1, &self.bind_group, &[]);
 

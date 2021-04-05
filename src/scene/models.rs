@@ -1,4 +1,4 @@
-use cgmath::{EuclideanSpace, Matrix, SquareMatrix};
+use cgmath::{EuclideanSpace, Matrix};
 use serde::Deserialize;
 use std::{error::Error, path::Path, path::PathBuf, time::Duration};
 use wgpu::util::DeviceExt;
