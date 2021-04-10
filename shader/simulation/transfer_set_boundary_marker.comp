@@ -14,7 +14,7 @@ void main() {
     if (any(equal(gl_GlobalInvocationID, uvec3(0))) || any(equal(gl_GlobalInvocationID, Rendering.FluidGridResolution - ivec3(1)))) {
         imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_SOLID));
     } else {
-        if (texelFetch(SceneVoxelization, ivec3(gl_GlobalInvocationID), 0).w > 0.0)
+        if (texelFetch(SceneVoxelization, ivec3(gl_GlobalInvocationID), 0).w != 0.0)
             imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_SOLID));
     }
 }

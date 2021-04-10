@@ -29,7 +29,7 @@ void main() {
     // * expansion step reads this out and expands, writing out new expansion dir, loop this a couple of times
     //      * on every expansion we write the distance to the last cell in
 
-    imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled)), vec4(in_StepTranslation, -1.0));
+    imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled)), vec4(in_StepTranslation, 1.0));
 
     // "Depth Conservative"
     // If there is a strong change in depth we need to mark extra more voxels
@@ -41,10 +41,10 @@ void main() {
     float maxChange = max(abs(depthDx), abs(depthDy));
 
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z - maxChange)) {
-        imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled - vec3(0, 0, 1))), vec4(in_StepTranslation, -1.0));
+        imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled - vec3(0, 0, 1))), vec4(in_StepTranslation, 1.0));
     }
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z + maxChange)) {
-        imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled + vec3(0, 0, 1))), vec4(in_StepTranslation, -1.0));
+        imageStore(SceneVoxelization, UnswizzlePosAndClamp(ivec3(voxelPosSwizzled + vec3(0, 0, 1))), vec4(in_StepTranslation, 1.0));
     }
 
     out_Dummy = 0.0;

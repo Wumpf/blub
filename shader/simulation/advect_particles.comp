@@ -40,6 +40,30 @@ void main() {
     vec3 gridSize = Rendering.FluidGridResolution;
     vec3 gridTexelSizeNormalized = 1.0 / gridSize;
 
+    vec3 originalPosition = Particles[particleIndex].Position;
+
+    // Walls are moving, so we need to correct position right away if this particle got "eaten"
+    {
+        vec3 texcoord = originalPosition * gridTexelSizeNormalized;
+        vec4 currentSolid = texture(sampler3D(SceneVoxelization, SamplerPointClamp), texcoord);
+        if (currentSolid.w > 0.0) {
+            // Find "escape cell"
+            vec3 absSolidVelocity = abs(currentSolid.xyz);
+            if (absSolidVelocity.x > absSolidVelocity.y) {
+                if (absSolidVelocity.x > absSolidVelocity.z)
+                    originalPosition.x += sign(currentSolid.x);
+                else
+                    originalPosition.z += sign(currentSolid.z);
+            } else {
+                if (absSolidVelocity.y > absSolidVelocity.z)
+                    originalPosition.y += sign(currentSolid.y);
+                else
+                    originalPosition.z += sign(currentSolid.z);
+            }
+            // imageStore(DebugVolume, ivec3(originalPosition), vec4(1.0));
+        }
+    }
+
     // Sample all 8 neighboring velocity grid cells
     //
     // Notes from experimentation with texture sampling:
@@ -47,7 +71,6 @@ void main() {
     // for free wiht SamplerPointClamp
     // * using linear sampler repeatedly (6x linear sample instead of 8x direct sample + manual interpolate) is indeed slower
     // (as one would hope for sanity's sake :))
-    vec3 originalPosition = Particles[particleIndex].Position;
     vec3 offsetPositions[] = {
         max(vec3(0.0), originalPosition - vec3(1.0, 0.5, 0.5)),
         max(vec3(0.0), originalPosition - vec3(0.5, 1.0, 0.5)),
