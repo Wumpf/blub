@@ -134,7 +134,7 @@ void main() {
     {
         vec3 texcoord = newPosition * gridTexelSizeNormalized;
         // Wall penetration.
-        if (clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001)) != newPosition ||
+        if (clamp(newPosition, vec3(1.001), vec3(Rendering.FluidGridResolution - 1.001)) != newPosition ||
             texture(sampler3D(SceneVoxelization, SamplerPointClamp), texcoord).w > 0.0) {
             // the length can't be 0, otherwise we wouldn't enter here. But result may be inaccurate.
             float currentStepLength = length(totalMovement) + 1e-10;
@@ -150,9 +150,9 @@ void main() {
             // Correct position and velocity so we really do not penetrate that cell.
             totalMovement = movementDirection * maxAllowedStep;
 
-            // If we were in this cell to begin with we are in the rare case of "stuck anyways"
+            // If we were in this cell to begin with we are in the rare case of "stuck anyways".
             if (ivec3(originalPosition) == ivec3(newPosition)) {
-                // Note, we're using smooth interpolation here.
+                // Note, we're using smooth interpolation here to estimate a gradient.
                 vec3 pushForce =
                     vec3(texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord - vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).w -
                              texture(sampler3D(SceneVoxelization, SamplerTrilinearClamp), texcoord + vec3(gridTexelSizeNormalized.x, 0.0, 0.0)).w,
@@ -164,7 +164,7 @@ void main() {
             }
 
             newPosition = originalPosition + totalMovement;
-            newPosition = clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001));
+            newPosition = clamp(newPosition, vec3(1.001), vec3(Rendering.FluidGridResolution - 1.001));
 
             newVelocity = (movementDirection * maxAllowedStep) / Time.SimulationDelta;
 

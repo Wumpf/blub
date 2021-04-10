@@ -46,7 +46,7 @@ void main() {
     {
         vec3 texcoord = newPosition * texcoordSpaceFactor;
         // Wall penetration.
-        if (clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001)) != newPosition ||
+        if (clamp(newPosition, vec3(1.001), vec3(Rendering.FluidGridResolution - 1.001)) != newPosition ||
             texture(sampler3D(MarkerVolume, SamplerPointClamp), texcoord).x == CELL_SOLID) {
             // the length can't be 0, otherwise we wouldn't enter here. But result may be inaccurate.
             float currentStepLength = length(positionChange) + 1e-10;
@@ -63,7 +63,7 @@ void main() {
             positionChange = movementDirection * maxAllowedStep;
 
             newPosition = originalPosition + positionChange;
-            newPosition = clamp(newPosition, vec3(1.0001), vec3(Rendering.FluidGridResolution - 1.0001));
+            newPosition = clamp(newPosition, vec3(1.001), vec3(Rendering.FluidGridResolution - 1.001));
 
             // Do we also need to change the derivatives of velocity? Maybe just scale them?
         }
