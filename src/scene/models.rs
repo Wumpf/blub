@@ -19,6 +19,7 @@ pub struct StaticObjectConfig {
 #[derive(Deserialize, Clone)]
 pub enum AnimationCurve {
     Linear,
+    SmoothStep,
 }
 
 #[derive(Deserialize, Clone)]
@@ -143,6 +144,12 @@ impl StaticMeshData {
                 translation_progress = animation.translation_duration * 2.0 - translation_progress;
             }
             translation_progress /= animation.translation_duration;
+            translation_progress = translation_progress.clamp(0.0, 1.0);
+
+            translation_progress = match animation.translation_curve {
+                AnimationCurve::Linear => translation_progress,
+                AnimationCurve::SmoothStep => translation_progress * translation_progress * (3.0 - 2.0 * translation_progress),
+            };
 
             self.config.world_position * (1.0 - translation_progress) + animation.translation_target.to_vec() * translation_progress
         } else {

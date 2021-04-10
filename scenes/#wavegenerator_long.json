@@ -52,7 +52,7 @@
                     "y": 0.0,
                     "z": 0.0
                 },
-                "translation_curve": "Linear",
+                "translation_curve": "SmoothStep",
                 "translation_duration": 0.8,
                 "rotational_speed": {
                     "x": 0.0,
