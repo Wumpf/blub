@@ -11,7 +11,7 @@ layout(location = 1) in vec2 in_Texcoord;
 layout(location = 0) out vec4 out_Color;
 
 void main() {
-    vec3 normal = normalize(vec4(in_Normal, 0.0) * Meshes[MeshIndex].Transform);
+    vec3 normal = normalize(vec4(in_Normal, 0.0) * Meshes[MeshIndex].WorldTransform);
 
     vec3 albedo = vec3(1.0);
     int textureIndex = Meshes[MeshIndex].TextureIndex;

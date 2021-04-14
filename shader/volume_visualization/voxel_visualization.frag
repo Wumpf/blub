@@ -16,7 +16,7 @@ void main() {
     vec3 dxY = dFdy(in_WorldPosition);
     vec3 normal = normalize(cross(dxY, dxX));
 
-    vec3 voxelSpeed = abs(texelFetch(SceneVoxelization, in_VolumeCoordinate, 0).xyz) / Time.SimulationDelta;
+    vec3 voxelSpeed = abs(texelFetch(SceneVoxelization, in_VolumeCoordinate, 0).xyz);
     vec3 brdf = voxelSpeed * Rendering.VelocityVisualizationScale;
 
     vec3 radiance = brdf * saturate(dot(normal, -DirectionalLightDirection)) * DirectionalLightRadiance;

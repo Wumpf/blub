@@ -1,9 +1,11 @@
-use cgmath::{EuclideanSpace, Matrix};
+use cgmath::{EuclideanSpace, Matrix, Transform};
 use serde::Deserialize;
 use std::{error::Error, path::Path, path::PathBuf, time::Duration};
 use wgpu::util::DeviceExt;
 
 use crate::timer::Timer;
+
+use super::FluidConfig;
 
 // Data describing a model in the scene.
 #[derive(Deserialize, Clone)]
@@ -23,11 +25,17 @@ pub enum AnimationCurve {
 }
 
 #[derive(Deserialize, Clone)]
+pub struct TranslationAnimation {
+    pub target: cgmath::Point3<f32>,
+    pub curve: AnimationCurve,
+    pub duration: f32, // time to reach the target_position in seconds
+}
+
+#[derive(Deserialize, Clone)]
 pub struct RigidAnimation {
-    pub translation_target: cgmath::Point3<f32>,
-    pub translation_curve: AnimationCurve,
-    pub translation_duration: f32, // time to reach the target_position in seconds
-                                   //pub rotational_speed: cgmath::Vector3<cgmath::Deg<f32>>, // TODO
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub translation: Option<TranslationAnimation>,
+    pub rotational_speed: cgmath::Vector3<cgmath::Deg<f32>>,
 }
 
 pub struct StaticMeshData {
@@ -43,11 +51,9 @@ pub struct StaticMeshData {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct MeshDataGpu {
-    transform_r0: cgmath::Vector4<f32>,
-    transform_r1: cgmath::Vector4<f32>,
-    transform_r2: cgmath::Vector4<f32>,
-    step_translation: cgmath::Vector3<f32>,
-    padding0: f32,
+    transform_world: [cgmath::Vector4<f32>; 3],
+    transform_voxel: [cgmath::Vector4<f32>; 3],
+    rigid_velocity_voxel: [cgmath::Vector4<f32>; 3],
 
     vertex_buffer_range: cgmath::Vector2<u32>,
     index_buffer_range: cgmath::Vector2<u32>,
@@ -139,50 +145,65 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
 impl StaticMeshData {
     fn world_position_at_time(&self, total_simulated_time: Duration) -> cgmath::Point3<f32> {
         if let Some(animation) = &self.config.animation {
-            let mut translation_progress = total_simulated_time.as_secs_f32() % (animation.translation_duration * 2.0);
-            if translation_progress > animation.translation_duration {
-                translation_progress = animation.translation_duration * 2.0 - translation_progress;
+            if let Some(translation) = &animation.translation {
+                let mut translation_progress = total_simulated_time.as_secs_f32() % (translation.duration * 2.0);
+                if translation_progress > translation.duration {
+                    translation_progress = translation.duration * 2.0 - translation_progress;
+                }
+                translation_progress /= translation.duration;
+                translation_progress = translation_progress.clamp(0.0, 1.0);
+
+                translation_progress = match translation.curve {
+                    AnimationCurve::Linear => translation_progress,
+                    AnimationCurve::SmoothStep => translation_progress * translation_progress * (3.0 - 2.0 * translation_progress),
+                };
+
+                return self.config.world_position * (1.0 - translation_progress) + translation.target.to_vec() * translation_progress;
             }
-            translation_progress /= animation.translation_duration;
-            translation_progress = translation_progress.clamp(0.0, 1.0);
-
-            translation_progress = match animation.translation_curve {
-                AnimationCurve::Linear => translation_progress,
-                AnimationCurve::SmoothStep => translation_progress * translation_progress * (3.0 - 2.0 * translation_progress),
-            };
-
-            self.config.world_position * (1.0 - translation_progress) + animation.translation_target.to_vec() * translation_progress
-        } else {
-            self.config.world_position
         }
+
+        self.config.world_position
     }
 
-    fn to_gpu(&self, total_simulated_time: Duration, simulation_delta: Duration) -> MeshDataGpu {
+    fn to_gpu(&self, total_simulated_time: Duration, simulation_delta: Duration, fluid_config: &FluidConfig) -> MeshDataGpu {
         let world_position = self.world_position_at_time(total_simulated_time);
 
-        // Brute force way for getting a translation vector. Analytical derivative would probably be better.
-        let step_translation = if total_simulated_time > simulation_delta {
-            world_position - self.world_position_at_time(total_simulated_time - simulation_delta)
+        // Brute force way for getting a translation vector. Analytical derivative would be better.
+        let translation_velocity = if total_simulated_time > simulation_delta {
+            (world_position - self.world_position_at_time(total_simulated_time - simulation_delta)) / simulation_delta.as_secs_f32()
         } else {
             cgmath::vec3(0.0, 0.0, 0.0)
         };
 
-        let transform = cgmath::Matrix4::from_translation(world_position.to_vec())
+        let transform_world = cgmath::Matrix4::from_translation(world_position.to_vec())
             * cgmath::Matrix4::from_scale(self.config.scale)
             * cgmath::Matrix4::from_angle_x(self.config.rotation_angles.x)
             * cgmath::Matrix4::from_angle_y(self.config.rotation_angles.y)
             * cgmath::Matrix4::from_angle_z(self.config.rotation_angles.z);
+        let transform_voxel = cgmath::Matrix4::from_scale(1.0 / fluid_config.grid_to_world_scale)
+            * cgmath::Matrix4::from_translation(-fluid_config.world_position.to_vec())
+            * transform_world;
 
-        let transposed_transform = transform.transpose();
-        // let inverse_transform = transposed_transform
-        //     .invert()
-        //     .expect("Mesh matrix not invertible, this should never happen");
+        let mesh_position_voxel = transform_voxel.transform_vector(world_position.to_vec());
+
+        // TODO: Add rotation here. how to do that exactly actually?
+        let rigid_velocity_voxel =// cgmath::Matrix4::from_translation(mesh_position_voxel)
+            cgmath::Matrix4::from_translation(translation_velocity / fluid_config.grid_to_world_scale)
+            * cgmath::Matrix4::from_scale(0.0);
+        //* cgmath::Matrix4::from_translation(-mesh_position_voxel);
+
+        let transposed_transform_world = transform_world.transpose();
+        let transposed_transform_voxel = transform_voxel.transpose();
+        let transposed_rigid_velocity_voxel = rigid_velocity_voxel.transpose();
         MeshDataGpu {
-            transform_r0: transposed_transform.x,
-            transform_r1: transposed_transform.y,
-            transform_r2: transposed_transform.z,
-            step_translation,
-            padding0: 0.0,
+            transform_world: [transposed_transform_world.x, transposed_transform_world.y, transposed_transform_world.z],
+            transform_voxel: [transposed_transform_voxel.x, transposed_transform_voxel.y, transposed_transform_voxel.z],
+            rigid_velocity_voxel: [
+                transposed_rigid_velocity_voxel.x,
+                transposed_rigid_velocity_voxel.y,
+                transposed_rigid_velocity_voxel.z,
+            ],
+
             vertex_buffer_range: cgmath::vec2(self.vertex_buffer_range.start, self.vertex_buffer_range.end),
             index_buffer_range: cgmath::vec2(self.index_buffer_range.start, self.index_buffer_range.end),
             texture_index: self.texture_index,
@@ -216,7 +237,12 @@ impl SceneModels {
         }
     }
 
-    pub fn from_config(device: &wgpu::Device, queue: &wgpu::Queue, configs: &Vec<StaticObjectConfig>) -> Result<Self, Box<dyn Error>> {
+    pub fn from_config(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        configs: &Vec<StaticObjectConfig>,
+        fluid_config: &FluidConfig,
+    ) -> Result<Self, Box<dyn Error>> {
         let mut vertices = Vec::new();
         let mut indices = Vec::<u32>::new();
         let mut meshes = Vec::new();
@@ -293,7 +319,7 @@ impl SceneModels {
 
         let meshes_gpu: Vec<MeshDataGpu> = meshes
             .iter()
-            .map(|mesh| mesh.to_gpu(Duration::from_secs(0), Duration::from_secs(0)))
+            .map(|mesh| mesh.to_gpu(Duration::from_secs(0), Duration::from_secs(0), fluid_config))
             .collect();
 
         let texture_views = texture_paths
@@ -322,12 +348,12 @@ impl SceneModels {
         })
     }
 
-    pub fn step(&self, timer: &Timer, queue: &wgpu::Queue) {
+    pub fn step(&self, timer: &Timer, queue: &wgpu::Queue, fluid_config: &FluidConfig) {
         // We typically don't have a lot of objects. So just overwrite the entire mesh desc.
         let meshes_gpu: Vec<MeshDataGpu> = self
             .meshes
             .iter()
-            .map(|mesh| mesh.to_gpu(timer.total_simulated_time(), timer.simulation_delta()))
+            .map(|mesh| mesh.to_gpu(timer.total_simulated_time(), timer.simulation_delta(), fluid_config))
             .collect();
         queue.write_buffer(&self.mesh_desc_buffer, 0, bytemuck::cast_slice(&meshes_gpu));
     }

@@ -86,7 +86,7 @@ impl Scene {
             global_bind_group_layout,
             &voxelization,
         );
-        let models = SceneModels::from_config(&device, queue, &config.static_objects)?;
+        let models = SceneModels::from_config(&device, queue, &config.static_objects, &config.fluid)?;
 
         Ok(Scene {
             hybrid_fluid,
@@ -185,7 +185,7 @@ impl Scene {
         });
 
         //wgpu_profiler!("Animate Models", profiler, &mut encoder, device, {
-        self.models.step(timer, queue);
+        self.models.step(timer, queue, &self.config.fluid);
         //});
 
         wgpu_profiler!("Voxelize Scene", profiler, &mut encoder, device, {

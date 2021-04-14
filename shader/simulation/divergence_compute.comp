@@ -18,7 +18,6 @@ layout(set = 2, binding = 4, r32f) uniform restrict image3D Divergence;
 COMPUTE_PASS_VOLUME
 
 float solidWallContribution(ivec3 gridCoord, float wallVelocity, float solidVelocity) {
-    // (Moving solid will need to be treated here)
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker == CELL_SOLID)
         return wallVelocity - solidVelocity;

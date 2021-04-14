@@ -15,5 +15,5 @@ out gl_PerVertex { vec4 gl_Position; };
 void main() {
     out_Normal = in_Normal;
     out_Texcoord = in_Texcoord;
-    gl_Position = Camera.ViewProjection * vec4(vec4(in_Position, 1.0) * Meshes[MeshIndex].Transform, 1.0);
+    gl_Position = Camera.ViewProjection * vec4(vec4(in_Position, 1.0) * Meshes[MeshIndex].WorldTransform, 1.0);
 }
