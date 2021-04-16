@@ -33,7 +33,6 @@ void main() {
     // place!
     float marker = texelFetch(MarkerVolume, gridCoord, 0).x;
     if (marker != CELL_FLUID) {
-        imageStore(DebugVolume, ivec3(gl_GlobalInvocationID), vec4(0.0));
         return;
     }
 
