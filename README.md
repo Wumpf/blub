@@ -94,22 +94,20 @@ Since evaluating the error itself is costly, this is done every couple of few it
 
 The last computed error and iteration count is queried asynchronously, in order to display a histogram in the gui and make informed choices for selecting the error tolerance, max iteration & error evaluation frequency parameters.
 
-## Implicit Density Projection
+### Implicit Density Projection
 
 For improved volume conversation & iteration times Blub implements a "secondary pressure solver" that uses fluid density instead of divergence as input. A video + paper can be found [here](https://animation.rwth-aachen.de/publication/0566/). I found that it improves the quality of the simulation tremendously for large timesteps (I typically run the simulation/solver at 120hz).
 
 Compared to what is described (to my understanding) in the paper I made a few adjustments/trade-offs:
 * For computing densities, neighboring solid cells are assumed to have a fixed (interpolation kernel derived) density contribution instead of sampling it with particles
 * No resampling for degenerated cases
-
-TODO: Note a few more details.
-TODO: Recently fixed some major bugs, some things are a bit incomplete right now - WIP
+* No Push Boundaries (more details below)
 
 To my knowledge this is the only publicly available implementation as of writing (I asked the authors for a look at their reference implementation but didn't get a reply.)
 
-### Push Boundaries
+#### Push Boundaries
 
-_Stopped using Push Boundaries in favor of dropping signed distance fields. Last use of Push Boundaries is at tag INSERT-TAG_
+_Stopped using Push Boundaries in favor of dropping signed distance fields. Last use of Push Boundaries is at tag `last-use-of-push-boundaries`_
 
 Push boundaries as described in the paper are a bit challenging for a GPU implementation as they require to store the maximum penetration into a solid cell, thus requiring in theory another vec3 volume with data that needs to be written atomically.
 This displacement is clamped to the length of the cell (as in the paper) allowing us to accurately enough encode this value in a 32 bit value.
@@ -117,6 +115,15 @@ As particles only rarely exit the volume (this happens only due to inaccuracies 
 
 An interesting implementation detail of push boundaries is that we need to reserve a few more boundary cells than without: In the MAC grid one can usually keep outer border cells on the positive axis marked as free,
 but with push boundaries we need to have a place to solid cell penetration for all borders.
+
+### Boundary Handling
+
+Fluid boundaries are handled using a realtime hull voxelization. Voxelization is done in a single pass using conservative rasterization.
+
+This is rather unconventional, the more common approach is to use a signed distance field (earlier versions of Blub did exactly that, essentially everything at and before the `last-use-of-push-boundaries` tag).
+
+*Disadvantage:* Boundary handling is rather coarse and it's very hard to properly particles that slip through.  
+*Advantage:* Very fast for dynamic objects - getting signed distance field computation realtime for arbitrary meshes is very challenging.
 
 ## Rendering
 
