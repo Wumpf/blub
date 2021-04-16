@@ -12,8 +12,15 @@ layout(location = 0) in flat uint in_SideIndex;
 layout(location = 0) out float out_Dummy;
 
 vec3 Unswizzle(vec3 v) { return in_SideIndex == 0 ? v.zyx : (in_SideIndex == 1 ? v.xzy : v.xyz); }
-
 vec3 UnswizzlePosAndClamp(vec3 pos) { return clamp(Unswizzle(pos), vec3(0), vec3(Rendering.FluidGridResolution) - vec3(1)); }
+
+vec3 ComputeVoxelSpeed(vec3 voxelPos) {
+    vec3 voxelSpaceCenter = (vec4(0.0, 0.0, 0.0, 1.0) * Meshes[MeshIndex].VoxelTransform).xyz;
+    vec3 a = Meshes[MeshIndex].FluidSpaceRotationAxisScaled;
+    vec3 p = voxelPos - voxelSpaceCenter;
+    vec3 tangentialVelocity = cross(a, p - dot(p, a) * a);
+    return tangentialVelocity + Meshes[MeshIndex].FluidSpaceVelocity;
+}
 
 void main() {
     // Retrieve voxel pos from gl_FragCoord
@@ -23,7 +30,7 @@ void main() {
     voxelPosSwizzled.xy = gl_FragCoord.xy;
     voxelPosSwizzled.z = gl_FragCoord.z * viewportSize;
     vec3 voxelPos = UnswizzlePosAndClamp(ivec3(voxelPosSwizzled));
-    imageStore(SceneVoxelization, ivec3(voxelPos), vec4((vec4(voxelPos, 1.0) * Meshes[MeshIndex].RigidVelocityVoxelSpace).xyz, 1.0));
+    imageStore(SceneVoxelization, ivec3(voxelPos), vec4(ComputeVoxelSpeed(voxelPos), 1.0));
 
     // "Depth Conservative"
     // If there is a strong change in depth we need to mark extra more voxels
@@ -36,11 +43,11 @@ void main() {
 
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z - maxChange)) {
         voxelPos = UnswizzlePosAndClamp(voxelPosSwizzled - vec3(0, 0, 1));
-        imageStore(SceneVoxelization, ivec3(voxelPos), vec4((vec4(voxelPos, 1.0) * Meshes[MeshIndex].RigidVelocityVoxelSpace).xyz, 1.0));
+        imageStore(SceneVoxelization, ivec3(voxelPos), vec4(ComputeVoxelSpeed(voxelPos), 1.0));
     }
     if (floor(voxelPosSwizzled.z) != floor(voxelPosSwizzled.z + maxChange)) {
         voxelPos = UnswizzlePosAndClamp(voxelPosSwizzled + vec3(0, 0, 1));
-        imageStore(SceneVoxelization, ivec3(voxelPos), vec4((vec4(voxelPos, 1.0) * Meshes[MeshIndex].RigidVelocityVoxelSpace).xyz, 1.0));
+        imageStore(SceneVoxelization, ivec3(voxelPos), vec4(ComputeVoxelSpeed(voxelPos), 1.0));
     }
 
     out_Dummy = 0.0;

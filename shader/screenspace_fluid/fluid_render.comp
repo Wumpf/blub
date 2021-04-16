@@ -90,7 +90,7 @@ vec3 computeRefraction(float waterDepthAtSeenSurfacePoint, vec3 surfacePosition,
     // Sampling depth with estimated refraction exit is "too wrong", leads to too many artifacts.
     // But not doing that gives us odd "shadows" in the water thickness, so we take max depth of both to work around the issue a bit.
     float waterDepth =
-        max(texelFetch(WaterDepthTexture, ivec2(gl_GlobalInvocationID.xy), 0).x, texelFetch(WaterDepthTexture, refractedTexcoordInt, 0).x) * 2;
+        max(texelFetch(WaterDepthTexture, ivec2(gl_GlobalInvocationID.xy), 0).x, texelFetch(WaterDepthTexture, refractedTexcoordInt, 0).x) * 3;
     float waterRefractionDepth = waterDepth; // estimate
 
     // We assume that the "other side" was lit without shadowing from the water mass, light got there unhindered. So we need to fix that first by

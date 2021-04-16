@@ -64,9 +64,10 @@ layout(set = 0, binding = 2) uniform sampler SamplerPointClamp;
 
 struct MeshData {
     // transposed so we can store them in 3 vec4s.
-    mat3x4 WorldTransform;          // Transforms from object space to world space
-    mat3x4 VoxelTransform;          // Transforms from object space to voxel space (equals world space but with scaling)
-    mat3x4 RigidVelocityVoxelSpace; // Gives velocity for a point in VoxelSpace on the Mesh
+    mat3x4 WorldTransform; // Transforms from object space to world space
+    mat3x4 VoxelTransform; // Transforms from object space to voxel space (equals world space but with scaling and extra translation)
+    vec3 FluidSpaceVelocity;
+    vec3 FluidSpaceRotationAxisScaled; // Rotation axis scaled with angular velocity (in radians)
 
     uvec2 VertexBufferRange;
     uvec2 IndexBufferRange;

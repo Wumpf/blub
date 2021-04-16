@@ -1,9 +1,9 @@
-use cgmath::{EuclideanSpace, Matrix, Transform};
+use cgmath::*;
 use serde::Deserialize;
 use std::{error::Error, path::Path, path::PathBuf, time::Duration};
 use wgpu::util::DeviceExt;
 
-use crate::timer::Timer;
+use crate::{timer::Timer, wgpu_utils::uniformbuffer::PaddedVector3};
 
 use super::FluidConfig;
 
@@ -13,7 +13,7 @@ pub struct StaticObjectConfig {
     pub model: PathBuf,
     pub world_position: cgmath::Point3<f32>,
     pub scale: f32,
-    pub rotation_angles: cgmath::Point3<cgmath::Deg<f32>>,
+    pub rotation_angles: cgmath::Euler<cgmath::Deg<f32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub animation: Option<RigidAnimation>,
 }
@@ -32,10 +32,17 @@ pub struct TranslationAnimation {
 }
 
 #[derive(Deserialize, Clone)]
+pub struct RotationAnimation {
+    pub axis: cgmath::Vector3<f32>,
+    pub deg_per_sec: cgmath::Deg<f32>,
+}
+
+#[derive(Deserialize, Clone)]
 pub struct RigidAnimation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub translation: Option<TranslationAnimation>,
-    pub rotational_speed: cgmath::Vector3<cgmath::Deg<f32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<RotationAnimation>,
 }
 
 pub struct StaticMeshData {
@@ -53,7 +60,8 @@ pub struct StaticMeshData {
 struct MeshDataGpu {
     transform_world: [cgmath::Vector4<f32>; 3],
     transform_voxel: [cgmath::Vector4<f32>; 3],
-    rigid_velocity_voxel: [cgmath::Vector4<f32>; 3],
+    fluid_space_velocity: PaddedVector3,
+    fluid_space_rotation_axis_scaled: PaddedVector3,
 
     vertex_buffer_range: cgmath::Vector2<u32>,
     index_buffer_range: cgmath::Vector2<u32>,
@@ -144,29 +152,38 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
 
 impl StaticMeshData {
     fn world_position_at_time(&self, total_simulated_time: Duration) -> cgmath::Point3<f32> {
-        if let Some(animation) = &self.config.animation {
-            if let Some(translation) = &animation.translation {
-                let mut translation_progress = total_simulated_time.as_secs_f32() % (translation.duration * 2.0);
-                if translation_progress > translation.duration {
-                    translation_progress = translation.duration * 2.0 - translation_progress;
-                }
-                translation_progress /= translation.duration;
-                translation_progress = translation_progress.clamp(0.0, 1.0);
-
-                translation_progress = match translation.curve {
-                    AnimationCurve::Linear => translation_progress,
-                    AnimationCurve::SmoothStep => translation_progress * translation_progress * (3.0 - 2.0 * translation_progress),
-                };
-
-                return self.config.world_position * (1.0 - translation_progress) + translation.target.to_vec() * translation_progress;
+        if let Some(Some(translation)) = self.config.animation.as_ref().and_then(|a| Some(&a.translation)) {
+            let mut translation_progress = total_simulated_time.as_secs_f32() % (translation.duration * 2.0);
+            if translation_progress > translation.duration {
+                translation_progress = translation.duration * 2.0 - translation_progress;
             }
-        }
+            translation_progress /= translation.duration;
+            translation_progress = translation_progress.clamp(0.0, 1.0);
 
-        self.config.world_position
+            translation_progress = match translation.curve {
+                AnimationCurve::Linear => translation_progress,
+                AnimationCurve::SmoothStep => translation_progress * translation_progress * (3.0 - 2.0 * translation_progress),
+            };
+            self.config.world_position * (1.0 - translation_progress) + translation.target.to_vec() * translation_progress
+        } else {
+            self.config.world_position
+        }
+    }
+
+    fn rotation_at_time(&self, total_simulated_time: Duration) -> cgmath::Quaternion<f32> {
+        let static_rotation: cgmath::Quaternion<f32> = cgmath::Quaternion::from(self.config.rotation_angles);
+
+        if let Some(Some(rotation)) = self.config.animation.as_ref().and_then(|a| Some(&a.rotation)) {
+            static_rotation
+                * cgmath::Quaternion::from_axis_angle(rotation.axis.normalize(), rotation.deg_per_sec * total_simulated_time.as_secs_f32())
+        } else {
+            static_rotation
+        }
     }
 
     fn to_gpu(&self, total_simulated_time: Duration, simulation_delta: Duration, fluid_config: &FluidConfig) -> MeshDataGpu {
         let world_position = self.world_position_at_time(total_simulated_time);
+        let rotation = self.rotation_at_time(total_simulated_time);
 
         // Brute force way for getting a translation vector. Analytical derivative would be better.
         let translation_velocity = if total_simulated_time > simulation_delta {
@@ -177,32 +194,27 @@ impl StaticMeshData {
 
         let transform_world = cgmath::Matrix4::from_translation(world_position.to_vec())
             * cgmath::Matrix4::from_scale(self.config.scale)
-            * cgmath::Matrix4::from_angle_x(self.config.rotation_angles.x)
-            * cgmath::Matrix4::from_angle_y(self.config.rotation_angles.y)
-            * cgmath::Matrix4::from_angle_z(self.config.rotation_angles.z);
+            * cgmath::Matrix4::from(rotation);
         let transform_voxel = cgmath::Matrix4::from_scale(1.0 / fluid_config.grid_to_world_scale)
             * cgmath::Matrix4::from_translation(-fluid_config.world_position.to_vec())
             * transform_world;
 
-        let mesh_position_voxel = transform_voxel.transform_vector(world_position.to_vec());
-
-        // TODO: Add rotation here. how to do that exactly actually?
-        let rigid_velocity_voxel =// cgmath::Matrix4::from_translation(mesh_position_voxel)
-            cgmath::Matrix4::from_translation(translation_velocity / fluid_config.grid_to_world_scale)
-            * cgmath::Matrix4::from_scale(0.0);
-        //* cgmath::Matrix4::from_translation(-mesh_position_voxel);
-
         let transposed_transform_world = transform_world.transpose();
         let transposed_transform_voxel = transform_voxel.transpose();
-        let transposed_rigid_velocity_voxel = rigid_velocity_voxel.transpose();
         MeshDataGpu {
             transform_world: [transposed_transform_world.x, transposed_transform_world.y, transposed_transform_world.z],
             transform_voxel: [transposed_transform_voxel.x, transposed_transform_voxel.y, transposed_transform_voxel.z],
-            rigid_velocity_voxel: [
-                transposed_rigid_velocity_voxel.x,
-                transposed_rigid_velocity_voxel.y,
-                transposed_rigid_velocity_voxel.z,
-            ],
+            fluid_space_velocity: (translation_velocity / fluid_config.grid_to_world_scale).into(),
+            fluid_space_rotation_axis_scaled: self
+                .config
+                .animation
+                .as_ref()
+                .map_or(cgmath::Vector3::zero(), |a| {
+                    a.rotation
+                        .as_ref()
+                        .map_or(cgmath::Vector3::zero(), |r| r.axis.normalize() * cgmath::Rad::from(r.deg_per_sec).0)
+                })
+                .into(),
 
             vertex_buffer_range: cgmath::vec2(self.vertex_buffer_range.start, self.vertex_buffer_range.end),
             index_buffer_range: cgmath::vec2(self.index_buffer_range.start, self.index_buffer_range.end),

@@ -48,7 +48,7 @@
         {
             "model": "wgpu-logo/wgpu.obj",
             "world_position": {
-                "x": 0.64,
+                "x": 0.0,
                 "y": 0.0,
                 "z": 0.32
             },
@@ -59,10 +59,22 @@
                 "z": 0.0
             },
             "animation": {
-                "rotational_speed": {
-                    "x": 0.0,
-                    "y": 5.0,
-                    "z": 0.0
+                "rotation": {
+                    "axis": {
+                        "x": 0.0,
+                        "y": 5.0,
+                        "z": 0.0
+                    },
+                    "deg_per_sec": 180.0
+                },
+                "translation": {
+                    "target": {
+                        "x": 1.28,
+                        "y": 0.0,
+                        "z": 0.32
+                    },
+                    "curve": "SmoothStep",
+                    "duration": 2.0
                 }
             }
         }

@@ -55,11 +55,6 @@
                     },
                     "curve": "SmoothStep",
                     "duration": 0.8
-                },
-                "rotational_speed": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
                 }
             }
         }
