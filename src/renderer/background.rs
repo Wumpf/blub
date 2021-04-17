@@ -38,6 +38,7 @@ mod cubemap_loader {
     use std::{
         fs::File,
         io::{Read, Write},
+        num::NonZeroU32,
         path::{Path, PathBuf},
     };
 
@@ -72,16 +73,16 @@ mod cubemap_loader {
         });
 
         queue.write_texture(
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture: &cubemap,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             &image_data,
-            wgpu::TextureDataLayout {
+            wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: CUBEMAP_FORMAT_BYTES_PER_PIXEL * resolution,
-                rows_per_image: resolution,
+                bytes_per_row: NonZeroU32::new(CUBEMAP_FORMAT_BYTES_PER_PIXEL * resolution),
+                rows_per_image: NonZeroU32::new(resolution),
             },
             wgpu::Extent3d {
                 width: resolution,
@@ -140,16 +141,16 @@ mod cubemap_loader {
             cache_file.write_all(image_data_raw)?;
 
             queue.write_texture(
-                wgpu::TextureCopyView {
+                wgpu::ImageCopyTexture {
                     texture: &cubemap.as_ref().unwrap(),
                     mip_level: 0,
                     origin: wgpu::Origin3d { x: 0, y: 0, z: i as u32 },
                 },
                 image_data_raw,
-                wgpu::TextureDataLayout {
+                wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: CUBEMAP_FORMAT_BYTES_PER_PIXEL * resolution,
-                    rows_per_image: 0,
+                    bytes_per_row: NonZeroU32::new(CUBEMAP_FORMAT_BYTES_PER_PIXEL * resolution),
+                    rows_per_image: NonZeroU32::new(resolution),
                 },
                 wgpu::Extent3d {
                     width: resolution,
@@ -242,7 +243,6 @@ impl Background {
             depth_compare: wgpu::CompareFunction::LessEqual,
             stencil: Default::default(),
             bias: Default::default(),
-            clamp_depth: Default::default(),
         });
 
         Ok(Background {

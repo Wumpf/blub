@@ -129,16 +129,16 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
     });
 
     queue.write_texture(
-        wgpu::TextureCopyView {
+        wgpu::ImageCopyTexture {
             texture: &texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
         },
         &image_data,
-        wgpu::TextureDataLayout {
+        wgpu::ImageDataLayout {
             offset: 0,
-            bytes_per_row: 4 * image.width(),
-            rows_per_image: image.height(),
+            bytes_per_row: std::num::NonZeroU32::new(4 * image.width()),
+            rows_per_image: None,
         },
         wgpu::Extent3d {
             width: image.width(),

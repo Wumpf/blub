@@ -154,8 +154,8 @@ impl SceneVoxelization {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Voxelize"),
             // Needed until https://github.com/gpuweb/gpuweb/issues/503 is resolved
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &self.dummy_render_target,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &self.dummy_render_target,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,

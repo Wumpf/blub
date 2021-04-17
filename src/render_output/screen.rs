@@ -181,8 +181,8 @@ impl Screen {
         // Right now this is not possible since they have different formats. Could fix that, but all it safes us is this copy here (can't remove the buffer either)
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("copy to swapchain"),
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &output.view,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &output.view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),

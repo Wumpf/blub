@@ -35,7 +35,7 @@ impl PendingScreenshot {
                 let imgbuf = {
                     let screenshot_buffer_slice = buffer.slice(..);
                     let padded_buffer = screenshot_buffer_slice.get_mapped_range();
-                    let padded_row_size = ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(resolution) as usize;
+                    let padded_row_size = ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(resolution);
                     let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, std::vec::Vec<_>>::new(resolution.width, resolution.height);
                     for (image_row, buffer_chunk) in imgbuf.rows_mut().zip(padded_buffer.chunks(padded_row_size)) {
                         for (image_pixel, buffer_pixel) in image_row.zip(buffer_chunk.chunks(4)) {
@@ -141,17 +141,17 @@ impl ScreenshotCapture {
         let buffer = self.unused_screenshot_buffers.pop().unwrap();
 
         encoder.copy_texture_to_buffer(
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture: &backbuffer,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            wgpu::BufferCopyView {
+            wgpu::ImageCopyBuffer {
                 buffer: &buffer,
-                layout: wgpu::TextureDataLayout {
+                layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(self.resolution) as u32,
-                    rows_per_image: 0,
+                    bytes_per_row: std::num::NonZeroU32::new(ScreenshotCapture::screenshot_buffer_bytes_per_padded_row(self.resolution) as u32),
+                    rows_per_image: None,
                 },
             },
             wgpu::Extent3d {

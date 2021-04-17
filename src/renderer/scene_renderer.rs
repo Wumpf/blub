@@ -204,16 +204,16 @@ impl SceneRenderer {
         wgpu_profiler!("opaque", profiler, encoder, device, {
             let mut rpass_backbuffer = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("opaque"),
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: backbuffer.texture_view(),
+                color_attachments: &[wgpu::RenderPassColorAttachment {
+                    view: backbuffer.texture_view(),
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
                     },
                 }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: depthbuffer,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depthbuffer,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true,

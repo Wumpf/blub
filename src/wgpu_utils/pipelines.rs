@@ -273,7 +273,6 @@ pub mod depth_state {
             depth_compare: wgpu::CompareFunction::LessEqual,
             stencil: Default::default(),
             bias: Default::default(),
-            clamp_depth: false,
         }
     }
 }

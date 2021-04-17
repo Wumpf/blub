@@ -97,7 +97,6 @@ impl ScreenSpaceFluid {
                     depth_compare: wgpu::CompareFunction::LessEqual,
                     stencil: Default::default(),
                     bias: Default::default(),
-                    clamp_depth: Default::default(),
                 }),
                 multisample: Default::default(),
                 fragment: FragmentStateCreationDesc {
@@ -360,12 +359,12 @@ impl ScreenSpaceFluid {
         };
 
         encoder.copy_texture_to_texture(
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture: backbuffer.texture(),
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture: &self.screen_dependent.backbuffer_copy,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
@@ -381,16 +380,16 @@ impl ScreenSpaceFluid {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("particles"),
                 color_attachments: &[
-                    wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &self.screen_dependent.texture_view_fluid_view[0],
+                    wgpu::RenderPassColorAttachment {
+                        view: &self.screen_dependent.texture_view_fluid_view[0],
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(depth_clear_color),
                             store: true,
                         },
                     },
-                    wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &self.screen_dependent.texture_view_fluid_thickness[0],
+                    wgpu::RenderPassColorAttachment {
+                        view: &self.screen_dependent.texture_view_fluid_thickness[0],
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -398,8 +397,8 @@ impl ScreenSpaceFluid {
                         },
                     },
                 ],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                    attachment: depthbuffer,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depthbuffer,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: false,
@@ -418,8 +417,8 @@ impl ScreenSpaceFluid {
                 encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("clear secondary water depth texture"),
-                        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                            attachment: &self.screen_dependent.texture_view_fluid_view[1],
+                        color_attachments: &[wgpu::RenderPassColorAttachment {
+                            view: &self.screen_dependent.texture_view_fluid_view[1],
                             resolve_target: None,
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(depth_clear_color),
@@ -434,8 +433,8 @@ impl ScreenSpaceFluid {
                 encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("clear secondary water thickness texture"),
-                        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                            attachment: &self.screen_dependent.texture_view_fluid_thickness[1],
+                        color_attachments: &[wgpu::RenderPassColorAttachment {
+                            view: &self.screen_dependent.texture_view_fluid_thickness[1],
                             resolve_target: None,
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),

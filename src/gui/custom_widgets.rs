@@ -33,7 +33,7 @@ pub fn plot_barchart(
 
         let mut fill_color = ui.visuals().weak_text_color();
 
-        let tooltip = if let Some(pointer_pos) = ui.input().pointer.tooltip_pos() {
+        let tooltip = if let Some(pointer_pos) = ui.input().pointer.interact_pos() {
             if bar.contains(pointer_pos) {
                 fill_color = ui.visuals().text_color();
                 Some(Shape::text(

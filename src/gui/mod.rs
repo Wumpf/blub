@@ -207,15 +207,15 @@ impl GUI {
     fn setup_ui_solver_config(ui: &mut egui::Ui, config: &mut SolverConfig) {
         egui::Grid::new("solver config").show(ui, |ui| {
             ui.label("error tolerance");
-            ui.add(egui::Slider::f32(&mut config.error_tolerance, 0.0001..=1.0).text(""));
+            ui.add(egui::Slider::new(&mut config.error_tolerance, 0.0001..=1.0).text(""));
             ui.end_row();
 
             ui.label("max iteration count");
-            ui.add(egui::Slider::i32(&mut config.max_num_iterations, 2..=128).text(""));
+            ui.add(egui::Slider::new(&mut config.max_num_iterations, 2..=128).text(""));
             ui.end_row();
 
             ui.label("error check frequency count");
-            ui.add(egui::Slider::i32(&mut config.error_check_frequency, 1..=config.max_num_iterations).text(""));
+            ui.add(egui::Slider::new(&mut config.error_check_frequency, 1..=config.max_num_iterations).text(""));
             ui.end_row();
         });
     }
@@ -276,19 +276,19 @@ impl GUI {
         egui::Grid::new("simulation controls").show(ui, |ui| {
             ui.label("target simulation time (s)");
             let mut simulation_time_seconds = simulation_controller.simulation_stop_time.as_secs_f32();
-            ui.add(egui::DragValue::f32(&mut simulation_time_seconds).speed(0.1));
+            ui.add(egui::DragValue::new(&mut simulation_time_seconds).speed(0.1));
             simulation_controller.simulation_stop_time = std::time::Duration::from_secs_f32(simulation_time_seconds);
             ui.end_row();
 
             ui.label("simulation steps per second");
             let mut simulation_steps_per_second = simulation_controller.simulation_steps_per_second() as i32;
-            ui.add(egui::DragValue::i32(&mut simulation_steps_per_second).speed(10.0));
+            ui.add(egui::DragValue::new(&mut simulation_steps_per_second).speed(10.0));
             simulation_controller.set_simulation_steps_per_second(simulation_steps_per_second.max(20).min(60 * 20) as u64);
             ui.end_row();
 
             ui.label("time scale");
             ui.add(
-                egui::DragValue::f32(&mut simulation_controller.time_scale)
+                egui::DragValue::new(&mut simulation_controller.time_scale)
                     .speed(0.05)
                     .clamp_range(0.01..=100.0),
             );
@@ -301,7 +301,7 @@ impl GUI {
             let min_jump = 1.0 / simulation_controller.simulation_steps_per_second() as f32;
             state.fast_forward_length_seconds = state.fast_forward_length_seconds.max(min_jump);
             ui.add(
-                egui::DragValue::f32(&mut state.fast_forward_length_seconds)
+                egui::DragValue::new(&mut state.fast_forward_length_seconds)
                     .speed(0.01)
                     .clamp_range(min_jump..=120.0),
             );
@@ -330,7 +330,7 @@ impl GUI {
                 }
 
                 ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::i32(&mut state.video_fps).clamp_range(10.0..=300.0));
+                    ui.add(egui::DragValue::new(&mut state.video_fps).clamp_range(10.0..=300.0));
                     ui.label("video fps")
                 });
             });
@@ -339,14 +339,12 @@ impl GUI {
 
     fn setup_ui_scene_settings(ui: &mut egui::Ui, state: &mut GUIState, event_loop_proxy: &EventLoopProxy<ApplicationEvent>) {
         ui.spacing_mut().slider_width = 250.0;
-        egui::combo_box(
-            ui,
-            ui.make_persistent_id("Scene Selection"),
-            format!(
+        egui::ComboBox::from_label("Scene Selection")
+            .selected_text(format!(
                 "{:?}",
                 state.known_scene_files[state.selected_scene_idx].strip_prefix(SCENE_DIRECTORY).unwrap()
-            ),
-            |ui| {
+            ))
+            .show_ui(ui, |ui| {
                 for (i, scene_file) in state.known_scene_files.iter().enumerate() {
                     if ui
                         .selectable_value(
@@ -361,8 +359,7 @@ impl GUI {
                             .unwrap();
                     }
                 }
-            },
-        );
+            });
     }
 
     fn setup_ui_render_settings(ui: &mut egui::Ui, scene_renderer: &mut SceneRenderer) {
@@ -370,33 +367,27 @@ impl GUI {
             ui.spacing_mut().slider_width = 170.0;
 
             ui.label("Fluid Rendering");
-            egui::combo_box(
-                ui,
-                ui.make_persistent_id("Fluid Rendering"),
-                format!("{:?}", scene_renderer.fluid_rendering_mode),
-                |ui| {
+            egui::ComboBox::from_label("Fluid Rendering")
+                .selected_text(format!("{:?}", scene_renderer.fluid_rendering_mode))
+                .show_ui(ui, |ui| {
                     for mode in FluidRenderingMode::iter() {
                         ui.selectable_value(&mut scene_renderer.fluid_rendering_mode, mode, format!("{:?}", mode));
                     }
-                },
-            );
+                });
             ui.end_row();
 
             ui.label("Particle Radius Factor");
-            ui.add(egui::Slider::f32(&mut scene_renderer.particle_radius_factor, 0.0..=1.0).text(""));
+            ui.add(egui::Slider::new(&mut scene_renderer.particle_radius_factor, 0.0..=1.0).text(""));
             ui.end_row();
 
             ui.label("Volume Visualization");
-            egui::combo_box(
-                ui,
-                ui.make_persistent_id("Volume Visualization"),
-                format!("{:?}", scene_renderer.volume_visualization),
-                |ui| {
+            egui::ComboBox::from_label("Volume Visualization")
+                .selected_text(format!("{:?}", scene_renderer.volume_visualization))
+                .show_ui(ui, |ui| {
                     for mode in VolumeVisualizationMode::iter() {
                         ui.selectable_value(&mut scene_renderer.volume_visualization, mode, format!("{:?}", mode));
                     }
-                },
-            );
+                });
             ui.end_row();
 
             ui.checkbox(&mut scene_renderer.enable_voxel_visualization, "Voxel Visualization");
@@ -404,7 +395,7 @@ impl GUI {
 
             ui.label("Velocity Visualization Scale");
             ui.add(
-                egui::Slider::f32(&mut scene_renderer.velocity_visualization_scale, 0.001..=5.0)
+                egui::Slider::new(&mut scene_renderer.velocity_visualization_scale, 0.001..=5.0)
                     .logarithmic(true)
                     .text(""),
             );

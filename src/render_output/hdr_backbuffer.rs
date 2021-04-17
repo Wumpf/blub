@@ -94,8 +94,8 @@ impl HdrBackbuffer {
         // Note that we can't use a compute shader here since that would require STORAGE usage flag on the final output which we can't do since it's srgb!
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("tonemap"),
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &target,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &target,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
