@@ -1,0 +1,55 @@
+#version 460
+
+// Do a prefix sum over the particle counters (ParticleBinningVolume)
+// By doing this we're determining new particle bins!
+
+// TODO: For starters we implement the simplest possible algorithm. Not work optimal.
+
+#include "../global_bindings.glsl"
+
+#define LOCAL_SIZE_SCAN 1024
+
+layout(local_size_x = LOCAL_SIZE_SCAN, local_size_y = 1, local_size_z = 1) in;
+
+shared uint sharedBuffer[LOCAL_SIZE_SCAN];
+
+layout(set = 2, binding = 0, r32ui) uniform restrict uimage3D ParticleBinningVolume;
+layout(set = 2, binding = 1) buffer restrict ParticleBinningAtomicCounter_ { uint ParticleBinningAtomicCounter; };
+
+ivec3 IndexToImageAddress(uint index) {
+    // TODO: Figure out good pattern.
+    return ivec3(index % Rendering.FluidGridResolution.x, (index / Rendering.FluidGridResolution.x) % Rendering.FluidGridResolution.y,
+                 (index / Rendering.FluidGridResolution.x / Rendering.FluidGridResolution.y) % Rendering.FluidGridResolution.z);
+}
+
+void main() {
+    uint localIndex = gl_LocalInvocationID.x;
+    ivec3 imageAddress = IndexToImageAddress(gl_GlobalInvocationID.x);
+
+    uint result = imageLoad(ParticleBinningVolume, imageAddress).x;
+
+    uint offset = 1;
+    while (offset < LOCAL_SIZE_SCAN) {
+        sharedBuffer[localIndex] = result;
+        barrier();
+        if (localIndex >= offset) {
+            result += sharedBuffer[localIndex - offset];
+        }
+        barrier();
+        offset *= 2;
+    }
+
+    // observation: How much do we care about where particle end up as long as they ar binned?
+    // If we don't, then we can do a reduce per block like this:
+    // 1024 threads reducing 1024*32 (think 32 cube block (TODO)) and then do atomic adds on a global (for 512 cube block that's still only 4096, for
+    // a 256 cube block only 512!). That way we'd save the more complicated and long winded multi pass setup which requires a lot more reads & writes.
+
+    if (localIndex == LOCAL_SIZE_SCAN - 1)
+        sharedBuffer[0] = atomicAdd(ParticleBinningAtomicCounter, result);
+    barrier();
+    result += sharedBuffer[0];
+
+    // Skip write if we're 0. No particle here anyways!
+    if (result != 0)
+        imageStore(ParticleBinningVolume, imageAddress, uvec4(result));
+}

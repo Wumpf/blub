@@ -555,6 +555,7 @@ impl PressureSolver {
         const DISPATCH_BUFFER_OFFSETS: [u64; 2] = [(4 * 4) * 2, (4 * 4) * 2];
 
         // Reduce
+        // Even if we have a 512x512x512 volume, this step will only run twice with the config we have right now (16384 elements reduced per block)
         cpass.set_pipeline(pipeline_manager.get_compute(pipeline));
         let mut reduce_step_idx = 0;
         while num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP {

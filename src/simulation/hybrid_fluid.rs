@@ -28,6 +28,7 @@ pub struct HybridFluid {
     volume_debug: Option<wgpu::Texture>,
 
     particles_position_llindex: wgpu::Buffer,
+    particle_binning_atomic_counter: wgpu::Buffer,
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
     simulation_properties: SimulationPropertiesUniformBufferContent,
 
@@ -36,6 +37,7 @@ pub struct HybridFluid {
     bind_group_divergence_compute: wgpu::BindGroup,
     bind_group_divergence_projection_write_velocity: wgpu::BindGroup,
     bind_group_advect_particles: wgpu::BindGroup,
+    bind_group_binning_reduce: wgpu::BindGroup,
     bind_group_density_projection_gather_error: wgpu::BindGroup,
     bind_group_density_projection_correct_particles: wgpu::BindGroup,
     bind_group_density_projection_write_velocity: wgpu::BindGroup,
@@ -51,6 +53,7 @@ pub struct HybridFluid {
     pipeline_divergence_remove: ComputePipelineHandle,
     pipeline_extrapolate_velocity: ComputePipelineHandle,
     pipeline_advect_particles: ComputePipelineHandle,
+    pipeline_binning_reduce: ComputePipelineHandle,
     pipeline_density_projection_gather_error: ComputePipelineHandle,
     pipeline_density_projection_position_change: ComputePipelineHandle,
     pipeline_density_projection_correct_particles: ComputePipelineHandle,
@@ -112,6 +115,13 @@ impl HybridFluid {
             mapped_at_creation: false,
         });
 
+        let particle_binning_atomic_counter = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Buffer: Atomic counter for particle binning"),
+            size: wgpu::BIND_BUFFER_ALIGNMENT,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let create_volume_texture_desc = |label: &'static str, format: wgpu::TextureFormat| -> wgpu::TextureDescriptor {
             wgpu::TextureDescriptor {
                 label: Some(label),
@@ -128,6 +138,7 @@ impl HybridFluid {
         let volume_velocity_y = device.create_texture(&create_volume_texture_desc("Velocity Volume Y", wgpu::TextureFormat::R32Float));
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
+        let volume_particle_binning = device.create_texture(&create_volume_texture_desc("Particle Binning Volume", wgpu::TextureFormat::R32Uint));
         let volume_marker = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
         let volume_debug = if cfg!(debug_assertions) {
             Some(device.create_texture(&create_volume_texture_desc("Debug Volume", wgpu::TextureFormat::R32Float)))
@@ -140,6 +151,7 @@ impl HybridFluid {
         let volume_velocity_view_y = volume_velocity_y.create_view(&Default::default());
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
+        let volume_particle_binning_view = volume_particle_binning.create_view(&Default::default());
         let volume_marker_view = volume_marker.create_view(&Default::default());
         let volume_debug_view = match volume_debug {
             Some(ref volume) => Some(volume.create_view(&Default::default())),
@@ -165,6 +177,7 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
             .next_binding_compute(binding_glsl::buffer(true)) // particles, velocity component
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // linkedlist_volume
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // volume_particle_binning
             .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R8Snorm, wgpu::StorageTextureAccess::ReadWrite)) // marker volume
             .next_binding_compute(binding_glsl::image3D(
                 wgpu::TextureFormat::R32Float,
@@ -207,7 +220,13 @@ impl HybridFluid {
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityX
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityY
             .next_binding_compute(binding_glsl::buffer(false)) // particles, velocityZ
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // volume_particle_binning
             .create(device, "BindGroupLayout: Advect to Particles");
+
+        let group_layout_binning_reduce = BindGroupLayoutBuilder::new()
+            .next_binding_compute(binding_glsl::image3D(wgpu::TextureFormat::R32Uint, wgpu::StorageTextureAccess::ReadWrite)) // volume_particle_binning
+            .next_binding_compute(binding_glsl::buffer(false)) // ParticleBinningAtomicCounter
+            .create(device, "BindGroupLayout: Binning, reduce");
 
         let group_layout_density_projection_gather_error = BindGroupLayoutBuilder::new()
             .next_binding_compute(binding_glsl::buffer(false)) // particles, position llindex
@@ -252,6 +271,7 @@ impl HybridFluid {
                 .resource(particles_position_llindex.as_entire_binding())
                 .resource(particles_velocity_x.as_entire_binding())
                 .texture(&volume_linked_lists_view)
+                .texture(&volume_particle_binning_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_x)
                 .create(device, "BindGroup: Transfer velocity to volume X"),
@@ -259,6 +279,7 @@ impl HybridFluid {
                 .resource(particles_position_llindex.as_entire_binding())
                 .resource(particles_velocity_y.as_entire_binding())
                 .texture(&volume_linked_lists_view)
+                .texture(&volume_particle_binning_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_y)
                 .create(device, "BindGroup: Transfer velocity to volume Y"),
@@ -266,6 +287,7 @@ impl HybridFluid {
                 .resource(particles_position_llindex.as_entire_binding())
                 .resource(particles_velocity_z.as_entire_binding())
                 .texture(&volume_linked_lists_view)
+                .texture(&volume_particle_binning_view)
                 .texture(&volume_marker_view)
                 .texture(&volume_velocity_view_z)
                 .create(device, "BindGroup: Transfer velocity to volume Z"),
@@ -301,7 +323,14 @@ impl HybridFluid {
             .resource(particles_velocity_x.as_entire_binding())
             .resource(particles_velocity_y.as_entire_binding())
             .resource(particles_velocity_z.as_entire_binding())
+            .texture(&volume_particle_binning_view)
             .create(device, "BindGroup: Write to Particles");
+
+        let bind_group_binning_reduce = BindGroupBuilder::new(&group_layout_binning_reduce)
+            .texture(&volume_particle_binning_view)
+            .resource(particle_binning_atomic_counter.as_entire_binding())
+            .create(device, "BindGroup: Binning, Reduce");
+
         let bind_group_density_projection_gather_error = BindGroupBuilder::new(&group_layout_density_projection_gather_error)
             .resource(particles_position_llindex.as_entire_binding())
             .texture(&volume_linked_lists_view)
@@ -378,6 +407,17 @@ impl HybridFluid {
             ],
             push_constant_ranges,
         }));
+
+        let layout_binning_reduce = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("PipelineLayout: Binning, reduce"),
+            bind_group_layouts: &[
+                global_bind_group_layout,
+                &group_layout_general.layout,
+                &group_layout_binning_reduce.layout,
+            ],
+            push_constant_ranges,
+        }));
+
         let layout_density_projection_gather_error = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("PipelineLayout: HybridFluid, Density Projection Gather"),
             bind_group_layouts: &[
@@ -409,6 +449,7 @@ impl HybridFluid {
             volume_debug,
 
             particles_position_llindex,
+            particle_binning_atomic_counter,
             simulation_properties_uniformbuffer,
             simulation_properties: SimulationPropertiesUniformBufferContent {
                 num_particles: 0,
@@ -420,6 +461,7 @@ impl HybridFluid {
             bind_group_divergence_compute,
             bind_group_divergence_projection_write_velocity,
             bind_group_advect_particles,
+            bind_group_binning_reduce,
             bind_group_renderer,
 
             bind_group_density_projection_gather_error,
@@ -496,6 +538,16 @@ impl HybridFluid {
                     "Fluid: G->P, advect",
                     layout_particles.clone(),
                     Path::new("simulation/advect_particles.comp"),
+                ),
+            ),
+
+            pipeline_binning_reduce: pipeline_manager.create_compute_pipeline(
+                device,
+                shader_dir,
+                ComputePipelineCreationDesc::new(
+                    "Particle Binning: Reduce",
+                    layout_binning_reduce.clone(),
+                    Path::new("simulation/particle_binning_prefixsum.comp"),
                 ),
             ),
 
@@ -659,6 +711,7 @@ impl HybridFluid {
         depth_or_array_layers: 8,
     };
     const COMPUTE_LOCAL_SIZE_PARTICLES: u32 = 64;
+    const COMPUTE_LOCAL_SIZE_REDUCE: u32 = 1024;
 
     pub fn pressure_solver_config_velocity(&mut self) -> &mut SolverConfig {
         &mut self.pressure_field_from_velocity.config
@@ -701,6 +754,14 @@ impl HybridFluid {
 
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
         let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, Self::COMPUTE_LOCAL_SIZE_PARTICLES);
+        let reduce_work_groups = wgpu_utils::compute_group_size_1d(
+            self.grid_dimension.width * self.grid_dimension.height * self.grid_dimension.depth_or_array_layers,
+            Self::COMPUTE_LOCAL_SIZE_REDUCE,
+        );
+
+        // TODO: There should be a clear_buffer on the encoder that one could use for this.
+        // TODO: Need to clear after every use.
+        queue.write_buffer(&self.particle_binning_atomic_counter, 0, &[0, 0, 0, 0]);
 
         if let Some(ref volume_debug) = self.volume_debug {
             encoder.clear_texture(&volume_debug, &Default::default());
@@ -792,6 +853,14 @@ impl HybridFluid {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_advect_particles));
                 cpass.dispatch(particle_work_groups, 1, 1);
             });
+
+            {
+                wgpu_profiler!("particle binning - reduce", profiler, &mut cpass, device, {
+                    cpass.set_bind_group(2, &self.bind_group_binning_reduce, &[]);
+                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_reduce));
+                    cpass.dispatch(reduce_work_groups, 1, 1);
+                });
+            }
 
             wgpu_profiler!("density projection: set boundary marker", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
