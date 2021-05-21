@@ -9,6 +9,7 @@ use super::{
 };
 use crate::{
     render_output::hdr_backbuffer::HdrBackbuffer,
+    renderer::particle_renderer::ParticleRendererMode,
     scene::Scene,
     simulation::HybridFluid,
     wgpu_utils::{pipelines::PipelineManager, shader::ShaderDirectory},
@@ -21,7 +22,8 @@ use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 pub enum FluidRenderingMode {
     None,
     ScreenSpaceFluid,
-    Particles,
+    ParticlesVelocity,
+    ParticlesIndex,
 }
 
 #[repr(C)]
@@ -228,9 +230,18 @@ impl SceneRenderer {
                 FluidRenderingMode::ScreenSpaceFluid => {
                     // Handled earlier!
                 }
-                FluidRenderingMode::Particles => {
+                FluidRenderingMode::ParticlesIndex | FluidRenderingMode::ParticlesVelocity => {
                     wgpu_profiler!("particles", profiler, &mut rpass_backbuffer, device, {
-                        self.particle_renderer.draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid());
+                        self.particle_renderer.draw(
+                            &mut rpass_backbuffer,
+                            pipeline_manager,
+                            &scene.fluid(),
+                            match self.fluid_rendering_mode {
+                                FluidRenderingMode::ParticlesVelocity => ParticleRendererMode::Velocity,
+                                FluidRenderingMode::ParticlesIndex => ParticleRendererMode::Index,
+                                _ => unreachable!(),
+                            },
+                        );
                     });
                 }
             }
