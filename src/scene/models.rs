@@ -262,7 +262,16 @@ impl SceneModels {
 
         for static_object_config in configs {
             let file_name = Path::new("models").join(&static_object_config.model);
-            let (mut loaded_models, loaded_materials) = tobj::load_obj(&file_name, true)?;
+            let (mut loaded_models, loaded_materials) = tobj::load_obj(
+                &file_name,
+                &tobj::LoadOptions {
+                    single_index: true,
+                    triangulate: true,
+                    ignore_points: true,
+                    ignore_lines: true,
+                },
+            )?;
+            let loaded_materials = loaded_materials?;
 
             loaded_models.sort_by_key(|m| m.mesh.material_id);
             let mut prev_material_id = std::usize::MAX;
