@@ -1,0 +1,16 @@
+#version 450
+
+#include "hybrid_fluid.glsl"
+#include "particle_binning.glsl"
+
+COMPUTE_PASS_PARTICLES
+
+void main() {
+    uint particleIndex = gl_GlobalInvocationID.x;
+
+    uint indexInCell = Old_Particles[particleIndex].LinkedListNext;
+    ivec3 cellCoordinate = ivec3(Old_Particles[particleIndex].Position);
+    uint maxCellIndex = imageLoad(ParticleBinningVolume, cellCoordinate).x;
+
+    New_Particles[maxCellIndex - indexInCell] = Old_Particles[particleIndex];
+}

@@ -1,0 +1,13 @@
+#version 450
+
+#include "../global_bindings.glsl"
+#include "hybrid_fluid.glsl"
+#include "particle_binning.glsl"
+
+COMPUTE_PASS_PARTICLES
+
+void main() {
+    uint particleIndex = gl_GlobalInvocationID.x;
+    ivec3 cellCoordinate = ivec3(Old_Particles[particleIndex].Position);
+    Old_Particles[particleIndex].LinkedListNext = imageAtomicAdd(ParticleBinningVolume, cellCoordinate, 1);
+}

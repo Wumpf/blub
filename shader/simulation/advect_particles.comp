@@ -14,7 +14,6 @@ layout(set = 2, binding = 5) buffer restrict ParticlePositionLlBuffer { Particle
 layout(set = 2, binding = 6) buffer restrict ParticleBufferVx { vec4 ParticleBufferVelocityX[]; };
 layout(set = 2, binding = 7) buffer restrict ParticleBufferVy { vec4 ParticleBufferVelocityY[]; };
 layout(set = 2, binding = 8) buffer restrict ParticleBufferVz { vec4 ParticleBufferVelocityZ[]; };
-layout(set = 2, binding = 9, r32ui) uniform restrict coherent uimage3D ParticleBinningVolume;
 
 COMPUTE_PASS_PARTICLES
 
@@ -179,7 +178,6 @@ void main() {
         imageStore(MarkerVolume, ivec3(newPosition), vec4(CELL_FLUID, 0, 0, 0));
         ivec3 nearestDualGridCell = ivec3(newPosition - vec3(0.5));
         Particles[particleIndex].LinkedListNext = imageAtomicExchange(LinkedListDualGrid, nearestDualGridCell, particleIndex + 1) - 1;
-        imageAtomicAdd(ParticleBinningVolume, nearestDualGridCell, 1);
     }
 
     // Write out particle.

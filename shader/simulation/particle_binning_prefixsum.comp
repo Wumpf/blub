@@ -6,15 +6,13 @@
 // TODO: For starters we implement the simplest possible algorithm. Not work optimal.
 
 #include "../global_bindings.glsl"
+#include "particle_binning.glsl"
 
 #define LOCAL_SIZE_SCAN 1024
 
 layout(local_size_x = LOCAL_SIZE_SCAN, local_size_y = 1, local_size_z = 1) in;
 
 shared uint sharedBuffer[LOCAL_SIZE_SCAN];
-
-layout(set = 2, binding = 0, r32ui) uniform restrict uimage3D ParticleBinningVolume;
-layout(set = 2, binding = 1) buffer restrict ParticleBinningAtomicCounter_ { uint ParticleBinningAtomicCounter; };
 
 ivec3 IndexToImageAddress(uint index) {
     // TODO: Figure out good pattern.
