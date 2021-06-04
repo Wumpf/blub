@@ -23,6 +23,10 @@ pub struct HybridFluid {
     pressure_field_from_velocity: PressureField,
     pressure_field_from_density: PressureField,
 
+    volume_linked_lists: wgpu::Texture,
+    volume_marker: wgpu::Texture,
+    volume_debug: Option<wgpu::Texture>,
+
     particles_position_llindex: wgpu::Buffer,
     simulation_properties_uniformbuffer: UniformBuffer<SimulationPropertiesUniformBufferContent>,
     simulation_properties: SimulationPropertiesUniformBufferContent,
@@ -116,7 +120,7 @@ impl HybridFluid {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D3,
                 format,
-                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
+                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::COPY_DST,
             }
         };
         // TODO: Reuse volumes to safe memory, not all are used simultaneously.
@@ -124,7 +128,7 @@ impl HybridFluid {
         let volume_velocity_y = device.create_texture(&create_volume_texture_desc("Velocity Volume Y", wgpu::TextureFormat::R32Float));
         let volume_velocity_z = device.create_texture(&create_volume_texture_desc("Velocity Volume Z", wgpu::TextureFormat::R32Float));
         let volume_linked_lists = device.create_texture(&create_volume_texture_desc("Linked Lists Volume", wgpu::TextureFormat::R32Uint));
-        let volume_marker_primary = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
+        let volume_marker = device.create_texture(&create_volume_texture_desc("Marker Grid", wgpu::TextureFormat::R8Snorm));
         let volume_debug = if cfg!(debug_assertions) {
             Some(device.create_texture(&create_volume_texture_desc("Debug Volume", wgpu::TextureFormat::R32Float)))
         } else {
@@ -136,9 +140,9 @@ impl HybridFluid {
         let volume_velocity_view_y = volume_velocity_y.create_view(&Default::default());
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
-        let volume_marker_view = volume_marker_primary.create_view(&Default::default());
+        let volume_marker_view = volume_marker.create_view(&Default::default());
         let volume_debug_view = match volume_debug {
-            Some(volume) => Some(volume.create_view(&Default::default())),
+            Some(ref volume) => Some(volume.create_view(&Default::default())),
             None => None,
         };
 
@@ -399,6 +403,10 @@ impl HybridFluid {
             pressure_solver,
             pressure_field_from_velocity,
             pressure_field_from_density,
+
+            volume_marker,
+            volume_linked_lists,
+            volume_debug,
 
             particles_position_llindex,
             simulation_properties_uniformbuffer,
@@ -693,6 +701,10 @@ impl HybridFluid {
 
         let grid_work_groups = wgpu_utils::compute_group_size(self.grid_dimension, Self::COMPUTE_LOCAL_SIZE_FLUID);
         let particle_work_groups = wgpu_utils::compute_group_size_1d(self.simulation_properties.num_particles, Self::COMPUTE_LOCAL_SIZE_PARTICLES);
+
+        if let Some(ref volume_debug) = self.volume_debug {
+            encoder.clear_texture(&volume_debug, &Default::default());
+        }
 
         {
             let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {

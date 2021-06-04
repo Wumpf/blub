@@ -38,12 +38,4 @@ egui_winit_platform = {git = "https://github.com/hasenbanck/egui_winit_platform"
 opt-level = 3
 
 [patch.crates-io]
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "d4cdd461781d2c2b863f5a48455e82697f3499e4"}
-# wgpu = {version = "0.7", path = "../gfx-rs/wgpu-rs"}
-
-# [patch."https://github.com/gfx-rs/wgpu"]
-# wgpu-core = {version = "0.7", path = "../gfx-rs/wgpu/wgpu-core"}
-# wgpu-types = {version = "0.7", path = "../gfx-rs/wgpu/wgpu-types"}
-
-# [patch."https://github.com/Wumpf/wgpu-profiler"]
-# wgpu-profiler = {version = "0.1", path = "../wgpu-profiler"}
+wgpu = {git = "https://github.com/wumpf/wgpu.git", rev = "4ada8587e5eb0bb67599f1400b68b137f3e3d070"}

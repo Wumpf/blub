@@ -11,8 +11,5 @@ void main() {
     imageStore(LinkedListDualGrid, ivec3(gl_GlobalInvocationID), uvec4(0));
     if (VelocityTransferComponent == 0) {
         imageStore(MarkerVolume, ivec3(gl_GlobalInvocationID), vec4(CELL_AIR));
-#ifdef DEBUG
-        imageStore(DebugVolume, ivec3(gl_GlobalInvocationID), vec4(0.0));
-#endif
     }
 }

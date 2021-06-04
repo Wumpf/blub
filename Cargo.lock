@@ -553,7 +553,7 @@ dependencies = [
 [[package]]
 name = "egui_wgpu_backend"
 version = "0.6.0"
-source = "git+https://github.com/Wumpf/egui_wgpu_backend?branch=use-wgpu-master#2f08c78b9e1090797f4f60f47cb30093c662c30a"
+source = "git+https://github.com/Wumpf/egui_wgpu_backend?branch=use-wgpu-master#ec6b55116a55a2debc133eb1549da2959b2fa486"
 dependencies = [
  "bytemuck",
  "epi",
@@ -994,9 +994,9 @@ dependencies = [
 
 [[package]]
 name = "heck"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87cbf45460356b7deeb5e3415b5563308c0a9b057c85e12b06ad551f98d0a6ac"
+checksum = "6d621efb26863f0e9924c6ac577e8275e5e6b77455db64ffa6c65c904e9e132c"
 dependencies = [
  "unicode-segmentation",
 ]
@@ -1250,9 +1250,9 @@ dependencies = [
 
 [[package]]
 name = "mio-misc"
-version = "1.0.1"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18d9bf3ad929ad9ec136d7bd55f68c62223561423474c21b5e34eb9322018d36"
+checksum = "0ddf05411bb159cdb5801bb10002afb66cb4572be656044315e363460ce69dc2"
 dependencies = [
  "crossbeam",
  "crossbeam-queue",
@@ -1373,9 +1373,9 @@ dependencies = [
 
 [[package]]
 name = "notify"
-version = "5.0.0-pre.9"
+version = "5.0.0-pre.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b89869d77edd64db917d7903abeadc166f93686b342c56cc0ca51acb68441d09"
+checksum = "51f18203a26893ca1d3526cf58084025d5639f91c44f8b70ab3b724f60e819a0"
 dependencies = [
  "bitflags",
  "crossbeam-channel",
@@ -2168,7 +2168,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu-rs.git?rev=d4cdd461781d2c2b863f5a48455e82697f3499e4#d4cdd461781d2c2b863f5a48455e82697f3499e4"
+source = "git+https://github.com/wumpf/wgpu.git?rev=4ada8587e5eb0bb67599f1400b68b137f3e3d070#4ada8587e5eb0bb67599f1400b68b137f3e3d070"
 dependencies = [
  "arrayvec",
  "js-sys",
@@ -2187,7 +2187,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=eadaa1b7d8f585761e28445904fe619b180aca0d#eadaa1b7d8f585761e28445904fe619b180aca0d"
+source = "git+https://github.com/wumpf/wgpu.git?rev=4ada8587e5eb0bb67599f1400b68b137f3e3d070#4ada8587e5eb0bb67599f1400b68b137f3e3d070"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -2226,7 +2226,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=eadaa1b7d8f585761e28445904fe619b180aca0d#eadaa1b7d8f585761e28445904fe619b180aca0d"
+source = "git+https://github.com/wumpf/wgpu.git?rev=4ada8587e5eb0bb67599f1400b68b137f3e3d070#4ada8587e5eb0bb67599f1400b68b137f3e3d070"
 dependencies = [
  "bitflags",
 ]

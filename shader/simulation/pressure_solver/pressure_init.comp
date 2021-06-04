@@ -16,9 +16,6 @@ layout(set = 2, binding = 1) buffer restrict ReduceResultAndMainDispatchBuffer {
 
 COMPUTE_PASS_PRESSURE
 
-#define FIRST_STEP 0
-#define NOT_FIRST_STEP 1
-
 void main() {
     ivec3 gridCoord = ivec3(gl_GlobalInvocationID);
 
@@ -32,12 +29,6 @@ void main() {
         DispatchCommandReduce0 = uvec4((numElements / REDUCE_READS_PER_THREAD + (LOCAL_SIZE_REDUCE - 1)) / LOCAL_SIZE_REDUCE, 1, 1, 0);
         numElements /= REDUCE_READS_PER_THREAD * LOCAL_SIZE_REDUCE;
         DispatchCommandReduce1 = uvec4((numElements / REDUCE_READS_PER_THREAD + (LOCAL_SIZE_REDUCE - 1)) / LOCAL_SIZE_REDUCE, 1, 1, 0);
-    }
-
-    // If this is the first step overall (not just the first of this particular physics step), just do a clear, nothing else.
-    if (PushConstants.Mode == FIRST_STEP) {
-        imageStore(Pressure, gridCoord, vec4(0.0));
-        return;
     }
 
     // Don't solve outside of the fluid domain!

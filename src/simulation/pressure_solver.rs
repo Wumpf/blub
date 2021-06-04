@@ -15,7 +15,7 @@ fn create_volume_texture_desc(label: &str, grid_dimension: wgpu::Extent3d, forma
         sample_count: 1,
         dimension: wgpu::TextureDimension::D3,
         format,
-        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE,
+        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::COPY_DST,
     }
 }
 
@@ -83,6 +83,7 @@ type SolverConfigUniformBuffer = UniformBuffer<SolverConfigUniformBufferContent>
 // Pressure solver instance keeps track of pressure result from last step/frame in order to speed up the solve.
 pub struct PressureField {
     bind_group_pressure_field: wgpu::BindGroup,
+    volume_pressure: wgpu::Texture,
     volume_pressure_view: wgpu::TextureView,
 
     unused_error_buffers: Vec<wgpu::Buffer>,
@@ -126,6 +127,7 @@ impl PressureField {
 
         PressureField {
             bind_group_pressure_field,
+            volume_pressure,
             volume_pressure_view,
             unused_error_buffers,
             unscheduled_error_readbacks: Vec::new(),
@@ -594,6 +596,11 @@ impl PressureSolver {
         pipeline_manager: &'a PipelineManager,
         profiler: &mut GpuProfiler,
     ) {
+        // Clear pressures on first overall step of this pressure field.
+        if pressure_field.timestamp_last_iteration == Duration::new(0, 0) {
+            encoder.clear_texture(&pressure_field.volume_pressure, &Default::default());
+        }
+
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("pressure solve"),
         });
@@ -619,19 +626,7 @@ impl PressureSolver {
 
             // We use pressure from last frame, but set explicitly set all pressure values to zero wherever there is not fluid right now.
             // This is done in order to prevent having results from many frames ago influence results for upcoming frames.
-            // In first step overall we instruct to use a fresh pressure buffer.
-            const FIRST_STEP: u32 = 0;
-            const NOT_FIRST_STEP: u32 = 1;
             cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_init));
-            // Clear pressures on first step.
-            // wgpu-rs doesn't zero initialize textures yet (bug/missing feature impl)
-            // Most resources are derived from particles which we initialize ourselves, but not pressure where we use the previous step to kickstart the solver
-            // https://github.com/gfx-rs/wgpu/issues/563
-            if pressure_field.timestamp_last_iteration == Duration::new(0, 0) {
-                cpass.set_push_constants(0, bytemuck::bytes_of(&[FIRST_STEP]));
-            } else {
-                cpass.set_push_constants(0, bytemuck::bytes_of(&[NOT_FIRST_STEP]));
-            }
             cpass.set_bind_group(2, &self.bind_group_init, &[]);
             cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
 
