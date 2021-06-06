@@ -771,10 +771,7 @@ impl HybridFluid {
             Self::COMPUTE_LOCAL_SIZE_SCAN,
         );
 
-        // TODO: There should be a clear_buffer on the encoder that one could use for this.
-        // TODO: Need to clear after every use.
-        queue.write_buffer(&self.particle_binning_atomic_counter, 0, &[0, 0, 0, 0]);
-
+        encoder.clear_buffer(&self.particle_binning_atomic_counter, 0, None);
         if let Some(ref volume_debug) = self.volume_debug {
             encoder.clear_texture(&volume_debug, &Default::default());
         }
