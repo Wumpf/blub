@@ -15,9 +15,17 @@ layout(local_size_x = LOCAL_SIZE_SCAN, local_size_y = 1, local_size_z = 1) in;
 shared uint sharedBuffer[LOCAL_SIZE_SCAN];
 
 ivec3 IndexToImageAddress(uint index) {
-    // TODO: Figure out good pattern.
-    return ivec3(index % Rendering.FluidGridResolution.x, (index / Rendering.FluidGridResolution.x) % Rendering.FluidGridResolution.y,
-                 (index / Rendering.FluidGridResolution.x / Rendering.FluidGridResolution.y) % Rendering.FluidGridResolution.z);
+    // Tried a few patterns. X to y to came out fastest as expected. Knowing the tiling/swizzling pattern of the volume we could sure improve even
+    // Current guess for my nvidia card/driver is block tiling in xy sliced in z. 🤔
+    // more! Linear x to y to z (fastest!)
+    return ivec3(index, index / Rendering.FluidGridResolution.x, index / Rendering.FluidGridResolution.x / Rendering.FluidGridResolution.y) %
+           ivec3(Rendering.FluidGridResolution.xyz);
+    // Linear y to x to z
+    // return ivec3(index / Rendering.FluidGridResolution.y, index, index / Rendering.FluidGridResolution.x / Rendering.FluidGridResolution.y) %
+    //       ivec3(Rendering.FluidGridResolution.xyz);
+    // Linear z to x to y
+    // return ivec3(index / Rendering.FluidGridResolution.z, index / Rendering.FluidGridResolution.x / Rendering.FluidGridResolution.z, index) %
+    //       ivec3(Rendering.FluidGridResolution.xyz);
 }
 
 void main() {
