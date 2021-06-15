@@ -46,6 +46,9 @@ pub struct GUIState {
 
     profiling_data_rendering: Vec<GpuTimerScopeResult>,
     profiling_data_simulation: Vec<GpuTimerScopeResult>,
+
+    show_profiling_data_rendering: bool,
+    show_profiling_data_simulation: bool,
 }
 
 pub struct GUI {
@@ -87,6 +90,8 @@ impl GUI {
 
                 profiling_data_rendering: Vec::new(),
                 profiling_data_simulation: Vec::new(),
+                show_profiling_data_rendering: false,
+                show_profiling_data_simulation: false,
             },
         }
     }
@@ -466,7 +471,7 @@ impl GUI {
                 egui::CollapsingHeader::new("Rendering Settings").default_open(true).show(ui, |ui| {
                     Self::setup_ui_render_settings(ui, scene_renderer);
                 });
-                egui::CollapsingHeader::new("Profiler - Single Simulation Frame")
+                if let Some(_) = egui::CollapsingHeader::new("Profiler - Single Simulation Frame")
                     .default_open(false)
                     .show(ui, |ui| {
                         if ui.button("Write Chrometrace").clicked() {
@@ -476,16 +481,30 @@ impl GUI {
                                 .expect("Failed to write chrometrace");
                         }
                         Self::setup_ui_profiler(ui, &self.state.profiling_data_simulation, 2);
-                    });
-                egui::CollapsingHeader::new("Profiler - Rendering").default_open(false).show(ui, |ui| {
-                    if ui.button("Write Chrometrace").clicked() {
-                        let filename = Path::new("rendering-trace.json");
-                        info!("Writing chrome trace file to {:?}", filename);
-                        wgpu_profiler::chrometrace::write_chrometrace(filename, &self.state.profiling_data_rendering)
-                            .expect("Failed to write chrometrace");
-                    }
-                    Self::setup_ui_profiler(ui, &self.state.profiling_data_rendering, 4);
-                });
+                    })
+                    .body_returned
+                {
+                    self.state.show_profiling_data_simulation = true;
+                } else {
+                    self.state.show_profiling_data_simulation = false;
+                }
+                if let Some(_) = egui::CollapsingHeader::new("Profiler - Rendering")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        if ui.button("Write Chrometrace").clicked() {
+                            let filename = Path::new("rendering-trace.json");
+                            info!("Writing chrome trace file to {:?}", filename);
+                            wgpu_profiler::chrometrace::write_chrometrace(filename, &self.state.profiling_data_rendering)
+                                .expect("Failed to write chrometrace");
+                        }
+                        Self::setup_ui_profiler(ui, &self.state.profiling_data_rendering, 4);
+                    })
+                    .body_returned
+                {
+                    self.state.show_profiling_data_rendering = true;
+                } else {
+                    self.state.show_profiling_data_rendering = false;
+                }
             });
 
         // End the UI frame.
@@ -511,5 +530,11 @@ impl GUI {
     }
     pub fn report_profiling_data_simulation(&mut self, profiling_data_simulation: Vec<GpuTimerScopeResult>) {
         self.state.profiling_data_simulation = profiling_data_simulation;
+    }
+    pub fn show_profiling_data_simulation(&self) -> bool {
+        self.state.show_profiling_data_simulation
+    }
+    pub fn show_profiling_data_rendering(&self) -> bool {
+        self.state.show_profiling_data_rendering
     }
 }

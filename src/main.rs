@@ -356,6 +356,8 @@ impl Application {
             self.screenshot_recorder.stop_recording();
         }
 
+        self.profiler_simulation.enable_timer = self.gui.show_profiling_data_simulation();
+        self.profiler_rendering.enable_timer = self.gui.show_profiling_data_rendering();
         if let Some(profiling_data_rendering) = self.profiler_rendering.process_finished_frame() {
             self.gui.report_profiling_data_rendering(profiling_data_rendering);
         }
