@@ -776,7 +776,7 @@ impl HybridFluid {
             encoder.clear_texture(&volume_debug, &Default::default());
         }
 
-        {
+        wgpu_profiler!("transfer & divergence compute", profiler, encoder, device, {
             let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("transfer & divergence compute"),
             });
@@ -819,16 +819,30 @@ impl HybridFluid {
                 cpass.set_bind_group(2, &self.bind_group_divergence_compute, &[]); // Writes directly into Residual of the pressure solver.
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
+        });
 
-            wgpu_profiler!("particle binning", profiler, &mut cpass, device, {
-                // TODO: This should be an image clear once available!
-                wgpu_profiler!("clear bin counters", profiler, &mut cpass, device, {
-                    cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
-                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
-                    cpass.set_push_constants(0, bytemuck::bytes_of(&[1 as u32]));
-                    cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
+        wgpu_profiler!("primary pressure solver (divergence)", profiler, encoder, device, {
+            self.pressure_solver.solve(
+                simulation_delta,
+                encoder,
+                device,
+                &mut self.pressure_field_from_velocity,
+                pipeline_manager,
+                profiler,
+            );
+        });
+
+        wgpu_profiler!("Particle Binning", profiler, encoder, device, {
+            wgpu_profiler!("Clear counters", profiler, encoder, device, {
+                encoder.clear_texture(&self.volume_linked_lists, &Default::default());
+            });
+
+            {
+                let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("Particle Binning"),
                 });
-
+                cpass.set_bind_group(0, global_bind_group, &[]);
+                cpass.set_bind_group(1, &self.bind_group_general, &[]);
                 cpass.set_bind_group(2, &self.bind_group_binning, &[]);
                 wgpu_profiler!("count", profiler, &mut cpass, device, {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_count));
@@ -842,28 +856,18 @@ impl HybridFluid {
                     cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_rewrite_particles));
                     cpass.dispatch(particle_work_groups, 1, 1);
                 });
+            }
+
+            // Copy binned particles back to avoid having all descriptors twice
+            wgpu_profiler!("Copy binned particles", profiler, encoder, device, {
+                encoder.copy_buffer_to_buffer(
+                    &self.particles_position_llindex_tmp,
+                    0,
+                    &self.particles_position_llindex,
+                    0,
+                    self.max_num_particles as u64 * std::mem::size_of::<ParticlePositionLl>() as u64,
+                );
             });
-        }
-
-        // Copy binned particles back to avoid having all descriptors twice
-        // TODO: Should be part of profiler scope with particle binning
-        encoder.copy_buffer_to_buffer(
-            &self.particles_position_llindex_tmp,
-            0,
-            &self.particles_position_llindex,
-            0,
-            self.max_num_particles as u64 * std::mem::size_of::<ParticlePositionLl>() as u64,
-        );
-
-        wgpu_profiler!("primary pressure solver (divergence)", profiler, encoder, device, {
-            self.pressure_solver.solve(
-                simulation_delta,
-                encoder,
-                device,
-                &mut self.pressure_field_from_velocity,
-                pipeline_manager,
-                profiler,
-            );
         });
 
         {
