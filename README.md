@@ -72,6 +72,10 @@ I eventually settled with three different grids, processing a single velocity co
 Note that _by far_ the biggest bottleneck in this approach is walking the particle linked list. Doing a shared memory optimization yielded >4x performance speed up:
 Every thread walks only a single linked list, stores the result to shared memory and then reads the remaining seven neighbor linked lists from shared memory. 👌
 
+### Particle binning
+
+Particles get scattered over time in memory (i.e. memory & spatial location diverge), resulting in slower and slower volume sampling & transfer over time. To counteract this, particles are binned to cells every n steps.
+Strict sorting is not necessary, so it's done by counting all particles in each cell and then summing all cells up, creating prefix sums in each cell. Introducing some "sloppiness" in the spatial ordering of the cells allows to do this in a single pass (for details refer to the particle binning shader code).
 ### Solver
 
 Using Preconditioned Conjugate Gradient solver for solving the poisson pressure equation (PPE). In comments and naming in the code I'm following the description in [Bridson's book](https://www.amazon.com/Simulation-Computer-Graphics-Robert-Bridson/dp/1568813260).
