@@ -348,20 +348,34 @@ impl SceneModels {
             .map(|path| load_texture2d_from_path(device, queue, path).create_view(&Default::default()))
             .collect();
 
+        let dummy_content = [0, 0, 0, 0];
+
         Ok(SceneModels {
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("SceneModel VertexBuffer"),
-                contents: bytemuck::cast_slice(&vertices),
+                contents: if meshes_gpu.is_empty() {
+                    &dummy_content
+                } else {
+                    bytemuck::cast_slice(&vertices)
+                },
                 usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::STORAGE,
             }),
             index_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("SceneModel IndexBuffer"),
-                contents: bytemuck::cast_slice(&indices),
+                contents: if meshes_gpu.is_empty() {
+                    &dummy_content
+                } else {
+                    bytemuck::cast_slice(&indices)
+                },
                 usage: wgpu::BufferUsage::INDEX | wgpu::BufferUsage::STORAGE,
             }),
             mesh_desc_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("SceneModel Mesh Data"),
-                contents: bytemuck::cast_slice(&meshes_gpu),
+                contents: if meshes_gpu.is_empty() {
+                    &dummy_content
+                } else {
+                    bytemuck::cast_slice(&meshes_gpu)
+                },
                 usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
             }),
             meshes,
