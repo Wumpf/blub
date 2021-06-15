@@ -16,6 +16,11 @@ struct SimulationPropertiesUniformBufferContent {
 unsafe impl bytemuck::Pod for SimulationPropertiesUniformBufferContent {}
 unsafe impl bytemuck::Zeroable for SimulationPropertiesUniformBufferContent {}
 
+pub struct DynamicSettings {
+    // perform particle binning every n steps
+    pub particle_rebinning_step_frequency: u32,
+}
+
 pub struct HybridFluid {
     grid_dimension: wgpu::Extent3d,
 
@@ -62,6 +67,8 @@ pub struct HybridFluid {
     pipeline_density_projection_correct_particles: ComputePipelineHandle,
 
     max_num_particles: u32,
+    step_counter: u32,
+    dynamic_settings: DynamicSettings,
 }
 
 static mut GROUP_LAYOUT_RENDERER: Option<BindGroupLayoutWithDesc> = None;
@@ -592,6 +599,10 @@ impl HybridFluid {
             ),
 
             max_num_particles,
+            step_counter: 0,
+            dynamic_settings: DynamicSettings {
+                particle_rebinning_step_frequency: 60,
+            },
         }
     }
 
@@ -733,6 +744,10 @@ impl HybridFluid {
         &mut self.pressure_field_from_density.config
     }
 
+    pub fn dynamic_settings(&mut self) -> &mut DynamicSettings {
+        &mut self.dynamic_settings
+    }
+
     pub fn pressure_solver_stats_velocity(&self) -> &VecDeque<SolverStatisticSample> {
         &self.pressure_field_from_velocity.stats
     }
@@ -832,43 +847,47 @@ impl HybridFluid {
             );
         });
 
-        wgpu_profiler!("Particle Binning", profiler, encoder, device, {
-            wgpu_profiler!("Clear counters", profiler, encoder, device, {
-                encoder.clear_texture(&self.volume_linked_lists, &Default::default());
-            });
+        if self.dynamic_settings.particle_rebinning_step_frequency != 0
+            && self.step_counter % self.dynamic_settings.particle_rebinning_step_frequency == 0
+        {
+            wgpu_profiler!("Particle Binning", profiler, encoder, device, {
+                wgpu_profiler!("Clear counters", profiler, encoder, device, {
+                    encoder.clear_texture(&self.volume_linked_lists, &Default::default());
+                });
 
-            {
-                let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some("Particle Binning"),
-                });
-                cpass.set_bind_group(0, global_bind_group, &[]);
-                cpass.set_bind_group(1, &self.bind_group_general, &[]);
-                cpass.set_bind_group(2, &self.bind_group_binning, &[]);
-                wgpu_profiler!("count", profiler, &mut cpass, device, {
-                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_count));
-                    cpass.dispatch(particle_work_groups, 1, 1);
-                });
-                wgpu_profiler!("scan", profiler, &mut cpass, device, {
-                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_scan));
-                    cpass.dispatch(scan_work_groups, 1, 1);
-                });
-                wgpu_profiler!("rewrite particles", profiler, &mut cpass, device, {
-                    cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_rewrite_particles));
-                    cpass.dispatch(particle_work_groups, 1, 1);
-                });
-            }
+                {
+                    let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("Particle Binning"),
+                    });
+                    cpass.set_bind_group(0, global_bind_group, &[]);
+                    cpass.set_bind_group(1, &self.bind_group_general, &[]);
+                    cpass.set_bind_group(2, &self.bind_group_binning, &[]);
+                    wgpu_profiler!("count", profiler, &mut cpass, device, {
+                        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_count));
+                        cpass.dispatch(particle_work_groups, 1, 1);
+                    });
+                    wgpu_profiler!("scan", profiler, &mut cpass, device, {
+                        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_scan));
+                        cpass.dispatch(scan_work_groups, 1, 1);
+                    });
+                    wgpu_profiler!("rewrite particles", profiler, &mut cpass, device, {
+                        cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_binning_rewrite_particles));
+                        cpass.dispatch(particle_work_groups, 1, 1);
+                    });
+                }
 
-            // Copy binned particles back to avoid having all descriptors twice
-            wgpu_profiler!("Copy binned particles", profiler, encoder, device, {
-                encoder.copy_buffer_to_buffer(
-                    &self.particles_position_llindex_tmp,
-                    0,
-                    &self.particles_position_llindex,
-                    0,
-                    self.max_num_particles as u64 * std::mem::size_of::<ParticlePositionLl>() as u64,
-                );
+                // Copy binned particles back to avoid having all descriptors twice
+                wgpu_profiler!("Copy binned particles", profiler, encoder, device, {
+                    encoder.copy_buffer_to_buffer(
+                        &self.particles_position_llindex_tmp,
+                        0,
+                        &self.particles_position_llindex,
+                        0,
+                        self.max_num_particles as u64 * std::mem::size_of::<ParticlePositionLl>() as u64,
+                    );
+                });
             });
-        });
+        }
 
         {
             let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -949,5 +968,7 @@ impl HybridFluid {
                 cpass.dispatch(particle_work_groups, 1, 1);
             });
         }
+
+        self.step_counter += 1;
     }
 }

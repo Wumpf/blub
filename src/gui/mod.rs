@@ -449,6 +449,11 @@ impl GUI {
 
                 egui::CollapsingHeader::new("Solver").show(ui, |ui| {
                     Self::setup_ui_solver(ui, scene.fluid_mut());
+                    ui.separator();
+                    ui.add(
+                        egui::Slider::new(&mut scene.fluid_mut().dynamic_settings().particle_rebinning_step_frequency, 0..=300)
+                            .text("particle binning frequency"),
+                    );
                 });
                 egui::CollapsingHeader::new("Simulation Controller & Recording")
                     .default_open(true)
