@@ -76,7 +76,7 @@ impl GUI {
             style,
         });
 
-        let render_pass = egui_wgpu_backend::RenderPass::new(device, Screen::FORMAT_BACKBUFFER);
+        let render_pass = egui_wgpu_backend::RenderPass::new(device, Screen::FORMAT_BACKBUFFER, 1);
 
         GUI {
             platform,

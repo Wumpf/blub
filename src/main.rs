@@ -73,7 +73,7 @@ struct Application {
 
 impl Application {
     async fn new(event_loop: &EventLoop<ApplicationEvent>) -> Application {
-        let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY); //wgpu::BackendBit::DX12);
+        let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::VULKAN); //wgpu::BackendBit::DX12);
         let window = WindowBuilder::new()
             .with_title("Blub")
             .with_resizable(true)

@@ -3,14 +3,13 @@ authors = ["Andreas Reich <r_andreas2@web.de>"]
 edition = "2018"
 name = "blub"
 version = "0.1.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+resolver = "2"
 
 [dependencies]
 bytemuck = "1.4.1"
 cgmath = {version = "0.18.0", features = ["rand", "serde"]}
 enumflags2 = "0.7.1"
-env_logger = "0.8.2"
+env_logger = "0.9"
 futures = "0.3"
 image = {version = "0.23", default-features = false, features = ["png", "hdr"]}
 lazy_static = "1.4"
@@ -22,20 +21,20 @@ regex = "1"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 shaderc = "0.7"
-strum = "0.20"
-strum_macros = "0.20.1"
+strum = "0.21"
+strum_macros = "0.21"
 tobj = "3.0.0"
-wgpu = "0.8"
-wgpu-profiler = "0.4"
+wgpu = "0.9"
+wgpu-profiler = "0.5"
 winit = "0.25"
 # egui and related
-egui = "0.12.0"
-epi = "0.12.0"
-egui_wgpu_backend = {git = "https://github.com/Wumpf/egui_wgpu_backend", branch = "use-wgpu-master"}
-egui_winit_platform = {git = "https://github.com/hasenbanck/egui_winit_platform", rev = "9fd92782d8de22d7882168d7b5ae7a2eb02448d9"}
+egui = "0.13"
+epi = "0.13"
+egui_wgpu_backend = "0.10"
+egui_winit_platform = "0.9"
 
 [profile.dev.package."*"]
 opt-level = 3
 
 [patch.crates-io]
-wgpu = {git = "https://github.com/wumpf/wgpu.git", rev = "4ada8587e5eb0bb67599f1400b68b137f3e3d070"}
+wgpu = { git = "https://github.com/Wumpf/wgpu.git", branch = "backport/adapter_specific_render_targets" }
