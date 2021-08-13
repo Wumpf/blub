@@ -186,7 +186,7 @@ impl SimulationController {
                 return false;
             }
         };
-        return true;
+        true
     }
 
     fn single_step<'a>(
@@ -214,6 +214,6 @@ impl SimulationController {
             scene.step(&self.timer, device, profiler, pipeline_manager, queue, global_bind_group);
             return true;
         }
-        return false;
+        false
     }
 }

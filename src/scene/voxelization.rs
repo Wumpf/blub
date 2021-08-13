@@ -52,7 +52,7 @@ impl SceneVoxelization {
                 label: "Voxelize Mesh",
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Voxelize Mesh Pipeline Layout"),
-                    bind_group_layouts: &[&global_bind_group_layout, &group_layout.layout],
+                    bind_group_layouts: &[global_bind_group_layout, &group_layout.layout],
                     push_constant_ranges: &[wgpu::PushConstantRange {
                         stages: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                         range: 0..4,
@@ -140,7 +140,7 @@ impl SceneVoxelization {
 
         rpass.set_viewport(0.0, 0.0, self.viewport_extent as f32, self.viewport_extent as f32, 0.0, 1.0);
         rpass.set_pipeline(pipeline_manager.get_render(&self.pipeline_conservative_hull));
-        rpass.set_bind_group(0, &global_bind_group, &[]);
+        rpass.set_bind_group(0, global_bind_group, &[]);
         rpass.set_bind_group(1, &self.bind_group, &[]);
 
         // Use programmable vertex fetching since for every triangle we want to decide independently which direction to use for rendering.

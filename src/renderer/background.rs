@@ -46,7 +46,7 @@ mod cubemap_loader {
     const CUBEMAP_FORMAT_BYTES_PER_PIXEL: u32 = std::mem::size_of::<Rgbe8Pixel>() as u32;
 
     fn get_cache_filename(path: &Path) -> PathBuf {
-        path.join(format!(".raw_rgbe8_cubemap.cache"))
+        path.join(".raw_rgbe8_cubemap.cache".to_string())
     }
 
     fn from_cache(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<wgpu::Texture, std::io::Error> {
@@ -114,7 +114,7 @@ mod cubemap_loader {
                 panic!("cubemap face width not equal height");
             }
 
-            if let &None = &cubemap {
+            if cubemap.is_none() {
                 resolution = metadata.width;
                 cubemap = Some(device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("Cubemap"),
@@ -142,7 +142,7 @@ mod cubemap_loader {
 
             queue.write_texture(
                 wgpu::ImageCopyTexture {
-                    texture: &cubemap.as_ref().unwrap(),
+                    texture: cubemap.as_ref().unwrap(),
                     mip_level: 0,
                     origin: wgpu::Origin3d { x: 0, y: 0, z: i as u32 },
                 },
@@ -195,7 +195,7 @@ impl Background {
         let config: BackgroundConfig = serde_json::from_reader(reader)?;
 
         let ubo = LightingAndBackgroundUniformBuffer::new_with_data(
-            &device,
+            device,
             &LightingAndBackgroundUniformBufferContent {
                 dir_light_direction: config.dir_light_direction.into(),
                 dir_light_radiance: config.dir_light_radiance.into(),
@@ -229,7 +229,7 @@ impl Background {
             "Cubemap Renderer",
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Cubemap Renderer Pipeline Layout"),
-                bind_group_layouts: &[&global_bind_group_layout, &bind_group_layout.layout],
+                bind_group_layouts: &[global_bind_group_layout, &bind_group_layout.layout],
                 push_constant_ranges: &[],
             })),
             Path::new("screentri.vert"),

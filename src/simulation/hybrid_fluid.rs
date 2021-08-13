@@ -1,4 +1,5 @@
 use super::pressure_solver::*;
+use crate::scene::models::StaticMeshData;
 use crate::{
     scene::voxelization::SceneVoxelization,
     wgpu_utils::{self, binding_builder::*, binding_glsl, pipelines::*, shader::*, uniformbuffer::*},
@@ -159,10 +160,7 @@ impl HybridFluid {
         let volume_velocity_view_z = volume_velocity_z.create_view(&Default::default());
         let volume_linked_lists_view = volume_linked_lists.create_view(&Default::default());
         let volume_marker_view = volume_marker.create_view(&Default::default());
-        let volume_debug_view = match volume_debug {
-            Some(ref volume) => Some(volume.create_view(&Default::default())),
-            None => None,
-        };
+        let volume_debug_view = volume_debug.as_ref().map(|volume| volume.create_view(&Default::default()));
 
         // Layouts
         let group_layout_general = {
@@ -339,7 +337,7 @@ impl HybridFluid {
             .resource(particles_position_llindex.as_entire_binding())
             .texture(&volume_linked_lists_view)
             .texture(&volume_marker_view)
-            .texture(&pressure_solver.residual_view())
+            .texture(pressure_solver.residual_view())
             .create(device, "BindGroup: Density projection gather 0");
         let bind_group_density_projection_correct_particles = BindGroupBuilder::new(&group_layout_density_projection_correct_particles)
             .resource(particles_position_llindex.as_entire_binding())
@@ -349,7 +347,7 @@ impl HybridFluid {
             .texture(&volume_velocity_view_z)
             .create(device, "BindGroup: Density projection correct particles 0");
         let bind_group_renderer = {
-            let bind_group_renderer_builder = BindGroupBuilder::new(&Self::get_or_create_group_layout_renderer(device))
+            let bind_group_renderer_builder = BindGroupBuilder::new(Self::get_or_create_group_layout_renderer(device))
                 .resource(particles_position_llindex.as_entire_binding())
                 .resource(particles_velocity_x.as_entire_binding())
                 .resource(particles_velocity_y.as_entire_binding())
@@ -358,8 +356,8 @@ impl HybridFluid {
                 .texture(&volume_velocity_view_y)
                 .texture(&volume_velocity_view_z)
                 .texture(&volume_marker_view)
-                .texture(&pressure_field_from_velocity.pressure_view())
-                .texture(&pressure_field_from_density.pressure_view());
+                .texture(pressure_field_from_velocity.pressure_view())
+                .texture(pressure_field_from_density.pressure_view());
             if let Some(volume_debug_view) = volume_debug_view.as_ref() {
                 bind_group_renderer_builder.texture(volume_debug_view)
             } else {
@@ -501,7 +499,7 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "Fluid: P->G, set boundary",
-                    layout_transfer_velocity.clone(),
+                    layout_transfer_velocity,
                     Path::new("simulation/transfer_set_boundary_marker.comp"),
                 ),
             ),
@@ -510,7 +508,7 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "Fluid: Compute div",
-                    layout_divergence_compute.clone(),
+                    layout_divergence_compute,
                     Path::new("simulation/divergence_compute.comp"),
                 ),
             ),
@@ -535,11 +533,7 @@ impl HybridFluid {
             pipeline_advect_particles: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(
-                    "Fluid: G->P, advect",
-                    layout_particles.clone(),
-                    Path::new("simulation/advect_particles.comp"),
-                ),
+                ComputePipelineCreationDesc::new("Fluid: G->P, advect", layout_particles, Path::new("simulation/advect_particles.comp")),
             ),
 
             pipeline_binning_count: pipeline_manager.create_compute_pipeline(
@@ -565,7 +559,7 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "Particle Binning: Rewrite particles",
-                    layout_binning.clone(),
+                    layout_binning,
                     Path::new("simulation/particle_binning_rewrite_particles.comp"),
                 ),
             ),
@@ -575,7 +569,7 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "Fluid: Density Projection, gather",
-                    layout_density_projection_gather_error.clone(),
+                    layout_density_projection_gather_error,
                     Path::new("simulation/density_projection_gather_error.comp"),
                 ),
             ),
@@ -584,7 +578,7 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "Fluid: Density Projection, position change",
-                    layout_write_velocity_volume.clone(),
+                    layout_write_velocity_volume,
                     Path::new("simulation/density_projection_position_change.comp"),
                 ),
             ),
@@ -593,7 +587,7 @@ impl HybridFluid {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "Fluid: Density Projection, correct",
-                    layout_density_projection_correct_particles.clone(),
+                    layout_density_projection_correct_particles,
                     Path::new("simulation/density_projection_correct_particles.comp"),
                 ),
             ),
@@ -683,7 +677,7 @@ impl HybridFluid {
         _pipeline_manager: &PipelineManager,
         _queue: &wgpu::Queue,
         _global_bind_group: &wgpu::BindGroup,
-        _static_meshes: &Vec<crate::scene::models::StaticMeshData>,
+        _static_meshes: &[StaticMeshData],
         _scene_path: &Path,
     ) {
         // todo remove.
@@ -788,7 +782,7 @@ impl HybridFluid {
 
         encoder.clear_buffer(&self.particle_binning_atomic_counter, 0, None);
         if let Some(ref volume_debug) = self.volume_debug {
-            encoder.clear_texture(&volume_debug, &Default::default());
+            encoder.clear_texture(volume_debug, &Default::default());
         }
 
         wgpu_profiler!("transfer & divergence compute", profiler, encoder, device, {
@@ -912,7 +906,7 @@ impl HybridFluid {
             wgpu_profiler!("clear marker & linked list grids", profiler, &mut cpass, device, {
                 cpass.set_bind_group(2, &self.bind_group_transfer_velocity[0], &[]);
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_transfer_clear));
-                cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[0_u32]));
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
             wgpu_profiler!("advect particles & write new linked list grid", profiler, &mut cpass, device, {

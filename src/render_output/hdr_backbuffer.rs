@@ -69,7 +69,7 @@ impl HdrBackbuffer {
 
         HdrBackbuffer {
             hdr_backbuffer,
-            hdr_backbuffer_view: hdr_backbuffer_view,
+            hdr_backbuffer_view,
             resolution,
 
             read_backbuffer_bind_group,
@@ -95,7 +95,7 @@ impl HdrBackbuffer {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("tonemap"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &target,
+                view: target,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),

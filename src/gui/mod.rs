@@ -23,14 +23,14 @@ const SCENE_DIRECTORY: &str = "scenes";
 
 fn list_scene_files() -> Vec<PathBuf> {
     let files: Vec<PathBuf> = std::fs::read_dir(SCENE_DIRECTORY)
-        .expect(&format!("Scene directory \"{}\" not present!", SCENE_DIRECTORY))
+        .unwrap_or_else(|_| panic!("Scene directory \"{}\" not present!", SCENE_DIRECTORY))
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.file_type().unwrap().is_file())
         .map(|entry| entry.path())
         .filter(|path| path.extension().unwrap_or_default() == "json")
         .collect();
 
-    if files.len() == 0 {
+    if files.is_empty() {
         panic!("No scene files found scene directory \"{}\"", SCENE_DIRECTORY);
     }
 
@@ -51,7 +51,7 @@ pub struct GUIState {
     show_profiling_data_simulation: bool,
 }
 
-pub struct GUI {
+pub struct Gui {
     platform: egui_winit_platform::Platform,
     render_pass: egui_wgpu_backend::RenderPass,
 
@@ -63,7 +63,7 @@ impl epi::RepaintSignal for DummyRepaintSignal {
     fn request_repaint(&self) {}
 }
 
-impl GUI {
+impl Gui {
     pub fn new(device: &wgpu::Device, window: &winit::window::Window) -> Self {
         let mut style = egui::Style::default();
         style.visuals.code_bg_color = egui::Color32::from_rgb(64, 64, 100);
@@ -78,7 +78,7 @@ impl GUI {
 
         let render_pass = egui_wgpu_backend::RenderPass::new(device, Screen::FORMAT_BACKBUFFER, 1);
 
-        GUI {
+        Gui {
             platform,
             render_pass,
             state: GUIState {
@@ -409,7 +409,7 @@ impl GUI {
         ui.checkbox(&mut scene_renderer.enable_box_lines, "Show Fluid Domain Bounds");
     }
 
-    fn setup_ui_profiler(ui: &mut egui::Ui, profiling_data: &Vec<GpuTimerScopeResult>, levels_default_open: i32) {
+    fn setup_ui_profiler(ui: &mut egui::Ui, profiling_data: &[GpuTimerScopeResult], levels_default_open: i32) {
         for scope in profiling_data.iter() {
             let time = format!("{:.3}ms", (scope.time.end - scope.time.start) * 1000.0);
             if scope.nested_scopes.is_empty() {

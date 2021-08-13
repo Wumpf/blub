@@ -86,7 +86,7 @@ impl Scene {
             global_bind_group_layout,
             &voxelization,
         );
-        let models = SceneModels::from_config(&device, queue, &config.static_objects, &config.fluid)?;
+        let models = SceneModels::from_config(device, queue, &config.static_objects, &config.fluid)?;
 
         Ok(Scene {
             hybrid_fluid,

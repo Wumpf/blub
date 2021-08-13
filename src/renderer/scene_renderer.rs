@@ -235,7 +235,7 @@ impl SceneRenderer {
                         self.particle_renderer.draw(
                             &mut rpass_backbuffer,
                             pipeline_manager,
-                            &scene.fluid(),
+                            scene.fluid(),
                             match self.fluid_rendering_mode {
                                 FluidRenderingMode::ParticlesVelocity => ParticleRendererMode::Velocity,
                                 FluidRenderingMode::ParticlesIndex => ParticleRendererMode::Index,
@@ -259,7 +259,7 @@ impl SceneRenderer {
 
             wgpu_profiler!("volume visualization", profiler, &mut rpass_backbuffer, device, {
                 self.volume_renderer
-                    .draw(&mut rpass_backbuffer, pipeline_manager, &scene.fluid(), self.volume_visualization);
+                    .draw(&mut rpass_backbuffer, pipeline_manager, scene.fluid(), self.volume_visualization);
             });
 
             if self.enable_box_lines {
@@ -299,7 +299,7 @@ impl SceneRenderer {
                         depthbuffer,
                         global_bind_group,
                         self.background_and_lighting.bind_group(),
-                        &scene.fluid(),
+                        scene.fluid(),
                         backbuffer,
                     );
                 });

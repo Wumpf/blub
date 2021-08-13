@@ -63,7 +63,7 @@ impl ScreenshotRecorder {
 
     pub fn capture_screenshot(&mut self, screen: &mut Screen, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
         if let Some(ref scheduled_screenshot) = self.scheduled_screenshot {
-            screen.capture_screenshot(&scheduled_screenshot, device, encoder);
+            screen.capture_screenshot(scheduled_screenshot, device, encoder);
         }
         if let Some(ref recording_output_dir) = self.recording_output_dir {
             screen.capture_screenshot(

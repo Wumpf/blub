@@ -134,7 +134,7 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
         },
-        &image_data,
+        image_data,
         wgpu::ImageDataLayout {
             offset: 0,
             bytes_per_row: std::num::NonZeroU32::new(4 * image.width()),
@@ -152,7 +152,7 @@ fn load_texture2d_from_path(device: &wgpu::Device, queue: &wgpu::Queue, path: &P
 
 impl StaticMeshData {
     fn world_position_at_time(&self, total_simulated_time: Duration) -> cgmath::Point3<f32> {
-        if let Some(Some(translation)) = self.config.animation.as_ref().and_then(|a| Some(&a.translation)) {
+        if let Some(Some(translation)) = self.config.animation.as_ref().map(|a| &a.translation) {
             let mut translation_progress = total_simulated_time.as_secs_f32() % (translation.duration * 2.0);
             if translation_progress > translation.duration {
                 translation_progress = translation.duration * 2.0 - translation_progress;
@@ -173,7 +173,7 @@ impl StaticMeshData {
     fn rotation_at_time(&self, total_simulated_time: Duration) -> cgmath::Quaternion<f32> {
         let static_rotation: cgmath::Quaternion<f32> = cgmath::Quaternion::from(self.config.rotation_angles);
 
-        if let Some(Some(rotation)) = self.config.animation.as_ref().and_then(|a| Some(&a.rotation)) {
+        if let Some(Some(rotation)) = self.config.animation.as_ref().map(|a| &a.rotation) {
             static_rotation
                 * cgmath::Quaternion::from_axis_angle(rotation.axis.normalize(), rotation.deg_per_sec * total_simulated_time.as_secs_f32())
         } else {
@@ -252,7 +252,7 @@ impl SceneModels {
     pub fn from_config(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        configs: &Vec<StaticObjectConfig>,
+        configs: &[StaticObjectConfig],
         fluid_config: &FluidConfig,
     ) -> Result<Self, Box<dyn Error>> {
         let mut vertices = Vec::new();
@@ -318,7 +318,7 @@ impl SceneModels {
                 mesh.index_buffer_range = mesh.index_buffer_range.start..(indices.len() as u32);
 
                 let prev_vertex_count = vertices.len();
-                vertices.resize_with(vertices.len() + m.mesh.positions.len(), || MeshVertex::default());
+                vertices.resize_with(vertices.len() + m.mesh.positions.len(), MeshVertex::default);
                 mesh.vertex_buffer_range = mesh.vertex_buffer_range.start..(vertices.len() as u32);
 
                 for (vertex, pos) in vertices.iter_mut().skip(prev_vertex_count).zip(m.mesh.positions.chunks(3)) {

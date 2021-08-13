@@ -91,7 +91,7 @@ pub fn image2D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) 
     wgpu::BindingType::StorageTexture {
         access,
         view_dimension: wgpu::TextureViewDimension::D2,
-        format: format,
+        format,
     }
 }
 
@@ -99,7 +99,7 @@ pub fn image2DArray(format: wgpu::TextureFormat, access: wgpu::StorageTextureAcc
     wgpu::BindingType::StorageTexture {
         access,
         view_dimension: wgpu::TextureViewDimension::D2Array,
-        format: format,
+        format,
     }
 }
 
@@ -107,6 +107,6 @@ pub fn image3D(format: wgpu::TextureFormat, access: wgpu::StorageTextureAccess) 
     wgpu::BindingType::StorageTexture {
         access,
         view_dimension: wgpu::TextureViewDimension::D3,
-        format: format,
+        format,
     }
 }

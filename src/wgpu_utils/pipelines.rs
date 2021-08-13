@@ -90,10 +90,7 @@ impl RenderPipelineCreationDesc {
                 buffers: Vec::new(),
             },
             primitive: Default::default(),
-            depth_stencil: match depth_format {
-                Some(depth_format) => Some(depth_state::default_read_write(depth_format)),
-                None => None,
-            },
+            depth_stencil: depth_format.map(depth_state::default_read_write),
             multisample: Default::default(),
             fragment: FragmentStateCreationDesc {
                 shader_relative_path: PathBuf::from(fragment_shader_relative_path),
@@ -114,9 +111,9 @@ impl RenderPipelineCreationDesc {
                 entry_point: SHADER_ENTRY_POINT_NAME,
                 buffers: &self.vertex.buffers,
             },
-            primitive: self.primitive.clone(),
+            primitive: self.primitive,
             depth_stencil: self.depth_stencil.clone(),
-            multisample: self.multisample.clone(),
+            multisample: self.multisample,
             fragment: Some(wgpu::FragmentState {
                 module: &shader_fs.module,
                 entry_point: SHADER_ENTRY_POINT_NAME,

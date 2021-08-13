@@ -53,7 +53,7 @@ impl PendingScreenshot {
             });
             return None;
         }
-        return Some(self);
+        Some(self)
     }
 }
 
@@ -125,13 +125,13 @@ impl ScreenshotCapture {
     }
 
     pub fn capture_screenshot(&mut self, path: &Path, backbuffer: &wgpu::Texture, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
-        if self.unused_screenshot_buffers.len() == 0 {
+        if self.unused_screenshot_buffers.is_empty() {
             device.poll(wgpu::Maintain::Poll);
             self.process_pending_screenshots();
 
-            if self.unused_screenshot_buffers.len() == 0 {
+            if self.unused_screenshot_buffers.is_empty() {
                 warn!("No more unused screenshot buffers available. Waiting for GPU/writer to catch up and draining screenshot queue...");
-                while self.unused_screenshot_buffers.len() == 0 {
+                while self.unused_screenshot_buffers.is_empty() {
                     std::thread::yield_now();
                     device.poll(wgpu::Maintain::Poll);
                     self.process_pending_screenshots();
@@ -142,7 +142,7 @@ impl ScreenshotCapture {
 
         encoder.copy_texture_to_buffer(
             wgpu::ImageCopyTexture {
-                texture: &backbuffer,
+                texture: backbuffer,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
