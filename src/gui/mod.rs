@@ -342,8 +342,18 @@ impl GUI {
         }
     }
 
-    fn setup_ui_scene_settings(ui: &mut egui::Ui, state: &mut GUIState, event_loop_proxy: &EventLoopProxy<ApplicationEvent>) {
+    fn setup_ui_scene_settings(ui: &mut egui::Ui, state: &mut GUIState, scene: &mut Scene, event_loop_proxy: &EventLoopProxy<ApplicationEvent>) {
         ui.spacing_mut().slider_width = 250.0;
+        ui.horizontal(|ui| {
+            ui.label("volume resolution:");
+            let grid_dim = scene.config().fluid.grid_dimension;
+            ui.add(egui::Label::new(format!("{}x{}x{}", grid_dim.x, grid_dim.y, grid_dim.z)).strong());
+        });
+        ui.horizontal(|ui| {
+            ui.label("num particles:");
+            ui.add(egui::Label::new(format!("{}", scene.num_active_particles())).strong());
+        });
+        ui.separator();
         egui::ComboBox::from_label("Scene Selection")
             .selected_text(format!(
                 "{:?}",
@@ -466,7 +476,7 @@ impl GUI {
                         Self::setup_ui_simulation_control(ui, &mut self.state, simulation_controller, event_loop_proxy);
                     });
                 egui::CollapsingHeader::new("Scene Settings").default_open(true).show(ui, |ui| {
-                    Self::setup_ui_scene_settings(ui, &mut self.state, event_loop_proxy);
+                    Self::setup_ui_scene_settings(ui, &mut self.state, scene, event_loop_proxy);
                 });
                 egui::CollapsingHeader::new("Rendering Settings").default_open(true).show(ui, |ui| {
                     Self::setup_ui_render_settings(ui, scene_renderer);

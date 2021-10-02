@@ -102,6 +102,10 @@ impl Scene {
         &self.config
     }
 
+    pub fn num_active_particles(&self) -> u32 {
+        self.hybrid_fluid.num_active_particles()
+    }
+
     fn create_fluid_from_config(
         config: &SceneConfig,
         device: &wgpu::Device,

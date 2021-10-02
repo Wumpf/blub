@@ -728,6 +728,10 @@ impl HybridFluid {
         self.grid_dimension
     }
 
+    pub fn num_active_particles(&self) -> u32 {
+        self.simulation_properties.num_particles
+    }
+
     const COMPUTE_LOCAL_SIZE_FLUID: wgpu::Extent3d = wgpu::Extent3d {
         width: 8,
         height: 8,
