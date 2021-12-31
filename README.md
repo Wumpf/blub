@@ -1,11 +1,15 @@
 # Blub
 
 Experimenting with GPU driven 3D fluid simulation on the GPU using [WebGPU-rs](https://github.com/gfx-rs/wgpu-rs).  
-Focusing primarily on hybrid approaches lagrangian/eularian approaches here (PIC/FLIP/APIC..).
-
-For SPH (pure lagrangian) fluid simulation, check out my simple 2D DFSPH fluid simulator, [YASPH2D](https://github.com/Wumpf/yasph2d).
+Focusing on hybrid lagrangian/eularian approaches here (PIC/FLIP/APIC..).
 
 [![](https://img.youtube.com/vi/Y646KLHyIms/hqdefault.jpg)](https://www.youtube.com/watch?v=Y646KLHyIms "Blub fluid simulation video")
+
+I gave a talk about it at the Rust Graphics Meetup:
+* [Video](https://www.youtube.com/watch?v=Yzr9va5UtiE)
+* [Slides](https://docs.google.com/presentation/d/105vjRxwaXVOhHWQJeaEZh3Nu-TtFWOwNAFroi0GFuzc/edit?usp=sharing)
+
+For SPH (pure lagrangian) fluid simulation, check out my simple 2D DFSPH fluid simulator, [YASPH2D](https://github.com/Wumpf/yasph2d).
 
 ## Application / Framework
 
