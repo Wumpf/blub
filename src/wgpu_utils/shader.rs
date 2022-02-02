@@ -107,7 +107,7 @@ impl ShaderDirectory {
                         source: wgpu::ShaderSource::SpirV(Borrowed(bytemuck::cast_slice(&cached_shader))),
                         flags: wgpu::ShaderFlags::empty(),
                     }),
-                    source_files: sources_string.lines().map(|line| PathBuf::from(line)).collect(),
+                    source_files: sources_string.lines().map(PathBuf::from).collect(),
                 });
             }
         }
@@ -170,9 +170,8 @@ impl ShaderDirectory {
             }
         };
 
-        std::fs::write(&cache_path, compilation_artifact.as_binary_u8()).or_else(|e| {
+        std::fs::write(&cache_path, compilation_artifact.as_binary_u8()).map_err(|e| {
             error!("failed to shader cache file {:?}: {}", cache_path, e);
-            Err(())
         })?;
         std::fs::write(
             &dependent_sources_cache_path,
@@ -183,15 +182,14 @@ impl ShaderDirectory {
                 .collect::<Vec<&str>>()
                 .join("\n"),
         )
-        .or_else(|e| {
+        .map_err(|e| {
             error!("failed to shader cache dependency file {:?}: {}", dependent_sources_cache_path, e);
-            Err(())
         })?;
 
         Ok(ShaderModuleWithSourceFiles {
             module: device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some(path.file_name().unwrap().to_str().unwrap()),
-                source: wgpu::ShaderSource::SpirV(Borrowed(&compilation_artifact.as_binary())),
+                source: wgpu::ShaderSource::SpirV(Borrowed(compilation_artifact.as_binary())),
                 flags: wgpu::ShaderFlags::empty(),
             }),
             source_files: source_files.into_inner(),

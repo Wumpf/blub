@@ -27,7 +27,7 @@ impl ParticleRenderer {
             "ParticleRenderer: Render particles",
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("ParticleRenderer Pipeline Layout"),
-                bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
+                bind_group_layouts: &[global_bind_group_layout, fluid_renderer_group_layout],
                 push_constant_ranges: &[wgpu::PushConstantRange {
                     stages: wgpu::ShaderStage::VERTEX,
                     range: 0..4,

@@ -79,7 +79,7 @@ impl ScreenSpaceFluid {
                 label: "ScreenspaceFluid: Render Particles",
                 layout: Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Particles for SS Fluid Pipeline Layout"),
-                    bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
+                    bind_group_layouts: &[global_bind_group_layout, fluid_renderer_group_layout],
                     push_constant_ranges: &[],
                 })),
 
@@ -138,8 +138,8 @@ impl ScreenSpaceFluid {
         let layout_narrow_range_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Narrow Range Filter Pipeline Layout"),
             bind_group_layouts: &[
-                &global_bind_group_layout,
-                &fluid_renderer_group_layout,
+                global_bind_group_layout,
+                fluid_renderer_group_layout,
                 &group_layout_narrow_range_filter.layout,
             ],
             push_constant_ranges,
@@ -158,7 +158,7 @@ impl ScreenSpaceFluid {
             shader_dir,
             ComputePipelineCreationDesc::new(
                 "ScreenspaceFluid: NarrowRane 2D",
-                layout_narrow_range_filter.clone(),
+                layout_narrow_range_filter,
                 Path::new("screenspace_fluid/narrow_range_filter_2d.comp"),
             ),
         );
@@ -166,8 +166,8 @@ impl ScreenSpaceFluid {
         let layout_thickness_filter = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Thickness Filter Pipeline Layout"),
             bind_group_layouts: &[
-                &global_bind_group_layout,
-                &fluid_renderer_group_layout,
+                global_bind_group_layout,
+                fluid_renderer_group_layout,
                 &group_layout_thickness_filter.layout,
             ],
             push_constant_ranges,
@@ -177,7 +177,7 @@ impl ScreenSpaceFluid {
             shader_dir,
             ComputePipelineCreationDesc::new(
                 "ScreenspaceFluid: Thickness filter",
-                layout_thickness_filter.clone(),
+                layout_thickness_filter,
                 Path::new("screenspace_fluid/thickness_filter.comp"),
             ),
         );
@@ -190,8 +190,8 @@ impl ScreenSpaceFluid {
                 Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Fluid Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        &global_bind_group_layout,
-                        &background_and_lighting_group_layout,
+                        global_bind_group_layout,
+                        background_and_lighting_group_layout,
                         &group_layout_compose.layout,
                     ],
                     push_constant_ranges,
@@ -320,7 +320,7 @@ impl ScreenSpaceFluid {
             .texture(&texture_view_fluid_view[1])
             .texture(&texture_view_fluid_thickness[0])
             .texture(&texture_view_backbuffer_copy)
-            .texture(&backbuffer.texture_view())
+            .texture(backbuffer.texture_view())
             .create(device, "BindGroup: SSFluid, Final Compose");
 
         ScreenDependentProperties {
@@ -406,7 +406,7 @@ impl ScreenSpaceFluid {
                     stencil_ops: None,
                 }),
             });
-            rpass.set_bind_group(0, &global_bind_group, &[]);
+            rpass.set_bind_group(0, global_bind_group, &[]);
             rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
             rpass.set_pipeline(pipeline_manager.get_render(&self.screen_independent.pipeline_render_particles));
             rpass.draw(0..4, 0..fluid.num_particles());
@@ -451,7 +451,7 @@ impl ScreenSpaceFluid {
             let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("fluid filters & render"),
             });
-            cpass.set_bind_group(0, &global_bind_group, &[]);
+            cpass.set_bind_group(0, global_bind_group, &[]);
             cpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
 
             const LOCAL_SIZE_FILTER_1D_X: wgpu::Extent3d = wgpu::Extent3d {
@@ -473,7 +473,7 @@ impl ScreenSpaceFluid {
 
                     // Filter Y
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[0], &[]);
-                    cpass.set_push_constants(0, &bytemuck::bytes_of(&[1 as u32]));
+                    cpass.set_push_constants(0, bytemuck::bytes_of(&[1_u32]));
                     cpass.dispatch(
                         work_group_filter_1d_y.width,
                         work_group_filter_1d_y.height,
@@ -481,7 +481,7 @@ impl ScreenSpaceFluid {
                     );
                     // Filter X - note that since filter is not really separable, order makes a difference. Found this order visually more pleasing.
                     cpass.set_bind_group(2, &self.screen_dependent.bind_group_narrow_range_filter[1], &[]);
-                    cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
+                    cpass.set_push_constants(0, bytemuck::bytes_of(&[0_u32]));
                     cpass.dispatch(
                         work_group_filter_1d_x.width,
                         work_group_filter_1d_x.height,
@@ -505,7 +505,7 @@ impl ScreenSpaceFluid {
 
                 // Filter Y
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[0], &[]);
-                cpass.set_push_constants(0, &bytemuck::bytes_of(&[1 as u32]));
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[1_u32]));
                 cpass.dispatch(
                     work_group_filter_1d_y.width,
                     work_group_filter_1d_y.height,
@@ -513,7 +513,7 @@ impl ScreenSpaceFluid {
                 );
                 // Filter X
                 cpass.set_bind_group(2, &self.screen_dependent.bind_group_thickness_filter[1], &[]);
-                cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[0_u32]));
                 cpass.dispatch(
                     work_group_filter_1d_x.width,
                     work_group_filter_1d_x.height,

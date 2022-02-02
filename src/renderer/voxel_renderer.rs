@@ -28,7 +28,7 @@ impl VoxelRenderer {
             "Visualize Voxels",
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Visualize Voxels Pipeline Layout"),
-                bind_group_layouts: &[&global_bind_group_layout, background_and_lighting_group_layout, &group_layout.layout],
+                bind_group_layouts: &[global_bind_group_layout, background_and_lighting_group_layout, &group_layout.layout],
                 push_constant_ranges: &[],
             })),
             Path::new("volume_visualization/voxel_visualization.vert"),

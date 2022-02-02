@@ -35,7 +35,7 @@ impl GlobalBindings {
             .create(device, "BindGroupLayout: GlobalBindings");
 
         GlobalBindings {
-            bind_group_layout: bind_group_layout,
+            bind_group_layout,
             bind_group: None,
         }
     }
@@ -101,7 +101,7 @@ impl GlobalBindings {
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.bind_group.as_ref().expect("Bind group has not been created yet!")
+        self.bind_group.as_ref().expect("Bind group has not been created yet!")
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

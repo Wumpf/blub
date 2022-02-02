@@ -378,7 +378,7 @@ impl PressureSolver {
         let volume_search_view = volume_search.create_view(&Default::default());
 
         let bind_group_general = BindGroupBuilder::new(&group_layout_general)
-            .texture(&volume_marker_view)
+            .texture(volume_marker_view)
             .create(device, "BindGroup: Pressure Solve general");
         let bind_group_init = BindGroupBuilder::new(&group_layout_init)
             .texture(&volume_residual_view)
@@ -445,7 +445,7 @@ impl PressureSolver {
         let shader_path = Path::new("simulation/pressure_solver");
 
         PressureSolver {
-            grid_dimension: grid_dimension,
+            grid_dimension,
 
             bind_group_general,
             bind_group_init,
@@ -459,18 +459,14 @@ impl PressureSolver {
             pipeline_init: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
-                ComputePipelineCreationDesc::new(
-                    "PressureSolve: Init",
-                    layout_init.clone(),
-                    &shader_path.join(Path::new("pressure_init.comp")),
-                ),
+                ComputePipelineCreationDesc::new("PressureSolve: Init", layout_init, &shader_path.join(Path::new("pressure_init.comp"))),
             ),
             pipeline_apply_preconditioner: pipeline_manager.create_compute_pipeline(
                 device,
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "PressureSolve: Apply preconditioner",
-                    layout_preconditioner.clone(),
+                    layout_preconditioner,
                     &shader_path.join(&Path::new("pressure_apply_preconditioner.comp")),
                 ),
             ),
@@ -488,7 +484,7 @@ impl PressureSolver {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "PressureSolve: DotProduct Reduce",
-                    layout_reduce.clone(),
+                    layout_reduce,
                     &shader_path.join(&Path::new("pressure_reduce_max.comp")),
                 ),
             ),
@@ -497,7 +493,7 @@ impl PressureSolver {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "PressureSolve: Apply coefficient matrix",
-                    layout_apply_coeff.clone(),
+                    layout_apply_coeff,
                     &shader_path.join(&Path::new("pressure_apply_coeff.comp")),
                 ),
             ),
@@ -515,7 +511,7 @@ impl PressureSolver {
                 shader_dir,
                 ComputePipelineCreationDesc::new(
                     "PressureSolve: Update search",
-                    layout_update_volume.clone(),
+                    layout_update_volume,
                     &shader_path.join(&Path::new("pressure_update_search.comp")),
                 ),
             ),
@@ -560,7 +556,7 @@ impl PressureSolver {
         let mut reduce_step_idx = 0;
         while num_entries_remaining > Self::REDUCE_REDUCTION_PER_STEP {
             cpass.set_bind_group(2, &self.bind_group_dotproduct_reduce[source_buffer_index], &[]);
-            cpass.set_push_constants(0, &bytemuck::bytes_of(&[Self::REDUCE_RESULTMODE_REDUCE, num_entries_remaining]));
+            cpass.set_push_constants(0, bytemuck::bytes_of(&[Self::REDUCE_RESULTMODE_REDUCE, num_entries_remaining]));
 
             if reduce_step_idx < DISPATCH_BUFFER_OFFSETS.len() {
                 cpass.dispatch_indirect(
@@ -584,7 +580,7 @@ impl PressureSolver {
         // Right now not a dispatch_indirect, so we always run it even if we decided that it is no longer necessary.
         // It's simply a bit too tricky to turn it off - we can't write into a dispatch buffer that is in use
         cpass.set_bind_group(2, &self.bind_group_dotproduct_final[source_buffer_index], &[]);
-        cpass.set_push_constants(0, &bytemuck::bytes_of(&[result_mode, num_entries_remaining]));
+        cpass.set_push_constants(0, bytemuck::bytes_of(&[result_mode, num_entries_remaining]));
         cpass.dispatch(1, 1, 1);
     }
 
@@ -635,11 +631,11 @@ impl PressureSolver {
             // Note that we don't use the auxillary vector here as in-between storage!
             wgpu_profiler!("preconditioner(r) ➡ s, start s·r", profiler, &mut cpass, device, {
                 cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
-                cpass.set_push_constants(0, &bytemuck::bytes_of(&[0 as u32]));
-                cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[0_u32]));
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
                 cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
-                cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]));
+                cpass.set_push_constants(0, bytemuck::bytes_of(&[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]));
                 cpass.set_bind_group(2, &self.bind_group_preconditioner[2], &[]);
                 cpass.dispatch(grid_work_groups.width, grid_work_groups.height, grid_work_groups.depth_or_array_layers);
             });
@@ -662,7 +658,7 @@ impl PressureSolver {
                         // The dot product is applied to the result (denoted as z in Bridson's book) and the search vector (s), i.e. compute <s; As>
                         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_coeff));
                         cpass.set_bind_group(2, &self.bind_group_apply_coeff, &[]);
-                        cpass.set_push_constants(0, &bytemuck::bytes_of(&[0, reduce_pass_initial_group_size]));
+                        cpass.set_push_constants(0, bytemuck::bytes_of(&[0, reduce_pass_initial_group_size]));
                         cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                     });
                     wgpu_profiler!("reduce_add: finish s·z ➡ alpha", profiler, &mut cpass, device, {
@@ -676,9 +672,9 @@ impl PressureSolver {
                         const PRUPDATE_COMPUTE_MAX_ERROR: u32 = 1;
                         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_update_pressure_and_residual));
                         if iteration_with_error_computation {
-                            cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRUPDATE_COMPUTE_MAX_ERROR, reduce_pass_initial_group_size]));
+                            cpass.set_push_constants(0, bytemuck::bytes_of(&[PRUPDATE_COMPUTE_MAX_ERROR, reduce_pass_initial_group_size]));
                         } else {
-                            cpass.set_push_constants(0, &bytemuck::bytes_of(&[0]));
+                            cpass.set_push_constants(0, bytemuck::bytes_of(&[0]));
                         }
                         cpass.set_bind_group(2, &self.bind_group_update_pressure_and_residual, &[]);
                         cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
@@ -699,10 +695,10 @@ impl PressureSolver {
 
                     wgpu_profiler!("preconditioner(r) ➡ (z), start z·r", profiler, &mut cpass, device, {
                         cpass.set_pipeline(pipeline_manager.get_compute(&self.pipeline_apply_preconditioner));
-                        cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
+                        cpass.set_push_constants(0, bytemuck::bytes_of(&[PRECONDITIONER_PASS0]));
                         cpass.set_bind_group(2, &self.bind_group_preconditioner[0], &[]);
                         cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
-                        cpass.set_push_constants(0, &bytemuck::bytes_of(&[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]));
+                        cpass.set_push_constants(0, bytemuck::bytes_of(&[PRECONDITIONER_PASS1, reduce_pass_initial_group_size]));
                         cpass.set_bind_group(2, &self.bind_group_preconditioner[1], &[]);
                         cpass.dispatch_indirect(&self.dotproduct_reduce_result_and_dispatch_buffer, DISPATCH_BUFFER_OFFSET);
                     });

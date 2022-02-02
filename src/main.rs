@@ -64,7 +64,7 @@ struct Application {
     scene: scene::Scene,
     scene_renderer: SceneRenderer,
     simulation_controller: simulation_controller::SimulationController,
-    gui: gui::GUI,
+    gui: gui::Gui,
 
     camera: camera::Camera,
     global_ubo: GlobalUBO,
@@ -78,7 +78,7 @@ impl Application {
             .with_title("Blub")
             .with_resizable(true)
             .with_inner_size(winit::dpi::LogicalSize::new(1980, 1080))
-            .build(&event_loop)
+            .build(event_loop)
             .unwrap();
 
         let window_surface = unsafe { wgpu_instance.create_surface(&window) };
@@ -135,7 +135,7 @@ impl Application {
             global_bindings.bind_group_layout(),
             &hdr_backbuffer,
         );
-        let gui = gui::GUI::new(&device, &window);
+        let gui = gui::Gui::new(&device, &window);
 
         let profiler_rendering = GpuProfiler::new(4, command_queue.get_timestamp_period());
         let profiler_simulation = GpuProfiler::new(16, command_queue.get_timestamp_period());
@@ -259,7 +259,7 @@ impl Application {
                     }
                 },
                 Event::WindowEvent { event, .. } => {
-                    self.camera.on_window_event(&event);
+                    self.camera.on_window_event(event);
                     match event {
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
@@ -288,7 +288,7 @@ impl Application {
                     }
                 }
                 Event::DeviceEvent { event, .. } => {
-                    self.camera.on_device_event(&event);
+                    self.camera.on_device_event(event);
                 }
                 Event::MainEventsCleared => {
                     self.window.request_redraw();
@@ -361,12 +361,8 @@ impl Application {
         if let Some(profiling_data_rendering) = self.profiler_rendering.process_finished_frame() {
             self.gui.report_profiling_data_rendering(profiling_data_rendering);
         }
-        loop {
-            if let Some(simulation_profiling_data) = self.profiler_simulation.process_finished_frame() {
-                self.gui.report_profiling_data_simulation(simulation_profiling_data);
-            } else {
-                break;
-            }
+        while let Some(simulation_profiling_data) = self.profiler_simulation.process_finished_frame() {
+            self.gui.report_profiling_data_simulation(simulation_profiling_data);
         }
     }
 
@@ -408,7 +404,7 @@ impl Application {
 
         wgpu_profiler!("tonemap", self.profiler_rendering, &mut encoder, &self.device, {
             self.hdr_backbuffer
-                .tonemap(&self.screen.backbuffer(), &mut encoder, &self.pipeline_manager);
+                .tonemap(self.screen.backbuffer(), &mut encoder, &self.pipeline_manager);
         });
 
         self.screenshot_recorder.capture_screenshot(&mut self.screen, &self.device, &mut encoder);
@@ -419,7 +415,7 @@ impl Application {
                 &self.window,
                 &mut encoder,
                 &mut self.command_queue,
-                &self.screen.backbuffer(),
+                self.screen.backbuffer(),
                 &mut self.simulation_controller,
                 &mut self.scene_renderer,
                 &mut self.scene,

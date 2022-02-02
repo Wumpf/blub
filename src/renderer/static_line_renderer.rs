@@ -42,7 +42,7 @@ impl StaticLineRenderer {
             "Line Renderer",
             Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Static Line Renderer Pipeline Layout"),
-                bind_group_layouts: &[&global_bind_group_layout],
+                bind_group_layouts: &[global_bind_group_layout],
                 push_constant_ranges: &[],
             })),
             Path::new("lines.vert"),

@@ -4,7 +4,7 @@ use cgmath::prelude::*;
 use enumflags2::{bitflags, BitFlags};
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 const OPENGL_PROJECTION_TO_WGPU_PROJECTION: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
@@ -100,7 +100,7 @@ impl Camera {
     }
 
     pub fn update(&mut self, timer: &Timer) {
-        if self.movement_locked == false {
+        if !self.movement_locked {
             let right = self.direction.cross(self.rotational_up).normalize();
 
             let mut translation = (self.active_move_commands.contains(MoveCommands::Forwards) as i32 as f32
@@ -144,7 +144,7 @@ impl Camera {
             right: right.into(),
             up: up.into(),
             direction: self.direction.into(),
-            ndc_camera_space_projected: ndc_camera_space_projected.into(),
+            ndc_camera_space_projected,
             tan_half_vertical_fov: (VERTICAL_FOV * 0.5).tan(),
             inv_tan_half_vertical_fov: 1.0 / (VERTICAL_FOV * 0.5).tan(),
         }

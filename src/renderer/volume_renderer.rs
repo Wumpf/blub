@@ -33,7 +33,7 @@ impl VolumeRenderer {
     ) -> Self {
         let layout = Rc::new(device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Volume Renderer Pipeline Layout"),
-            bind_group_layouts: &[&global_bind_group_layout, &fluid_renderer_group_layout],
+            bind_group_layouts: &[global_bind_group_layout, fluid_renderer_group_layout],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStage::VERTEX,
                 range: 0..4,
@@ -52,7 +52,7 @@ impl VolumeRenderer {
 
         let mut volume_visualization_with_billboards_pipeline_desc = RenderPipelineCreationDesc::new(
             "VolumeRender: Generic billboard based",
-            layout.clone(),
+            layout,
             Path::new("volume_visualization/volume_visualization_with_billboards.vert"),
             Path::new("sphere_particles.frag"),
             HdrBackbuffer::FORMAT,
@@ -93,17 +93,17 @@ impl VolumeRenderer {
                 rpass.set_bind_group(1, fluid.bind_group_renderer(), &[]);
                 match mode {
                     VolumeVisualizationMode::DivergenceError => {
-                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[0 as u32]))
+                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[0_u32]))
                     }
                     VolumeVisualizationMode::PressureFromVelocity => {
-                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[1 as u32]))
+                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[1_u32]))
                     }
                     VolumeVisualizationMode::PressureFromDensity => {
-                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[2 as u32]))
+                        rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[2_u32]))
                     }
-                    VolumeVisualizationMode::Marker => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[3 as u32])),
+                    VolumeVisualizationMode::Marker => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[3_u32])),
                     #[cfg(debug_assertions)]
-                    VolumeVisualizationMode::Debug => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[4 as u32])),
+                    VolumeVisualizationMode::Debug => rpass.set_push_constants(wgpu::ShaderStage::VERTEX, 0, bytemuck::cast_slice(&[4_u32])),
                     _ => {}
                 };
                 rpass.draw(0..6, 0..Self::num_grid_cells(fluid.grid_dimension()));
