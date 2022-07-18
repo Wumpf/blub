@@ -1,6 +1,6 @@
 # Blub
 
-Experimenting with GPU driven 3D fluid simulation on the GPU using [WebGPU-rs](https://github.com/gfx-rs/wgpu-rs).  
+Experimenting with GPU driven 3D fluid simulation on the GPU using [wgpu](https://github.com/gfx-rs/wgpu).  
 Focusing on hybrid lagrangian/eularian approaches here (PIC/FLIP/APIC..).
 
 [![](https://img.youtube.com/vi/Y646KLHyIms/hqdefault.jpg)](https://www.youtube.com/watch?v=Y646KLHyIms "Blub fluid simulation video")
