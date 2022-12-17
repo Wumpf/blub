@@ -15,7 +15,7 @@ image = {version = "0.23", default-features = false, features = ["png", "hdr"]}
 lazy_static = "1.4"
 log = "0.4"
 more-asserts = "0.2"
-notify = "5.0.0-pre.2"
+notify = "5.0.0"
 rand = {version = "0.8.3", features = ["small_rng"]}
 regex = "1"
 serde = {version = "1.0", features = ["derive"]}
@@ -37,4 +37,4 @@ egui_winit_platform = "0.9"
 opt-level = 3
 
 [patch.crates-io]
-wgpu = { git = "https://github.com/Wumpf/wgpu.git", branch = "backport/adapter_specific_render_targets" }
+wgpu = { git = "https://github.com/Wumpf/wgpu.git", commit = "13940628306aeb21ba9af6d9a4d62530d274dab0" }

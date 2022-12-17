@@ -28,25 +28,28 @@ impl ShaderDirectory {
     pub fn new(path: &Path, cache_dir: &Path) -> ShaderDirectory {
         let changed_files = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
         let changed_files_evt_ref = changed_files.clone();
-        let mut watcher: notify::RecommendedWatcher = notify::Watcher::new_immediate(move |res: Result<notify::Event, notify::Error>| match res {
-            Ok(evt) => match evt.kind {
-                notify::EventKind::Any => {}
-                notify::EventKind::Access(_) => {}
-                notify::EventKind::Create(_) => {}
-                notify::EventKind::Modify(_) => {
-                    let mut changes = changed_files_evt_ref.lock().unwrap();
-                    for path in evt.paths.iter() {
-                        if !path.is_file() || changes.contains(path) {
-                            continue;
+        let mut watcher: notify::RecommendedWatcher = notify::Watcher::new(
+            move |res: Result<notify::Event, notify::Error>| match res {
+                Ok(evt) => match evt.kind {
+                    notify::EventKind::Any => {}
+                    notify::EventKind::Access(_) => {}
+                    notify::EventKind::Create(_) => {}
+                    notify::EventKind::Modify(_) => {
+                        let mut changes = changed_files_evt_ref.lock().unwrap();
+                        for path in evt.paths.iter() {
+                            if !path.is_file() || changes.contains(path) {
+                                continue;
+                            }
+                            changes.push(path.canonicalize().unwrap());
                         }
-                        changes.push(path.canonicalize().unwrap());
                     }
-                }
-                notify::EventKind::Remove(_) => {}
-                notify::EventKind::Other => {}
+                    notify::EventKind::Remove(_) => {}
+                    notify::EventKind::Other => {}
+                },
+                Err(e) => error!("Failed to create filewatcher: {:?}", e),
             },
-            Err(e) => error!("Failed to create filewatcher: {:?}", e),
-        })
+            notify::Config::default(),
+        )
         .unwrap();
         watcher.watch(path, notify::RecursiveMode::Recursive).unwrap();
 
